@@ -3,6 +3,21 @@
     "context7": {
       "type": "http",
       "url": "https://mcp.context7.com/mcp"
+    },
+    "foundry": {
+      "command": "npx",
+      "args": ["@pranesh.asp/foundry-mcp-server"],
+      "env": {
+        "RPC_URL": "http://localhost:8545"
+      }
+    },
+    "openzeppelin": {
+      "command": "npx",
+      "args": ["-y", "@openzeppelin/contracts-mcp"]
+    },
+    "slither": {
+      "command": "/home/yangyang/.local/bin/uvx",
+      "args": ["--from", "git+https://github.com/trailofbits/slither-mcp", "slither-mcp"]
     }
   }
 }

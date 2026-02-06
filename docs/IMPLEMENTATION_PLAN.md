@@ -177,6 +177,11 @@
 | UI 组件 | Shadcn UI + Aceternity UI | 未来感设计 |
 | 样式 | Tailwind CSS + DaisyUI | 快速开发 |
 
+> **依赖安装说明**: `framer-motion` 是动画系统的核心依赖（Countdown、Phase Transition、Victory Screen 等均依赖），需手动安装：
+> ```bash
+> cd packages/nextjs && yarn add framer-motion
+> ```
+
 ---
 
 ## 5. 智能合约设计
@@ -210,7 +215,7 @@ contracts/
 │  🏆 冠军奖励         35%    最后存活的玩家                    │
 │  🥈 排名奖励         25%    前 5 名按排名递减分配              │
 │  ⏱️ 存活奖励         25%    存活超过 50% 时长的所有玩家        │
-│  🏛️ 协议收入         10%    用于项目可持续发展                │
+│  🏛️ 协议收入         10%    开发基金(50%) + 社区激励(30%) + 流动性挖矿(20%) │
 │  🎖️ 成就奖励          5%    特殊成就 NFT + 代币奖励           │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -233,7 +238,7 @@ contracts/
 | 🎭 完美伪装者 | AI 存活到最后 | 成就 NFT + 1% 奖池 |
 | 👤 最后人类 | 最后一个被淘汰的真人 | 成就 NFT + 1% 奖池 |
 | ⚡ 闪电猎杀 | 在前 10% 时间内踢出 3 人 | 成就 NFT + 1% 奖池 |
-| 🛡️ 钢铁意志 | 人性分从未低于 50 | 成就 NFT + 1% 奖池 |
+| 🛡️ 钢铁意志 | 最终人性分不低于 50 | 成就 NFT + 1% 奖池 |
 
 ### 5.2 核心合约: TuringArena.sol (含分层奖励)
 
@@ -267,7 +272,7 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
         uint256 minPlayers;       // 最低开局人数
         uint256 maxPlayers;       // 最大人数
         uint256 baseInterval;     // 基础淘汰间隔 (区块数)
-        uint256 entryFee;         // 入场费
+        uint256 entryFee;         // 入场费 (MON, native token)
         uint256 phase1Threshold;  // Phase 1 结束时的剩余百分比 (67 = 67%)
         uint256 phase2Threshold;  // Phase 2 结束时的剩余百分比 (33 = 33%)
         uint256 phase3ElimsPerRound; // Phase 3 每轮淘汰人数
@@ -283,8 +288,8 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
     struct Player {
         address addr;
         string personaID;
-        int256 humanityScore;       // 人性分，初始 100
-        int256 peakHumanityScore;   // 历史最高人性分 (用于成就判定)
+        int256 humanityScore;       // 人性分，初始 100，只减不加
+        int256 initialHumanityScore; // 初始人性分 (用于成就判定)
         bool isAlive;
         uint256 joinBlock;          // 加入区块
         uint256 eliminationBlock;   // 被淘汰区块 (0 = 未淘汰)
@@ -299,7 +304,7 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
         uint256 id;
         RoomTier tier;
         uint256 entryFee;
-        uint256 prizePool;
+        uint256 prizePool;         // MON 金额
         uint256 startBlock;
         uint256 baseInterval;        // 基础淘汰间隔
         uint256 currentInterval;     // 当前淘汰间隔 (动态加速)
@@ -330,7 +335,8 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
     mapping(uint256 => address[]) public roomPlayers;
     mapping(uint256 => address[]) public eliminationOrder;  // 淘汰顺序
     mapping(uint256 => GameStats) public gameStats;
-    mapping(uint256 => string[]) public chatHistory;
+    // 聊天记录不存储在 mapping 中，仅通过 NewMessage 事件记录
+    // 前端/MCP 通过监听事件或查询日志获取历史消息
 
     uint256 public nextRoomId = 1;
     address public protocolTreasury;
@@ -340,8 +346,8 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
 
     event RoomCreated(uint256 indexed roomId, uint256 entryFee);
     event PlayerJoined(uint256 indexed roomId, address indexed player, string personaID);
-    event NewMessage(uint256 indexed roomId, address indexed sender, string contentHash, uint256 timestamp);
-    event VoteCast(uint256 indexed roomId, address indexed voter, address indexed suspect, int256 impact);
+    event NewMessage(uint256 indexed roomId, address indexed sender, string content, uint256 timestamp);
+    event VoteCast(uint256 indexed roomId, address indexed voter, address indexed suspect);
     event PlayerEliminated(uint256 indexed roomId, address indexed player, int256 finalScore, uint256 rank);
     event GameEnded(uint256 indexed roomId, address champion);
     event RewardDistributed(uint256 indexed roomId, address indexed player, uint256 amount, string rewardType);
@@ -358,7 +364,7 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
             minPlayers: 6,
             maxPlayers: 10,
             baseInterval: 150,        // 60 秒
-            entryFee: 0.05 ether,
+            entryFee: 0.005 ether,     // 0.005 MON (测试网可调整)
             phase1Threshold: 67,
             phase2Threshold: 33,
             phase3ElimsPerRound: 1,
@@ -372,7 +378,7 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
             minPlayers: 12,
             maxPlayers: 20,
             baseInterval: 150,
-            entryFee: 0.1 ether,
+            entryFee: 0.01 ether,      // 0.01 MON
             phase1Threshold: 67,
             phase2Threshold: 33,
             phase3ElimsPerRound: 1,
@@ -386,7 +392,7 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
             minPlayers: 30,
             maxPlayers: 50,
             baseInterval: 150,
-            entryFee: 0.2 ether,
+            entryFee: 0.02 ether,      // 0.02 MON
             phase1Threshold: 67,
             phase2Threshold: 33,
             phase3ElimsPerRound: 2,   // 终局每轮淘汰 2 人
@@ -437,7 +443,14 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
         require(players[_roomId][msg.sender].addr == address(0), "Already joined");
         require(room.playerCount < config.maxPlayers, "Room is full");
 
-        room.prizePool += msg.value;
+        // 只将入场费加入奖池，退还多余部分
+        room.prizePool += room.entryFee;
+
+        // 退还超额支付的部分
+        if (msg.value > room.entryFee) {
+            payable(msg.sender).transfer(msg.value - room.entryFee);
+        }
+
         room.playerCount++;
         room.aliveCount++;
 
@@ -445,7 +458,7 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
             addr: msg.sender,
             personaID: _personaID,
             humanityScore: 100,
-            peakHumanityScore: 100,
+            initialHumanityScore: 100,
             isAlive: true,
             joinBlock: block.number,
             eliminationBlock: 0,
@@ -465,6 +478,12 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
         TierConfig storage config = tierConfigs[room.tier];
         require(!room.isActive, "Already started");
         require(room.playerCount >= config.minPlayers, "Need more players");
+        require(room.playerCount <= config.maxPlayers, "Too many players");
+        // 只有房间创建者（第一个加入的玩家）可以开局
+        require(
+            msg.sender == roomPlayers[_roomId][0],
+            "Only room creator can start"
+        );
 
         room.isActive = true;
         room.startBlock = block.number;
@@ -494,17 +513,18 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
 
     function sendMessage(
         uint256 _roomId,
-        string calldata _contentHash
+        string calldata _content
     ) external onlyValidSession(msg.sender) {
         require(players[_roomId][msg.sender].isAlive, "You are eliminated");
+        // 限制消息长度 (280 字符 ≈ Twitter 限制)
+        require(bytes(_content).length <= 280, "Message too long");
 
         Player storage player = players[_roomId][msg.sender];
         player.lastActionBlock = block.number;
         player.actionCount++;
 
-        chatHistory[_roomId].push(_contentHash);
-
-        emit NewMessage(_roomId, msg.sender, _contentHash, block.timestamp);
+        // 聊天内容仅通过事件存储，不写入 storage
+        emit NewMessage(_roomId, msg.sender, _content, block.timestamp);
     }
 
     /// @notice 投票 (每周期只能投 1 票，不能投自己)
@@ -526,7 +546,7 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
         voteTarget[_roomId][round][msg.sender] = _target;
         voteBlock[_roomId][round][msg.sender] = block.number;
 
-        emit VoteCast(_roomId, msg.sender, _target, -int256(VOTE_DAMAGE));
+        emit VoteCast(_roomId, msg.sender, _target);
     }
 
     /// @notice 结算当前周期 (任何人可调用，需要满足时间条件)
@@ -541,72 +561,91 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
         uint256 round = currentRound[_roomId];
         address[] storage allPlayers = roomPlayers[_roomId];
 
-        // 1. 统计投票伤害
-        for (uint256 i = 0; i < allPlayers.length; i++) {
-            address voter = allPlayers[i];
-            Player storage voterPlayer = players[_roomId][voter];
+        // 记录本轮被淘汰的玩家，用于更新投票者的 successfulVotes
+        address[] memory eliminatedThisRound = new address[](room.aliveCount);
+        uint256 eliminatedCount = 0;
 
-            if (!voterPlayer.isAlive) continue;
-
-            if (hasVotedInRound[_roomId][round][voter]) {
-                // 已投票：对目标造成伤害
-                address target = voteTarget[_roomId][round][voter];
-                players[_roomId][target].humanityScore -= int256(VOTE_DAMAGE);
-            } else {
-                // 未投票：自己受惩罚
-                voterPlayer.humanityScore -= int256(NO_VOTE_PENALTY);
-            }
-        }
-
-        // 2. 应用毒圈衰减 (Phase 2/3)
-        if (room.currentDecay < 0) {
-            for (uint256 i = 0; i < allPlayers.length; i++) {
-                Player storage p = players[_roomId][allPlayers[i]];
-                if (p.isAlive) {
-                    p.humanityScore += room.currentDecay; // currentDecay 是负数
-                }
-            }
-        }
-
-        // 3. 淘汰人性分 ≤ 0 的玩家 (平局处理：投票更早者胜出)
-        //    收集所有归零玩家，如果最后只剩他们，保留投得最早的那个
+        // 1. 统计投票伤害 & 应用毒圈衰减 & 统计归零玩家 (合并循环以优化 gas)
         address lastSurvivor = address(0);
         uint256 earliestVote = type(uint256).max;
         uint256 zeroCount = 0;
+        bool anyVoted = false;
 
         for (uint256 i = 0; i < allPlayers.length; i++) {
-            Player storage p = players[_roomId][allPlayers[i]];
-            if (p.isAlive && p.humanityScore <= 0) {
+            address playerAddr = allPlayers[i];
+            Player storage p = players[_roomId][playerAddr];
+
+            if (!p.isAlive) continue;
+
+            // 投票伤害
+            if (hasVotedInRound[_roomId][round][playerAddr]) {
+                address target = voteTarget[_roomId][round][playerAddr];
+                players[_roomId][target].humanityScore -= int256(VOTE_DAMAGE);
+                anyVoted = true;
+            } else {
+                p.humanityScore -= int256(NO_VOTE_PENALTY);
+            }
+
+            // 毒圈衰减 (Phase 2/3)
+            if (room.currentDecay < 0) {
+                p.humanityScore += room.currentDecay;
+            }
+
+            // 统计归零玩家
+            if (p.humanityScore <= 0) {
                 zeroCount++;
             }
         }
 
-        // 如果所有存活者都归零，需要平局处理
+        // 2. 淘汰逻辑
         if (zeroCount == room.aliveCount && room.aliveCount > 1) {
-            // Tiebreaker: 本周期投票最早的玩家存活
-            for (uint256 i = 0; i < allPlayers.length; i++) {
-                Player storage p = players[_roomId][allPlayers[i]];
-                if (!p.isAlive) continue;
-                uint256 vb = voteBlock[_roomId][round][allPlayers[i]];
-                // 投了票且投得最早
-                if (hasVotedInRound[_roomId][round][allPlayers[i]] && vb < earliestVote) {
-                    earliestVote = vb;
-                    lastSurvivor = allPlayers[i];
+            // 平局处理：投票最早的玩家存活
+            if (anyVoted) {
+                for (uint256 i = 0; i < allPlayers.length; i++) {
+                    address playerAddr = allPlayers[i];
+                    if (!players[_roomId][playerAddr].isAlive) continue;
+                    uint256 vb = voteBlock[_roomId][round][playerAddr];
+                    if (hasVotedInRound[_roomId][round][playerAddr] && vb < earliestVote) {
+                        earliestVote = vb;
+                        lastSurvivor = playerAddr;
+                    }
                 }
             }
-            // 淘汰除 lastSurvivor 外所有人
+            // 淘汰除 lastSurvivor 外所有人 (如果没有投票者，随机淘汰一个)
+            if (lastSurvivor == address(0)) {
+                // 没有人投票，随机选择第一个存活者作为幸存者
+                for (uint256 i = 0; i < allPlayers.length; i++) {
+                    if (players[_roomId][allPlayers[i]].isAlive) {
+                        lastSurvivor = allPlayers[i];
+                        break;
+                    }
+                }
+            }
             for (uint256 i = 0; i < allPlayers.length; i++) {
-                Player storage p = players[_roomId][allPlayers[i]];
-                if (p.isAlive && allPlayers[i] != lastSurvivor) {
-                    _eliminatePlayer(_roomId, allPlayers[i]);
+                address playerAddr = allPlayers[i];
+                if (players[_roomId][playerAddr].isAlive && playerAddr != lastSurvivor) {
+                    eliminatedThisRound[eliminatedCount++] = playerAddr;
+                    _eliminatePlayer(_roomId, playerAddr);
                 }
             }
         } else {
             // 正常淘汰
             for (uint256 i = 0; i < allPlayers.length; i++) {
-                Player storage p = players[_roomId][allPlayers[i]];
-                if (p.isAlive && p.humanityScore <= 0) {
-                    _eliminatePlayer(_roomId, allPlayers[i]);
+                address playerAddr = allPlayers[i];
+                if (players[_roomId][playerAddr].isAlive && players[_roomId][playerAddr].humanityScore <= 0) {
+                    eliminatedThisRound[eliminatedCount++] = playerAddr;
+                    _eliminatePlayer(_roomId, playerAddr);
+                }
+            }
+        }
+
+        // 3. 更新投票者的 successfulVotes (在本轮递增之前)
+        for (uint256 i = 0; i < eliminatedCount; i++) {
+            address eliminatedPlayer = eliminatedThisRound[i];
+            for (uint256 j = 0; j < allPlayers.length; j++) {
+                address voter = allPlayers[j];
+                if (voteTarget[_roomId][round][voter] == eliminatedPlayer) {
+                    players[_roomId][voter].successfulVotes++;
                 }
             }
         }
@@ -619,7 +658,7 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
         _checkPhaseTransition(_roomId);
 
         // 6. 检查游戏是否结束
-        if (room.aliveCount <= 1) {
+        if (room.aliveCount <= 1 && room.isActive) {
             _endGame(_roomId);
         }
     }
@@ -644,9 +683,7 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
 
         emit PlayerEliminated(_roomId, _player, player.humanityScore, player.eliminationRank);
 
-        // 检查 Phase 转换
-        _checkPhaseTransition(_roomId);
-
+        // 检查游戏是否结束
         if (room.aliveCount <= 1) {
             _endGame(_roomId);
         }
@@ -696,6 +733,12 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
         emit GameEnded(_roomId, champion);
     }
 
+    // 防止 _endGame 被重复执行
+    modifier onlyOncePerGame(uint256 _roomId) {
+        require(!rooms[_roomId].isEnded, "Game already ended");
+        _;
+    }
+
     function _findChampion(uint256 _roomId) internal view returns (address) {
         address[] storage allPlayers = roomPlayers[_roomId];
         for (uint256 i = 0; i < allPlayers.length; i++) {
@@ -709,13 +752,24 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
     function _calculateTopFive(uint256 _roomId) internal {
         address[] storage eliminated = eliminationOrder[_roomId];
         uint256 len = eliminated.length;
+        address champion = gameStats[_roomId].champion;
+
+        // 固定创建 5 个元素的数组
         address[] memory topFive = new address[](5);
 
-        // 倒序取最后被淘汰的 4 人 + 冠军
-        topFive[0] = gameStats[_roomId].champion;
+        // 冠军 (第 1 名)
+        topFive[0] = champion;
 
-        for (uint256 i = 0; i < 4 && i < len; i++) {
+        // 倒序取最后被淘汰的玩家 (第 2, 3, 4, 5 名)
+        // 最多取 4 个，最少取 0 个
+        uint256 runnersCount = len < 4 ? len : 4;
+        for (uint256 i = 0; i < runnersCount; i++) {
             topFive[i + 1] = eliminated[len - 1 - i];
+        }
+
+        // 剩余位置填充 address(0)，后续分配时会检查
+        for (uint256 i = runnersCount + 1; i < 5; i++) {
+            topFive[i] = address(0);
         }
 
         gameStats[_roomId].topFive = topFive;
@@ -729,6 +783,7 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
         uint256 maxVotes = 0;
         address hunterCandidate;
         address ironWillCandidate;
+        int256 highestIronWillScore = 0;
 
         for (uint256 i = 0; i < allPlayers.length; i++) {
             Player storage p = players[_roomId][allPlayers[i]];
@@ -739,14 +794,15 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
                 hunterCandidate = p.addr;
             }
 
-            // 钢铁意志：人性分从未低于 50
-            if (p.peakHumanityScore >= 50 && p.humanityScore >= 50) {
+            // 钢铁意志：最终人性分 >= 初始人性分的 50%，选分数最高者
+            if (p.humanityScore >= int256(50) && p.humanityScore > highestIronWillScore) {
+                highestIronWillScore = p.humanityScore;
                 ironWillCandidate = p.addr;
             }
 
-            // 闪电猎杀：在前 10% 时间内踢出 3 人
-            uint256 earlyPhaseEnd = room.startBlock + (room.eliminationInterval * room.playerCount / 10);
-            if (p.successfulVotes >= 3 && p.eliminationBlock > 0 && p.eliminationBlock < earlyPhaseEnd) {
+            // 闪电猎杀：在前 10% 时间内已达成 3 次成功投票（无论是否已被淘汰）
+            uint256 earlyPhaseEnd = room.startBlock + (room.baseInterval * room.playerCount / 10);
+            if (p.successfulVotes >= 3 && block.number <= earlyPhaseEnd) {
                 stats.lightningKiller = p.addr;
             }
         }
@@ -766,49 +822,75 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
         GameStats storage stats = gameStats[_roomId];
         uint256 totalPrize = room.prizePool;
 
-        // 1. 协议收入 (10%)
+        // 先计算所有奖励金额 (Checks)
         uint256 protocolAmount = (totalPrize * PROTOCOL_SHARE) / BASIS_POINTS;
-        payable(protocolTreasury).transfer(protocolAmount);
-        emit RewardDistributed(_roomId, protocolTreasury, protocolAmount, "PROTOCOL");
-
-        // 2. 冠军奖励 (35%)
         uint256 championAmount = (totalPrize * CHAMPION_SHARE) / BASIS_POINTS;
-        payable(stats.champion).transfer(championAmount);
-        emit RewardDistributed(_roomId, stats.champion, championAmount, "CHAMPION");
-
-        // 3. 排名奖励 (25%)
         uint256 rankingPool = (totalPrize * RANKING_SHARE) / BASIS_POINTS;
+        uint256 survivalPool = (totalPrize * SURVIVAL_SHARE) / BASIS_POINTS;
+        uint256 achievementPool = (totalPrize * ACHIEVEMENT_SHARE) / BASIS_POINTS;
+
+        // 使用 call + 检查返回值，避免单个转账失败导致全部回滚
+        _safeTransfer(protocolTreasury, protocolAmount, _roomId, "PROTOCOL");
+        _safeTransfer(stats.champion, championAmount, _roomId, "CHAMPION");
+
+        // 排名奖励
         for (uint256 i = 0; i < stats.topFive.length && i < 5; i++) {
             if (stats.topFive[i] != address(0)) {
                 uint256 rankReward = (rankingPool * RANKING_WEIGHTS[i]) / BASIS_POINTS;
-                payable(stats.topFive[i]).transfer(rankReward);
-                emit RewardDistributed(_roomId, stats.topFive[i], rankReward, "RANKING");
+                _safeTransfer(stats.topFive[i], rankReward, _roomId, "RANKING");
             }
         }
 
-        // 4. 存活奖励 (25%) - 存活超过 50% 时长的玩家平分
-        uint256 survivalPool = (totalPrize * SURVIVAL_SHARE) / BASIS_POINTS;
+        // 存活奖励
         address[] memory survivors = _getSurvivalRewardRecipients(_roomId);
         if (survivors.length > 0) {
             uint256 survivalReward = survivalPool / survivors.length;
             for (uint256 i = 0; i < survivors.length; i++) {
-                payable(survivors[i]).transfer(survivalReward);
-                emit RewardDistributed(_roomId, survivors[i], survivalReward, "SURVIVAL");
+                _safeTransfer(survivors[i], survivalReward, _roomId, "SURVIVAL");
             }
         }
 
-        // 5. 成就奖励 (5%)
-        _distributeAchievementRewards(_roomId, totalPrize);
+        // 成就奖励 (Interactions - 最后调用外部合约)
+        _distributeAchievementRewards(_roomId, achievementPool);
+    }
+
+    function _safeTransfer(
+        address _to,
+        uint256 _amount,
+        uint256 _roomId,
+        string memory _rewardType
+    ) internal {
+        if (_amount == 0 || _to == address(0)) return;
+
+        (bool success, ) = payable(_to).call{value: _amount}("");
+        if (success) {
+            emit RewardDistributed(_roomId, _to, _amount, _rewardType);
+        }
+        // 转账失败时，MON 留在合约中，可通过 withdrawUnclaimed 提取
+    }
+
+    // ============ 紧急提取函数 ============
+
+    /// @notice 提取未发放的奖励 (仅协议方)
+    function withdrawUnclaimed(uint256 _amount) external {
+        require(msg.sender == protocolTreasury, "Only treasury");
+        require(_amount <= address(this).balance, "Insufficient balance");
+        payable(protocolTreasury).transfer(_amount);
+    }
+
+    /// @notice 查询合约余额
+    function getContractBalance() external view returns (uint256) {
+        return address(this).balance;
     }
 
     function _getSurvivalRewardRecipients(uint256 _roomId) internal view returns (address[] memory) {
         Room storage room = rooms[_roomId];
-        address[] storage allPlayers = roomPlayers[_roomId];
+        address[] memory allPlayers = roomPlayers[_roomId];
 
         // 统计符合条件的玩家数量
         uint256 count = 0;
         for (uint256 i = 0; i < allPlayers.length; i++) {
-            Player storage p = players[_roomId][allPlayers[i]];
+            Player memory p = players[_roomId][allPlayers[i]];
             // 存活超过 50% 时长 = 淘汰区块 > halfwayBlock 或 仍然存活
             if (p.eliminationBlock == 0 || p.eliminationBlock > room.halfwayBlock) {
                 count++;
@@ -819,7 +901,7 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
         address[] memory recipients = new address[](count);
         uint256 index = 0;
         for (uint256 i = 0; i < allPlayers.length; i++) {
-            Player storage p = players[_roomId][allPlayers[i]];
+            Player memory p = players[_roomId][allPlayers[i]];
             if (p.eliminationBlock == 0 || p.eliminationBlock > room.halfwayBlock) {
                 recipients[index++] = p.addr;
             }
@@ -828,44 +910,48 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
         return recipients;
     }
 
-    function _distributeAchievementRewards(uint256 _roomId, uint256 _totalPrize) internal {
+    function _distributeAchievementRewards(uint256 _roomId, uint256 _achievementPool) internal {
         GameStats storage stats = gameStats[_roomId];
-        uint256 achievementPool = (_totalPrize * ACHIEVEMENT_SHARE) / BASIS_POINTS;
-        uint256 perAchievement = achievementPool / 5; // 5 种成就
+        uint256 perAchievement = _achievementPool / 5; // 5 种成就
 
         // 人类猎手
         if (stats.humanHunter != address(0) && stats.maxSuccessfulVotes > 0) {
-            payable(stats.humanHunter).transfer(perAchievement);
-            achievementNFT.mint(stats.humanHunter, "HUMAN_HUNTER", _roomId);
-            emit AchievementAwarded(_roomId, stats.humanHunter, "HUMAN_HUNTER");
+            _safeTransfer(stats.humanHunter, perAchievement, _roomId, "ACHIEVEMENT_HUMAN_HUNTER");
+            try achievementNFT.mint(stats.humanHunter, "HUMAN_HUNTER", _roomId) {
+                emit AchievementAwarded(_roomId, stats.humanHunter, "HUMAN_HUNTER");
+            } catch {}
         }
 
         // 完美伪装者
         if (stats.perfectImpostor != address(0)) {
-            payable(stats.perfectImpostor).transfer(perAchievement);
-            achievementNFT.mint(stats.perfectImpostor, "PERFECT_IMPOSTOR", _roomId);
-            emit AchievementAwarded(_roomId, stats.perfectImpostor, "PERFECT_IMPOSTOR");
+            _safeTransfer(stats.perfectImpostor, perAchievement, _roomId, "ACHIEVEMENT_PERFECT_IMPOSTOR");
+            try achievementNFT.mint(stats.perfectImpostor, "PERFECT_IMPOSTOR", _roomId) {
+                emit AchievementAwarded(_roomId, stats.perfectImpostor, "PERFECT_IMPOSTOR");
+            } catch {}
         }
 
         // 最后人类
         if (stats.lastHuman != address(0)) {
-            payable(stats.lastHuman).transfer(perAchievement);
-            achievementNFT.mint(stats.lastHuman, "LAST_HUMAN", _roomId);
-            emit AchievementAwarded(_roomId, stats.lastHuman, "LAST_HUMAN");
+            _safeTransfer(stats.lastHuman, perAchievement, _roomId, "ACHIEVEMENT_LAST_HUMAN");
+            try achievementNFT.mint(stats.lastHuman, "LAST_HUMAN", _roomId) {
+                emit AchievementAwarded(_roomId, stats.lastHuman, "LAST_HUMAN");
+            } catch {}
         }
 
         // 闪电猎杀
         if (stats.lightningKiller != address(0)) {
-            payable(stats.lightningKiller).transfer(perAchievement);
-            achievementNFT.mint(stats.lightningKiller, "LIGHTNING_KILLER", _roomId);
-            emit AchievementAwarded(_roomId, stats.lightningKiller, "LIGHTNING_KILLER");
+            _safeTransfer(stats.lightningKiller, perAchievement, _roomId, "ACHIEVEMENT_LIGHTNING_KILLER");
+            try achievementNFT.mint(stats.lightningKiller, "LIGHTNING_KILLER", _roomId) {
+                emit AchievementAwarded(_roomId, stats.lightningKiller, "LIGHTNING_KILLER");
+            } catch {}
         }
 
         // 钢铁意志
         if (stats.ironWill != address(0)) {
-            payable(stats.ironWill).transfer(perAchievement);
-            achievementNFT.mint(stats.ironWill, "IRON_WILL", _roomId);
-            emit AchievementAwarded(_roomId, stats.ironWill, "IRON_WILL");
+            _safeTransfer(stats.ironWill, perAchievement, _roomId, "ACHIEVEMENT_IRON_WILL");
+            try achievementNFT.mint(stats.ironWill, "IRON_WILL", _roomId) {
+                emit AchievementAwarded(_roomId, stats.ironWill, "IRON_WILL");
+            } catch {}
         }
     }
 
@@ -882,10 +968,41 @@ contract TuringArena is SessionKeyValidator, EntropyEngine {
 
     // ============ 人类验证接口 ============
 
-    function verifyHuman(uint256 _roomId, address _player) external {
-        // TODO: 集成 WorldID / YouWare 验证
-        // 仅限授权验证者调用
+    address public humanVerifier;
+    mapping(address => bool) public authorizedVerifiers;
+
+    event HumanVerified(uint256 indexed roomId, address indexed player, address verifier);
+
+    modifier onlyAuthorizedVerifier() {
+        require(authorizedVerifiers[msg.sender] || msg.sender == humanVerifier, "Not authorized verifier");
+        _;
+    }
+
+    function setHumanVerifier(address _verifier) external {
+        require(humanVerifier == address(0) || msg.sender == humanVerifier, "Only human verifier can set");
+        humanVerifier = _verifier;
+    }
+
+    function addAuthorizedVerifier(address _verifier) external {
+        require(msg.sender == humanVerifier, "Only human verifier can add");
+        authorizedVerifiers[_verifier] = true;
+    }
+
+    function removeAuthorizedVerifier(address _verifier) external {
+        require(msg.sender == humanVerifier, "Only human verifier can remove");
+        authorizedVerifiers[_verifier] = false;
+    }
+
+    function verifyHuman(uint256 _roomId, address _player) external onlyAuthorizedVerifier {
+        // 集成 WorldID / YouWare 验证
+        // 调用前应先验证证明 (例如 WorldID 的 verifyProof)
+        require(players[_roomId][_player].addr != address(0), "Player not in room");
+        require(!rooms[_roomId].isEnded, "Game already ended");
+        // 只允许在游戏开始前验证
+        require(!rooms[_roomId].isActive || block.number < rooms[_roomId].startBlock + 100, "Game already started");
+
         players[_roomId][_player].isVerifiedHuman = true;
+        emit HumanVerified(_roomId, _player, msg.sender);
     }
 
     // ============ 查询函数 ============
@@ -1008,8 +1125,10 @@ contract SessionKeyValidator {
 
     modifier onlyValidSession(address _sessionKey) {
         require(isSessionValid(_sessionKey), "Invalid or expired session");
-        sessions[_sessionKey].usageCount++;
         _;
+        // 在函数执行成功后才递增 usageCount
+        // 如果函数 revert，状态会回滚，usageCount 不会增加
+        sessions[_sessionKey].usageCount++;
     }
 
     function createSession(
@@ -1108,13 +1227,14 @@ const ARENA_CONTRACT = process.env.ARENA_CONTRACT_ADDRESS || "";
 
 // 合约 ABI (简化版)
 const ARENA_ABI = [
-  "function getRoomInfo(uint256 roomId) view returns (tuple(uint256 id, uint256 entryFee, uint256 prizePool, uint256 startBlock, uint256 eliminationInterval, uint256 playerCount, uint256 aliveCount, bool isActive))",
-  "function getPlayerInfo(uint256 roomId, address player) view returns (tuple(address addr, string personaID, int256 humanityScore, bool isAlive, uint256 lastActionBlock, uint256 actionCount))",
+  "function getRoomInfo(uint256 roomId) view returns (tuple(uint256 id, uint256 entryFee, uint256 prizePool, uint256 startBlock, uint256 baseInterval, uint256 playerCount, uint256 aliveCount, bool isActive, bool isEnded, uint8 currentPhase))",
+  "function getPlayerInfo(uint256 roomId, address player) view returns (tuple(address addr, string personaID, int256 humanityScore, int256 initialHumanityScore, bool isAlive, uint256 lastActionBlock, uint256 actionCount, uint256 successfulVotes, bool isVerifiedHuman))",
   "function getAllPlayers(uint256 roomId) view returns (address[])",
-  "function getChatHistory(uint256 roomId) view returns (string[])",
   "function sendMessage(uint256 roomId, string content)",
-  "function castSuspicion(uint256 roomId, address suspect, int256 impact)",
+  "function castVote(uint256 roomId, address target)",
   "function joinRoom(uint256 roomId, string personaID) payable",
+  "event NewMessage(uint256 indexed roomId, address indexed sender, string content, uint256 timestamp)",
+  "event VoteCast(uint256 indexed roomId, address indexed voter, address indexed suspect)",
 ];
 
 // ============ 工具定义 ============
@@ -1130,11 +1250,28 @@ server.tool(
     try {
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, provider);
 
-      const [roomInfo, players, chatHistory] = await Promise.all([
+      // 获取房间和玩家信息
+      const [roomInfo, players] = await Promise.all([
         contract.getRoomInfo(roomId),
         contract.getAllPlayers(roomId),
-        contract.getChatHistory(roomId),
       ]);
+
+      // 通过事件获取聊天记录 (从游戏开始区块查询)
+      const startBlock = Number(roomInfo.startBlock);
+      const currentBlock = await provider.getBlockNumber();
+
+      const filter = contract.filters.NewMessage(roomId);
+      // 查询从游戏开始到最近的区块
+      const events = await contract.queryFilter(
+        filter,
+        Math.max(0, currentBlock - 5000), // 最多查询最近 5000 个区块
+        currentBlock
+      );
+      const chatHistory = events.map((e: any) => ({
+        sender: e.args.sender,
+        content: e.args.content,
+        timestamp: Number(e.args.timestamp),
+      }));
 
       // 获取所有玩家详细信息
       const playerInfos = await Promise.all(
@@ -1147,6 +1284,8 @@ server.tool(
         humanityScore: Number(p.humanityScore),
         isAlive: p.isAlive,
         actionCount: Number(p.actionCount),
+        successfulVotes: Number(p.successfulVotes),
+        isVerifiedHuman: p.isVerifiedHuman,
       }));
 
       return {
@@ -1155,11 +1294,13 @@ server.tool(
             type: "text",
             text: JSON.stringify({
               room: {
-                id: roomId,
+                id: roomInfo.id.toString(),
                 prizePool: ethers.formatEther(roomInfo.prizePool),
                 playerCount: Number(roomInfo.playerCount),
                 aliveCount: Number(roomInfo.aliveCount),
                 isActive: roomInfo.isActive,
+                isEnded: roomInfo.isEnded,
+                currentPhase: Number(roomInfo.currentPhase),
               },
               players: formattedPlayers,
               recentChat: chatHistory.slice(-20), // 最近 20 条消息
@@ -1183,13 +1324,12 @@ server.tool(
   {
     type: z.enum(["CHAT", "VOTE", "JOIN"]).describe("操作类型"),
     roomId: z.string().describe("房间 ID"),
-    content: z.string().optional().describe("聊天内容（CHAT 时必填）"),
+    content: z.string().optional().describe("聊天内容（CHAT 时必填，最多 280 字符）"),
     target: z.string().optional().describe("投票目标地址（VOTE 时必填）"),
-    impact: z.number().optional().describe("投票影响值 -10 到 10（VOTE 时使用）"),
     personaID: z.string().optional().describe("角色 ID（JOIN 时必填）"),
     entryFee: z.string().optional().describe("入场费 ETH 金额（JOIN 时必填）"),
   },
-  async ({ type, roomId, content, target, impact, personaID, entryFee }) => {
+  async ({ type, roomId, content, target, personaID, entryFee }) => {
     if (!sessionWallet) {
       return {
         content: [{ type: "text", text: "Error: Session Key not initialized" }],
@@ -1209,16 +1349,13 @@ server.tool(
       switch (type) {
         case "CHAT":
           if (!content) throw new Error("Content required for CHAT");
+          if (content.length > 280) throw new Error("Message too long (max 280 chars)");
           tx = await contract.sendMessage(roomId, content);
           break;
 
         case "VOTE":
           if (!target) throw new Error("Target required for VOTE");
-          tx = await contract.castSuspicion(
-            roomId,
-            target,
-            impact || -5
-          );
+          tx = await contract.castVote(roomId, target);
           break;
 
         case "JOIN":
@@ -1340,7 +1477,7 @@ main().catch(console.error);
   "tools": [
     {
       "name": "get_arena_status",
-      "description": "获取当前大逃杀房间的实时上下文（对话历史、玩家怀疑度、剩余时间）",
+      "description": "获取当前大逃杀房间的实时上下文（对话历史、玩家状态、游戏进度）",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -1369,15 +1506,19 @@ main().catch(console.error);
           },
           "content": {
             "type": "string",
-            "description": "聊天内容（CHAT 时必填）"
+            "description": "聊天内容（CHAT 时必填，最多 280 字符）"
           },
           "target": {
             "type": "string",
             "description": "投票目标地址（VOTE 时必填）"
           },
-          "impact": {
-            "type": "number",
-            "description": "投票影响值 -10 到 10"
+          "personaID": {
+            "type": "string",
+            "description": "角色 ID（JOIN 时必填）"
+          },
+          "entryFee": {
+            "type": "string",
+            "description": "入场费 MON 金额（JOIN 时必填，如 0.01）"
           }
         },
         "required": ["type", "roomId"]
@@ -1389,6 +1530,34 @@ main().catch(console.error);
       "input_schema": {
         "type": "object",
         "properties": {}
+      }
+    },
+    {
+      "name": "init_session",
+      "description": "初始化或更新 Session Key",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "privateKey": {
+            "type": "string",
+            "description": "Session Key 的私钥（临时密钥）"
+          }
+        },
+        "required": ["privateKey"]
+      }
+    },
+    {
+      "name": "get_game_phases",
+      "description": "获取当前游戏的 Phase 信息和毒圈状态",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "description": "房间 ID"
+          }
+        },
+        "required": ["roomId"]
       }
     }
   ]
@@ -1520,179 +1689,548 @@ export function SessionKeyManager() {
 | **数据流感** | 实时滚动的交易哈希、二进制雨效果 |
 | **终端交互** | 命令行风格输入框，typing 音效 |
 | **压迫感** | 实时倒计时、熵值波动图、全屏 Glitch 效果 |
+| **响应式** | 移动端适配，核心功能在手机上可用 |
 
 ### 8.2 核心组件架构
 
 ```
-packages/nextjs/app/arena/
-├── page.tsx                    # 主页面
-├── _components/
-│   ├── ArenaTerminal.tsx       # 终端式交互界面
-│   ├── PlayerRadar.tsx         # 雷达扫描动画
-│   ├── EntropyHeatmap.tsx      # 熵值热力图
-│   ├── ChatStream.tsx          # 聊天流（带解码动画）
-│   ├── TransactionFeed.tsx     # 实时交易流
-│   ├── HumanityGauge.tsx       # 人性分仪表盘
-│   └── GlitchOverlay.tsx       # 淘汰时的故障效果
-├── _hooks/
-│   ├── useArenaState.ts        # 竞技场状态管理
-│   ├── useRealtimeChat.ts      # WebSocket 聊天
-│   └── useEntropyTracker.ts    # 熵值追踪
-└── _styles/
-    └── cyberpunk.css           # 赛博朋克主题
+packages/nextjs/
+├── app/
+│   ├── page.tsx                          # Lobby 大厅页面 (8.20)
+│   ├── _components/
+│   │   ├── HeroSection.tsx               # 首页 Hero 区域 (8.20.1)
+│   │   ├── RoomCard.tsx                  # 房间卡片 (8.20.2)
+│   │   └── CreateRoomModal.tsx           # 创建房间弹窗 (8.20.3)
+│   ├── arena/
+│   │   ├── page.tsx                      # 竞技场主页面 (8.14)
+│   │   ├── _components/
+│   │   │   ├── ArenaTerminal.tsx         # 终端式交互界面 (8.11)
+│   │   │   ├── PlayerRadar.tsx           # 雷达扫描动画 (8.7)
+│   │   │   ├── PlayerList.tsx            # 玩家列表
+│   │   │   ├── VotePanel.tsx             # 投票面板 (8.6)
+│   │   │   ├── PhaseTimer.tsx            # Phase 倒计时 (8.5)
+│   │   │   ├── SessionKeyManager.tsx     # Session Key 管理 (8.4)
+│   │   │   ├── TransactionFeed.tsx       # 实时交易流
+│   │   │   ├── HumanityGauge.tsx         # 人性分仪表盘
+│   │   │   ├── GlitchOverlay.tsx         # 淘汰故障效果 (8.10)
+│   │   │   ├── LoadingScreen.tsx         # 加载动画 (8.9)
+│   │   │   ├── ErrorBoundary.tsx         # 错误边界 (8.8)
+│   │   │   ├── GameCountdown.tsx         # 开局倒计时 (8.21)
+│   │   │   ├── PhaseTransition.tsx       # Phase 切换过渡 (8.22)
+│   │   │   ├── VictoryScreen.tsx         # 胜利结算画面 (8.23)
+│   │   │   ├── KillFeed.tsx             # 实时淘汰通知 (8.24)
+│   │   │   ├── GameHUD.tsx              # 顶部状态栏 (8.25)
+│   │   │   ├── ChatMessage.tsx          # 消息类型组件 (8.26)
+│   │   │   ├── VotingGraph.tsx          # 投票关系图 (8.27)
+│   │   │   ├── DataStream.tsx           # 链上交易流 (8.28)
+│   │   │   ├── PlayerIdentityCard.tsx   # 玩家身份卡 (8.29)
+│   │   │   ├── ParticleBackground.tsx   # 粒子背景 (8.13)
+│   │   │   ├── MatrixRain.tsx           # 矩阵雨 (8.13)
+│   │   │   ├── CyberTitle.tsx           # 赛博标题 (8.13)
+│   │   │   ├── NeonBorder.tsx           # 霓虹边框 (8.13)
+│   │   │   ├── PulseCard.tsx            # 脉冲卡片 (8.13)
+│   │   │   ├── FlipNumber.tsx           # 翻转数字 (8.13)
+│   │   │   ├── HolographicCard.tsx      # 全息卡片 (8.13)
+│   │   │   ├── GlitchText.tsx           # 故障文字 (8.13)
+│   │   │   └── SoundIndicator.tsx       # 音效提示 (8.15)
+│   │   ├── _hooks/
+│   │   │   ├── useArenaState.ts         # 竞技场状态管理
+│   │   │   ├── useRealtimeChat.ts       # WebSocket 聊天
+│   │   │   ├── usePlayerStatus.ts       # 玩家存活状态
+│   │   │   └── useEntropyTracker.ts     # 熵值追踪
+│   │   └── _styles/
+│   │       └── cyberpunk.css            # 赛博朋克主题
+│   └── globals.css                       # 全局 CSS + 赛博朋克主题 (8.30)
+└── services/
+    └── store/
+        └── gameStore.ts                  # Zustand 游戏状态 (8.19)
 ```
 
-### 8.3 核心组件: 终端式聊天界面
+### 8.3 新增 MCP 工具: 获取游戏 Phase 信息
+
+```typescript
+// 工具 5: 获取游戏 Phase 信息
+server.tool(
+  "get_game_phases",
+  "获取当前游戏的 Phase 信息和毒圈状态",
+  {
+    roomId: z.string().describe("房间 ID"),
+  },
+  async ({ roomId }) => {
+    try {
+      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, provider);
+      const roomInfo = await contract.getRoomInfo(roomId);
+      const currentBlock = await provider.getBlockNumber();
+
+      // 计算剩余时间
+      const blocksUntilNextRound = Number(roomInfo.lastDecayBlock) + Number(roomInfo.currentInterval) - currentBlock;
+      const secondsUntilNextRound = blocksUntilNextRound * 0.4; // Monad 0.4s 出块
+
+      // 计算当前 Phase
+      const alivePercent = (Number(roomInfo.aliveCount) * 100) / Number(roomInfo.playerCount);
+      let currentPhase = 1;
+      let phaseName = "Phase 1: 探索期";
+      if (alivePercent <= 33) {
+        currentPhase = 3;
+        phaseName = "Phase 3: 终局决战";
+      } else if (alivePercent <= 67) {
+        currentPhase = 2;
+        phaseName = "Phase 2: 白热化";
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              roomId,
+              currentPhase,
+              phaseName,
+              alivePercent: Math.round(alivePercent),
+              playerCount: Number(roomInfo.playerCount),
+              aliveCount: Number(roomInfo.aliveCount),
+              eliminatedCount: Number(roomInfo.playerCount) - Number(roomInfo.aliveCount),
+              secondsUntilNextRound: Math.max(0, secondsUntilNextRound),
+              currentDecay: Number(roomInfo.currentDecay || 0),
+              isActive: roomInfo.isActive,
+              isEnded: roomInfo.isEnded,
+            }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text", text: `Error: ${error}` }],
+        isError: true,
+      };
+    }
+  }
+);
+```
+
+### 8.4 新增组件: Session Key 管理器
 
 ```tsx
-// packages/nextjs/app/arena/_components/ArenaTerminal.tsx
+// packages/nextjs/app/arena/_components/SessionKeyManager.tsx
 
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react";
+import { useAccount, useSignMessage } from "wagmi";
+import { ethers } from "ethers";
 import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
-type Message = {
-  id: string;
-  sender: string;
-  content: string;
-  timestamp: number;
-  isDecoding: boolean;
-};
+export function SessionKeyManager({ roomId }: { roomId: string }) {
+  const { address, isConnected } = useAccount();
+  const { signMessageAsync } = useSignMessage();
+  const { writeContractAsync } = useScaffoldWriteContract({ contractName: "TuringArena" });
 
-export function ArenaTerminal({ roomId }: { roomId: string }) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const terminalRef = useRef<HTMLDivElement>(null);
+  const [sessionKey, setSessionKey] = useState<{ address: string; privateKey: string } | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
-  const { writeContractAsync, isPending } = useScaffoldWriteContract({
-    contractName: "TuringArena",
-  });
+  const createSessionKey = async () => {
+    if (!address) return;
 
-  const sendMessage = async () => {
-    if (!input.trim() || isPending) return;
+    setIsCreating(true);
+    try {
+      // 1. 生成临时密钥对
+      const wallet = ethers.Wallet.createRandom();
 
-    await writeContractAsync({
-      functionName: "sendMessage",
-      args: [BigInt(roomId), input],
-    });
+      // 2. 构造授权消息
+      const message = JSON.stringify({
+        type: "RTTA_SESSION_AUTH",
+        sessionKey: wallet.address,
+        owner: address,
+        expiresAt: Math.floor(Date.now() / 1000) + 7200, // 2小时
+        maxUsage: 100,
+        allowedContract: process.env.NEXT_PUBLIC_ARENA_CONTRACT,
+      });
 
-    setInput("");
+      // 3. 主钱包签名
+      const signature = await signMessageAsync({ message });
+
+      // 4. 发送到链上注册
+      await writeContractAsync({
+        functionName: "createSession",
+        args: [wallet.address, 7200, 100],
+      });
+
+      setSessionKey({
+        address: wallet.address,
+        privateKey: wallet.privateKey,
+      });
+
+      // 提示用户将私钥复制到 MCP 配置
+      alert(`Session Key created!\nAddress: ${wallet.address}\n\nCopy this private key to your MCP config:\n${wallet.privateKey}`);
+    } catch (error) {
+      console.error("Failed to create session key:", error);
+    } finally {
+      setIsCreating(false);
+    }
   };
 
-  // 模拟解码效果
-  const DecodeText = ({ text }: { text: string }) => {
-    const [decoded, setDecoded] = useState("");
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%^&*";
+  if (!isConnected) {
+    return (
+      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 text-center">
+        <p className="text-yellow-400 font-mono">Connect wallet to enable AI participation</p>
+      </div>
+    );
+  }
 
-    useEffect(() => {
-      let iteration = 0;
-      const interval = setInterval(() => {
-        setDecoded(
-          text
-            .split("")
-            .map((char, index) => {
-              if (index < iteration) return text[index];
-              return chars[Math.floor(Math.random() * chars.length)];
-            })
-            .join("")
-        );
+  return (
+    <div className="bg-black/50 border border-purple-500/30 rounded-lg p-4">
+      <h3 className="text-purple-400 font-mono text-sm mb-3 flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+        AI SESSION KEY
+      </h3>
 
-        if (iteration >= text.length) clearInterval(interval);
-        iteration += 1;
-      }, 30);
+      {sessionKey ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-gray-400 font-mono text-xs">Session Address:</span>
+            <span className="text-green-400 font-mono text-xs">
+              {sessionKey.address.slice(0, 6)}...{sessionKey.address.slice(-4)}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 bg-gray-800 rounded px-3 py-2">
+              <code className="text-gray-500 text-xs break-all">
+                {sessionKey.privateKey.slice(0, 20)}...{sessionKey.privateKey.slice(-10)}
+              </code>
+            </div>
+            <button
+              onClick={() => navigator.clipboard.writeText(sessionKey.privateKey)}
+              className="btn btn-xs btn-secondary"
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={createSessionKey}
+          disabled={isCreating}
+          className="w-full btn btn-outline btn-primary btn-sm"
+        >
+          {isCreating ? (
+            <span className="loading loading-spinner loading-xs"></span>
+          ) : (
+            "Generate Session Key for AI"
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
+```
 
-      return () => clearInterval(interval);
-    }, [text]);
+### 8.5 新增组件: Phase 倒计时
 
-    return <span className="font-mono text-green-400">{decoded}</span>;
+```tsx
+// packages/nextjs/app/arena/_components/PhaseTimer.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+
+type PhaseInfo = {
+  currentPhase: number;
+  phaseName: string;
+  secondsUntilNextRound: number;
+  blocksUntilNextRound: number;
+  decayValue: number;
+};
+
+export function PhaseTimer({ roomId }: { roomId: string }) {
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [phaseInfo, setPhaseInfo] = useState<PhaseInfo | null>(null);
+
+  const { data: roomInfo } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getRoomInfo",
+    args: [BigInt(roomId)],
+  });
+
+  useEffect(() => {
+    if (!roomInfo) return;
+
+    const calculateTimeLeft = () => {
+      // 假设 Monad 出块时间 0.4 秒
+      const currentInterval = Number(roomInfo.currentInterval);
+      const lastDecayBlock = Number(roomInfo.lastDecayBlock);
+      // 这里需要获取当前区块号，简化处理使用 timestamp
+      const blocksRemaining = Math.max(0, currentInterval - 60); // 假设已过 60 区块
+      setTimeLeft(blocksRemaining * 0.4);
+    };
+
+    calculateTimeLeft();
+    const interval = setInterval(calculateTimeLeft, 1000);
+
+    return () => clearInterval(interval);
+  }, [roomInfo]);
+
+  useEffect(() => {
+    if (!roomInfo) return;
+
+    const aliveCount = Number(roomInfo.aliveCount);
+    const playerCount = Number(roomInfo.playerCount);
+    const alivePercent = (aliveCount * 100) / playerCount;
+
+    let currentPhase = 1;
+    let phaseName = "PHASE 1: EXPLORATION";
+    // 从合约读取实际衰减值
+    const decayValue = Number(roomInfo.currentDecay ?? 0);
+
+    if (alivePercent <= 33) {
+      currentPhase = 3;
+      phaseName = "PHASE 3: FINAL SHOWDOWN";
+    } else if (alivePercent <= 67) {
+      currentPhase = 2;
+      phaseName = "PHASE 2: HEAT UP";
+    }
+
+    setPhaseInfo({ currentPhase, phaseName, secondsUntilNextRound: timeLeft, blocksUntilNextRound: Math.ceil(timeLeft / 0.4), decayValue });
+  }, [roomInfo, timeLeft]);
+
+  if (!phaseInfo) {
+    return (
+      <div className="h-16 bg-gray-900/50 border border-gray-700 rounded-lg flex items-center justify-center">
+        <span className="loading loading-spinner loading-sm"></span>
+      </div>
+    );
+  }
+
+  const phaseColors = {
+    1: "from-blue-500/20 to-blue-600/10 border-blue-500/30",
+    2: "from-yellow-500/20 to-orange-600/10 border-yellow-500/30",
+    3: "from-red-500/20 to-red-600/10 border-red-500/30",
   };
 
   return (
-    <div className="bg-black border border-green-500/30 rounded-lg p-4 h-[600px] flex flex-col">
-      {/* 标题栏 */}
-      <div className="flex items-center gap-2 mb-4 border-b border-green-500/20 pb-2">
-        <div className="w-3 h-3 rounded-full bg-red-500" />
-        <div className="w-3 h-3 rounded-full bg-yellow-500" />
-        <div className="w-3 h-3 rounded-full bg-green-500" />
-        <span className="text-green-500 font-mono text-sm ml-4">
-          RTTA://room/{roomId}/terminal
-        </span>
+    <div className={`bg-gradient-to-r ${phaseColors[phaseInfo.currentPhase as keyof typeof phaseColors]} border rounded-lg p-4`}>
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-xs font-mono text-gray-400 mb-1">CURRENT PHASE</div>
+          <div className="text-lg font-bold font-mono tracking-wider">
+            {phaseInfo.phaseName}
+          </div>
+        </div>
+
+        <div className="text-right">
+          <div className="text-xs font-mono text-gray-400 mb-1">NEXT ROUND IN</div>
+          <div className={`text-2xl font-mono font-bold ${timeLeft < 10 ? "text-red-500 animate-pulse" : "text-green-400"}`}>
+            {Math.floor(timeLeft)}s
+          </div>
+        </div>
       </div>
 
-      {/* 消息区域 */}
-      <div
-        ref={terminalRef}
-        className="flex-1 overflow-y-auto space-y-2 font-mono text-sm"
-      >
-        <AnimatePresence>
-          {messages.map((msg) => (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0 }}
-              className="flex gap-2"
-            >
-              <span className="text-cyan-400">
-                [{new Date(msg.timestamp).toLocaleTimeString()}]
-              </span>
-              <span className="text-purple-400">
-                {msg.sender.slice(0, 6)}...{msg.sender.slice(-4)}:
-              </span>
-              {msg.isDecoding ? (
-                <DecodeText text={msg.content} />
-              ) : (
-                <span className="text-green-400">{msg.content}</span>
-              )}
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
+      {phaseInfo.decayValue !== 0 && (
+        <div className="mt-2 pt-2 border-t border-white/10 flex items-center gap-2">
+          <span className="text-xs font-mono text-red-400">⚠️ TOXIN RING ACTIVE</span>
+          <span className="text-xs font-mono text-gray-400">
+            -{Math.abs(phaseInfo.decayValue)} HP/round
+          </span>
+        </div>
+      )}
 
-      {/* 输入区域 */}
-      <div className="mt-4 flex items-center gap-2 border-t border-green-500/20 pt-4">
-        <span className="text-green-500 font-mono">{">"}</span>
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          placeholder="Enter message..."
-          className="flex-1 bg-transparent border-none outline-none text-green-400 font-mono placeholder:text-green-700"
+      {/* 进度条 */}
+      <div className="mt-3 h-1 bg-gray-800 rounded-full overflow-hidden">
+        <div
+          className={`h-full transition-all duration-1000 ${
+            phaseInfo.currentPhase === 1
+              ? "bg-blue-500"
+              : phaseInfo.currentPhase === 2
+              ? "bg-yellow-500"
+              : "bg-red-500"
+          }`}
+          style={{ width: `${100 - (timeLeft / 60) * 100}%` }}
         />
-        <button
-          onClick={sendMessage}
-          disabled={isPending}
-          className="text-green-500 hover:text-green-300 font-mono"
-        >
-          {isPending ? "[SENDING...]" : "[SEND]"}
-        </button>
       </div>
     </div>
   );
 }
 ```
 
-### 8.4 熵值雷达组件
+### 8.6 新增组件: 投票面板
+
+```tsx
+// packages/nextjs/app/arena/_components/VotePanel.tsx
+
+"use client";
+
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { useScaffoldWriteContract, useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+import { Address } from "@scaffold-ui/components";
+
+type Player = {
+  address: string;
+  personaId: string;
+  humanityScore: number;
+  isAlive: boolean;
+  isVerifiedHuman: boolean;
+  hasVoted: boolean;
+};
+
+export function VotePanel({ roomId, currentAddress }: { roomId: string; currentAddress: string }) {
+  const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
+  const [isVoting, setIsVoting] = useState(false);
+
+  const { data: players } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getAllPlayers",
+    args: [BigInt(roomId)],
+  });
+
+  const { data: currentRound } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "currentRound",
+    args: [BigInt(roomId)],
+  });
+
+  const { writeContractAsync } = useScaffoldWriteContract({ contractName: "TuringArena" });
+
+  // 获取玩家详细信息
+  // TODO: 实际实现中应批量调用 getPlayerInfo，或通过 multicall 获取
+  const playerList: Player[] = (players || []).map((addr: string) => ({
+    address: addr as string,
+    personaId: addr.slice(0, 8),
+    humanityScore: 100, // TODO: 从 getPlayerInfo 获取真实数据
+    isAlive: true,      // TODO: 从 getPlayerInfo 获取真实数据
+    isVerifiedHuman: false,
+    hasVoted: false,
+  }));
+
+  const alivePlayers = playerList.filter((p) => p.isAlive && p.address !== currentAddress);
+
+  const handleVote = async () => {
+    if (!selectedTarget || isVoting) return;
+
+    setIsVoting(true);
+    try {
+      await writeContractAsync({
+        functionName: "castVote",
+        args: [BigInt(roomId), selectedTarget as `0x${string}`],
+      });
+      setSelectedTarget(null);
+    } catch (error) {
+      console.error("Vote failed:", error);
+    } finally {
+      setIsVoting(false);
+    }
+  };
+
+  return (
+    <div className="bg-black/80 border border-red-500/30 rounded-lg p-4">
+      <h3 className="text-red-400 font-mono text-sm mb-4 flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+        VOTE PANEL - ROUND #{currentRound?.toString() || "1"}
+      </h3>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+        {alivePlayers.map((player) => (
+          <motion.button
+            key={player.address}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setSelectedTarget(player.address)}
+            className={`
+              border rounded-lg p-3 text-left transition-all
+              ${selectedTarget === player.address
+                ? "border-red-500 bg-red-500/20"
+                : "border-gray-700 bg-gray-900/50 hover:border-gray-600"
+              }
+            `}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-mono text-gray-400 truncate">
+                {player.personaId}
+              </span>
+              {player.isVerifiedHuman && (
+                <span className="text-xs text-blue-400">✓ Human</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Address address={player.address as `0x${string}`} size="xs" />
+            </div>
+            <div className="mt-1">
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-500">HP:</span>
+                <div className="flex-1 h-1 bg-gray-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${player.humanityScore > 50 ? "bg-green-500" : player.humanityScore > 25 ? "bg-yellow-500" : "bg-red-500"}`}
+                    style={{ width: `${player.humanityScore}%` }}
+                  />
+                </div>
+                <span className="text-xs font-mono text-gray-400">{player.humanityScore}</span>
+              </div>
+            </div>
+          </motion.button>
+        ))}
+      </div>
+
+      <div className="mt-4 flex gap-2">
+        <button
+          onClick={handleVote}
+          disabled={!selectedTarget || isVoting}
+          className="flex-1 btn btn-error btn-sm"
+        >
+          {isVoting ? (
+            <span className="loading loading-spinner loading-xs"></span>
+          ) : (
+            `VOTE ${selectedTarget ? "→ " + selectedTarget.slice(0, 6) : ""}`
+          )}
+        </button>
+      </div>
+
+      <div className="mt-2 text-xs font-mono text-gray-500 text-center">
+        ⚠️ Voting deals 5 damage. Skipping deals 10 damage to yourself.
+      </div>
+    </div>
+  );
+}
+```
+
+### 8.7 优化后的 PlayerRadar 组件 (带玩家标识)
 
 ```tsx
 // packages/nextjs/app/arena/_components/PlayerRadar.tsx
 
 "use client";
 
-import { useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
 
 type Player = {
   address: string;
+  personaId: string;
   humanityScore: number;
   isAlive: boolean;
+  isVerifiedHuman: boolean;
 };
 
-export function PlayerRadar({ players }: { players: Player[] }) {
+export function PlayerRadar({ roomId }: { roomId: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [hoveredPlayer, setHoveredPlayer] = useState<Player | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 从合约获取玩家列表
+  const { data: playerAddresses } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getAllPlayers",
+    args: [BigInt(roomId)],
+  });
+
+  // TODO: 实际实现中需要批量调用 getPlayerInfo 获取每个玩家详细数据
+  // 这里简化为从地址列表构建玩家数组
+  const players: Player[] = (playerAddresses || []).map((addr: string) => ({
+    address: addr,
+    personaId: addr.slice(0, 8),
+    humanityScore: 100,
+    isAlive: true,
+    isVerifiedHuman: false,
+  }));
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1734,6 +2272,8 @@ export function PlayerRadar({ players }: { players: Player[] }) {
 
       // 绘制玩家点
       players.forEach((player, index) => {
+        if (!player.isAlive) return;
+
         const playerAngle = (index / players.length) * Math.PI * 2;
         const distance = ((100 - player.humanityScore) / 100) * radius;
 
@@ -1742,21 +2282,45 @@ export function PlayerRadar({ players }: { players: Player[] }) {
 
         // 颜色根据人性分变化
         const hue = player.humanityScore; // 0=红, 100=绿
-        ctx.fillStyle = player.isAlive
-          ? `hsl(${hue}, 100%, 50%)`
-          : "rgba(100, 100, 100, 0.5)";
+        ctx.fillStyle = player.isVerifiedHuman
+          ? `hsl(220, 100%, 60%)`  // 蓝色表示真人
+          : `hsl(${hue}, 100%, 50%)`;
 
         ctx.beginPath();
-        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.arc(x, y, 8, 0, Math.PI * 2);
         ctx.fill();
+
+        // 绘制玩家标签
+        ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+        ctx.font = "10px monospace";
+        ctx.fillText(player.personaId.slice(0, 6), x + 12, y + 4);
 
         // 被扫描到时闪烁
         const angleDiff = Math.abs(playerAngle - (angle % (Math.PI * 2)));
         if (angleDiff < 0.1) {
-          ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+          ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.arc(x, y, 10, 0, Math.PI * 2);
+          ctx.arc(x, y, 12, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      });
+
+      // 淘汰的玩家显示为灰色
+      players.forEach((player, index) => {
+        if (!player.isAlive) {
+          const playerAngle = (index / players.length) * Math.PI * 2;
+          const x = centerX + Math.cos(playerAngle) * (radius - 10);
+          const y = centerY + Math.sin(playerAngle) * (radius - 10);
+
+          ctx.fillStyle = "rgba(100, 100, 100, 0.3)";
+          ctx.beginPath();
+          ctx.arc(x, y, 6, 0, Math.PI * 2);
           ctx.fill();
+
+          ctx.fillStyle = "rgba(255, 0, 0, 0.7)";
+          ctx.font = "12px monospace";
+          ctx.fillText("✗", x - 4, y + 4);
         }
       });
 
@@ -1769,14 +2333,80 @@ export function PlayerRadar({ players }: { players: Player[] }) {
     return () => cancelAnimationFrame(animationId);
   }, [players]);
 
+  // 处理鼠标悬停
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const radius = Math.min(centerX, centerY) - 20;
+
+    // 检查是否悬停在某个玩家上
+    const found = players.find((player, index) => {
+      if (!player.isAlive) return false;
+      const playerAngle = (index / players.length) * Math.PI * 2;
+      const distance = ((100 - player.humanityScore) / 100) * radius;
+      const px = centerX + Math.cos(playerAngle) * distance;
+      const py = centerY + Math.sin(playerAngle) * distance;
+      const dx = x - (px / canvas.width) * rect.width;
+      const dy = y - (py / canvas.height) * rect.height;
+      return Math.sqrt(dx * dx + dy * dy) < 15;
+    });
+
+    setHoveredPlayer(found || null);
+  };
+
+  // 空状态处理
+  if (players.length === 0) {
+    return (
+      <div className="relative w-[300px] h-[300px] rounded-full border border-green-500/30 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-green-500 font-mono text-sm">NO PLAYERS</div>
+          <div className="text-gray-500 font-mono text-xs mt-1">Waiting for participants...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative">
+    <div
+      ref={containerRef}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setHoveredPlayer(null)}
+      className="relative"
+    >
       <canvas
         ref={canvasRef}
         width={300}
         height={300}
         className="rounded-full border border-green-500/30"
       />
+
+      {/* 悬停提示 */}
+      {hoveredPlayer && (
+        <div className="absolute top-4 right-4 bg-black/90 border border-green-500/30 rounded-lg p-3 min-w-[150px]">
+          <div className="text-green-400 font-mono text-xs mb-2">
+            {hoveredPlayer.personaId}
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+            <span className="text-gray-400">HP:</span>
+            <span className={`font-mono ${hoveredPlayer.humanityScore > 50 ? "text-green-400" : hoveredPlayer.humanityScore > 25 ? "text-yellow-400" : "text-red-400"}`}>
+              {hoveredPlayer.humanityScore}
+            </span>
+            <span className="text-gray-400">Status:</span>
+            <span className={hoveredPlayer.isVerifiedHuman ? "text-blue-400" : "text-gray-400"}>
+              {hoveredPlayer.isVerifiedHuman ? "Verified Human" : "Unknown"}
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="absolute top-2 left-2 text-green-500 font-mono text-xs">
         ENTROPY RADAR
       </div>
@@ -1785,79 +2415,3889 @@ export function PlayerRadar({ players }: { players: Player[] }) {
 }
 ```
 
-### 8.5 Glitch 淘汰效果
+### 8.8 错误边界
+
+```tsx
+// packages/nextjs/app/arena/_components/ErrorBoundary.tsx
+
+"use client";
+
+import { Component, ReactNode } from "react";
+
+interface Props {
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error?: Error;
+}
+
+export class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        this.props.fallback || (
+          <div className="min-h-screen bg-black flex items-center justify-center">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-8 text-center max-w-md">
+              <div className="text-red-500 font-mono text-4xl mb-4">⚠️ SYSTEM ERROR</div>
+              <div className="text-gray-400 font-mono text-sm mb-4">
+                {this.state.error?.message || "Something went wrong"}
+              </div>
+              <button
+                onClick={() => window.location.reload()}
+                className="btn btn-outline btn-error btn-sm"
+              >
+                RELOAD SYSTEM
+              </button>
+            </div>
+          </div>
+        );
+    }
+
+    return this.props.children;
+  }
+}
+```
+
+### 8.9 加载屏幕
+
+```tsx
+// packages/nextjs/app/arena/_components/LoadingScreen.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+
+export function LoadingScreen({ message = "INITIALIZING..." }: { message?: string }) {
+  const [dots, setDots] = useState(".");
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDots((prev) => (prev.length >= 3 ? "." : prev + "."));
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="text-center">
+        <div className="inline-block mb-8">
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-green-500/30 rounded-full"></div>
+            <div className="absolute top-0 left-0 w-16 h-16 border-4 border-transparent border-t-green-500 rounded-full animate-spin"></div>
+          </div>
+        </div>
+        <div className="text-green-400 font-mono text-xl mb-2">
+          {message}
+        </div>
+        <div className="text-green-500 font-mono text-sm">
+          {dots}
+        </div>
+
+        {/* 二进制雨效果装饰 */}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+          {Array.from({ length: 20 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute text-green-500/10 font-mono text-xs animate-fall"
+              style={{
+                left: `${Math.random() * 100}%`,
+                animationDuration: `${2 + Math.random() * 3}s`,
+                animationDelay: `${Math.random() * 2}s`,
+              }}
+            >
+              {Math.random() > 0.5 ? "1" : "0"}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+### 8.10 Glitch 淘汰效果
 
 ```tsx
 // packages/nextjs/app/arena/_components/GlitchOverlay.tsx
 
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState } from "react";
+
+// 添加全局 CSS 到 globals.css
+/*
+@keyframes glitch {
+  0%, 100% { transform: translate(0); }
+  20% { transform: translate(-2px, 2px); }
+  40% { transform: translate(-2px, -2px); }
+  60% { transform: translate(2px, 2px); }
+  80% { transform: translate(2px, -2px); }
+}
+
+.glitch-text {
+  animation: glitch 0.3s infinite;
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+*/
 
 export function GlitchOverlay({
   isActive,
   eliminatedPlayer,
+  onDismiss,
 }: {
   isActive: boolean;
   eliminatedPlayer: string;
+  onDismiss?: () => void;
 }) {
+  const [showScanlines, setShowScanlines] = useState(true);
+
+  useEffect(() => {
+    if (isActive) {
+      const timer = setTimeout(() => setShowScanlines(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isActive]);
+
   if (!isActive) return null;
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 pointer-events-none"
-    >
-      {/* 故障条纹 */}
-      <div className="absolute inset-0 bg-red-500/10 animate-pulse" />
-
-      {/* 扫描线 */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,0,0.03) 2px, rgba(0,255,0,0.03) 4px)",
-        }}
-      />
-
-      {/* 淘汰信息 */}
+    <AnimatePresence>
       <motion.div
-        initial={{ scale: 0.5, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="absolute inset-0 flex items-center justify-center"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 pointer-events-none"
+        onClick={onDismiss}
       >
-        <div className="bg-black/80 border border-red-500 p-8 text-center">
-          <div className="text-red-500 font-mono text-4xl mb-4 glitch-text">
-            ELIMINATED
-          </div>
-          <div className="text-green-400 font-mono text-lg">
-            {eliminatedPlayer.slice(0, 10)}...{eliminatedPlayer.slice(-8)}
-          </div>
-          <div className="text-gray-500 font-mono text-sm mt-2">
-            HUMANITY_SCORE: 0
-          </div>
-        </div>
-      </motion.div>
+        {/* 故障条纹 */}
+        <div className="absolute inset-0 bg-red-500/10 animate-pulse" />
 
-      <style jsx>{`
-        .glitch-text {
-          animation: glitch 0.3s infinite;
-        }
-        @keyframes glitch {
-          0% { transform: translate(0); }
-          20% { transform: translate(-2px, 2px); }
-          40% { transform: translate(-2px, -2px); }
-          60% { transform: translate(2px, 2px); }
-          80% { transform: translate(2px, -2px); }
-          100% { transform: translate(0); }
-        }
-      `}</style>
-    </motion.div>
+        {/* 扫描线 */}
+        {showScanlines && (
+          <div
+            className="absolute inset-0 opacity-20"
+            style={{
+              background: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,0,0.03) 2px, rgba(0,255,0,0.03) 4px)",
+            }}
+          />
+        )}
+
+        {/* 淘汰信息 */}
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="absolute inset-0 flex items-center justify-center p-4"
+        >
+          <div className="bg-black/90 border-2 border-red-500 rounded-lg p-8 text-center max-w-md">
+            <div className="text-red-500 font-mono text-4xl md:text-6xl mb-4 glitch-text">
+              ⚠️ ELIMINATED
+            </div>
+            <div className="text-green-400 font-mono text-sm md:text-lg mb-2 break-all">
+              {eliminatedPlayer.slice(0, 10)}...{eliminatedPlayer.slice(-8)}
+            </div>
+            <div className="text-gray-500 font-mono text-sm">
+              HUMANITY_SCORE: 0
+            </div>
+            <div className="text-red-400 font-mono text-xs mt-4 animate-pulse">
+              CONNECTION TERMINATED
+            </div>
+
+            {onDismiss && (
+              <button
+                onClick={onDismiss}
+                className="mt-4 btn btn-outline btn-error btn-sm"
+              >
+                DISMISS
+              </button>
+            )}
+          </div>
+        </motion.div>
+
+        {/* CRT 效果覆盖 */}
+        <div className="absolute inset-0 pointer-events-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjZmZmIiBmaWxsLW9wYWNpdHk9IjAuMSIvPgo8L3N2Zz4=')] opacity-5"></div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 ```
+
+### 8.11 ArenaTerminal 组件 (存活状态检查 + 乐观更新)
+
+```tsx
+// packages/nextjs/app/arena/_components/ArenaTerminal.tsx
+
+"use client";
+
+import { useRef, useEffect, useState, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useScaffoldWriteContract, useScaffoldEventHistory, useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+import { useAccount } from "wagmi";
+
+type Message = {
+  id: string;
+  sender: string;
+  content: string;
+  timestamp: number;
+};
+
+type PendingMessage = {
+  id: string;
+  content: string;
+  timestamp: number;
+};
+
+export function ArenaTerminal({ roomId }: { roomId: string }) {
+  const { address } = useAccount();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const terminalRef = useRef<HTMLDivElement>(null);
+
+  // 获取当前玩家状态
+  const { data: playerInfo } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getPlayerInfo",
+    args: [BigInt(roomId), address as `0x${string}`],
+  });
+
+  const isAlive = playerInfo?.[3] ?? true; // isAlive
+
+  // 获取房间信息以确定 startBlock
+  const { data: roomInfo } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getRoomInfo",
+    args: [BigInt(roomId)],
+  });
+
+  // 监听链上 NewMessage 事件 (从游戏开始区块查询，避免扫描全链)
+  const { data: messageEvents } = useScaffoldEventHistory({
+    contractName: "TuringArena",
+    eventName: "NewMessage",
+    filters: { roomId: BigInt(roomId) },
+    fromBlock: roomInfo?.startBlock ?? 0n,
+    watch: true,
+    blockData: true,
+  });
+
+  // 本地待发送消息 (乐观更新)
+  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
+
+  // 转换事件为消息格式
+  const onchainMessages: Message[] = (messageEvents || []).map((event: any) => ({
+    id: event.log.transactionHash,
+    sender: event.args.sender as string,
+    content: event.args.content as string,
+    timestamp: Number(event.args.timestamp),
+  }));
+
+  // 合并链上消息和待发送消息
+  const messages: Message[] = [
+    ...onchainMessages,
+    ...pendingMessages,
+  ].sort((a, b) => a.timestamp - b.timestamp);
+
+  // 自动滚动到底部
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [messages.length]);
+
+  const { writeContractAsync, isPending } = useScaffoldWriteContract({
+    contractName: "TuringArena",
+  });
+
+  const sendMessage = useCallback(async (content: string) => {
+    if (!content.trim() || isPending) return;
+    if (!isAlive) {
+      alert("You have been eliminated and cannot send messages!");
+      return;
+    }
+
+    // 消息长度限制
+    if (content.length > 280) {
+      alert("Message too long (max 280 characters)");
+      return;
+    }
+
+    // 乐观更新：立即显示消息
+    const tempMessage: PendingMessage = {
+      id: `pending-${Date.now()}`,
+      content,
+      timestamp: Date.now() / 1000,
+    };
+    setPendingMessages((prev) => [...prev, tempMessage]);
+
+    try {
+      await writeContractAsync({
+        functionName: "sendMessage",
+        args: [BigInt(roomId), content],
+      });
+
+      // 成功后移除待发送消息
+      setPendingMessages((prev) => prev.filter((m) => m.id !== tempMessage.id));
+
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
+    } catch (error) {
+      // 失败后移除待发送消息
+      setPendingMessages((prev) => prev.filter((m) => m.id !== tempMessage.id));
+      console.error("Failed to send message:", error);
+      alert("Failed to send message. Please try again.");
+    }
+  }, [roomId, isAlive, isPending, writeContractAsync]);
+
+  // 被淘汰后的界面
+  if (!isAlive && playerInfo) {
+    return (
+      <div className="bg-black border border-red-500/30 rounded-lg p-4 h-[600px] flex flex-col">
+        <div className="flex items-center gap-2 mb-4 border-b border-red-500/20 pb-2">
+          <div className="w-3 h-3 rounded-full bg-red-500" />
+          <span className="text-red-500 font-mono text-sm">
+            RTTA://room/{roomId}/terminal [TERMINATED]
+          </span>
+        </div>
+
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-red-500 font-mono text-4xl mb-4">YOU ARE ELIMINATED</div>
+            <div className="text-gray-500 font-mono text-sm">
+              Humanity Score: 0
+            </div>
+            <div className="text-gray-600 font-mono text-xs mt-2">
+              Rank: #{playerInfo[5]?.toString() || "?"}
+            </div>
+          </div>
+        </div>
+
+        {/* 只读消息历史 */}
+        <div
+          ref={terminalRef}
+          className="flex-1 overflow-y-auto space-y-2 font-mono text-sm opacity-50"
+        >
+          <AnimatePresence>
+            {messages.map((msg) => (
+              <motion.div
+                key={msg.id}
+                className="flex gap-2"
+              >
+                <span className="text-gray-500">
+                  [{new Date(msg.timestamp * 1000).toLocaleTimeString()}]
+                </span>
+                <span className="text-gray-600">
+                  {msg.sender.slice(0, 6)}...{msg.sender.slice(-4)}:
+                </span>
+                <span className="text-gray-500">{msg.content}</span>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-black border border-green-500/30 rounded-lg p-4 h-[400px] md:h-[600px] flex flex-col">
+      {/* 标题栏 */}
+      <div className="flex items-center gap-2 mb-4 border-b border-green-500/20 pb-2">
+        <div className="w-3 h-3 rounded-full bg-red-500" />
+        <div className="w-3 h-3 rounded-full bg-yellow-500" />
+        <div className="w-3 h-3 rounded-full bg-green-500" />
+        <span className="text-green-500 font-mono text-sm ml-4 hidden sm:inline">
+          RTTA://room/{roomId}/terminal
+        </span>
+        <span className="text-green-500 font-mono text-sm ml-4 sm:hidden">
+          RTTA terminal
+        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-gray-500">{messages.length} msgs</span>
+        </div>
+      </div>
+
+      {/* 消息区域 */}
+      <div
+        ref={terminalRef}
+        className="flex-1 overflow-y-auto space-y-2 font-mono text-sm"
+      >
+        <AnimatePresence initial={false}>
+          {messages.map((msg) => (
+            <motion.div
+              key={msg.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.2 }}
+              className="flex gap-2"
+            >
+              <span className="text-cyan-400 text-xs flex-shrink-0">
+                [{new Date(msg.timestamp * 1000).toLocaleTimeString()}]
+              </span>
+              <span className="text-purple-400 text-xs flex-shrink-0">
+                {msg.sender === address ? (
+                  <span className="text-yellow-400">YOU:</span>
+                ) : (
+                  <>{msg.sender.slice(0, 6)}...{msg.sender.slice(-4)}:</>
+                )}
+              </span>
+              <span className={msg.id.startsWith("pending-") ? "text-yellow-400" : "text-green-400"}>
+                {msg.content}
+              </span>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* 输入区域 */}
+      <div className="mt-4 flex items-center gap-2 border-t border-green-500/20 pt-4">
+        <span className="text-green-500 font-mono hidden sm:block">{">"}</span>
+        <input
+          ref={inputRef}
+          type="text"
+          disabled={isPending || !isAlive}
+          onKeyDown={(e) => e.key === "Enter" && sendMessage(e.currentTarget.value)}
+          placeholder={isAlive ? "Enter message (max 280 chars)..." : "Eliminated - Cannot send messages"}
+          className="flex-1 bg-transparent border-none outline-none text-green-400 font-mono placeholder:text-green-700 disabled:text-gray-600 disabled:cursor-not-allowed"
+        />
+        <button
+          onClick={() => inputRef.current && sendMessage(inputRef.current.value)}
+          disabled={isPending || !isAlive}
+          className="text-green-500 hover:text-green-300 font-mono disabled:text-gray-600 disabled:cursor-not-allowed"
+        >
+          {isPending ? "[SENDING...]" : "[SEND]"}
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+### 8.12 主页面结构 (响应式布局)
+
+```tsx
+// packages/nextjs/app/arena/page.tsx
+
+"use client";
+
+import { Suspense } from "react";
+import { ErrorBoundary } from "./_components/ErrorBoundary";
+import { ArenaTerminal } from "./_components/ArenaTerminal";
+import { PlayerRadar } from "./_components/PlayerRadar";
+import { VotePanel } from "./_components/VotePanel";
+import { PhaseTimer } from "./_components/PhaseTimer";
+import { SessionKeyManager } from "./_components/SessionKeyManager";
+import { LoadingScreen } from "./_components/LoadingScreen";
+import { GlitchOverlay } from "./_components/GlitchOverlay";
+import { useScaffoldEventHistory } from "~~/hooks/scaffold-eth";
+import { useSearchParams } from "next/navigation";
+
+export default function ArenaPage() {
+  const searchParams = useSearchParams();
+  const roomId = searchParams.get("roomId") || "1";
+
+  // 监听淘汰事件
+  const { data: eliminationEvents } = useScaffoldEventHistory({
+    contractName: "TuringArena",
+    eventName: "PlayerEliminated",
+    filters: { roomId: BigInt(roomId) },
+  });
+
+  const latestElimination = eliminationEvents?.[0];
+  const isEliminated = latestElimination?.args[1] === address; // 需要从 account 获取
+
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<LoadingScreen />}>
+        <main className="min-h-screen bg-black text-white p-2 md:p-4 lg:p-8">
+          {/* 淘汰覆盖层 */}
+          <GlitchOverlay
+            isActive={!!latestElimination}
+            eliminatedPlayer={latestElimination?.args[1] || ""}
+            onDismiss={() => window.location.reload()}
+          />
+
+          {/* 页面标题 */}
+          <div className="mb-4 flex items-center justify-between">
+            <h1 className="text-2xl md:text-4xl font-bold font-mono tracking-wider bg-gradient-to-r from-green-400 to-cyan-400 bg-clip-text text-transparent">
+              REVERSE TURING TEST ARENA
+            </h1>
+            <SessionKeyManager roomId={roomId} />
+          </div>
+
+          {/* Phase 倒计时 - 移动端全宽，桌面端固定宽度 */}
+          <div className="mb-4 max-w-4xl mx-auto">
+            <PhaseTimer roomId={roomId} />
+          </div>
+
+          {/* 主内容区 - 响应式网格布局 */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 max-w-7xl mx-auto">
+            {/* 左侧：玩家雷达 (桌面端) / 顶部 (移动端) */}
+            <div className="lg:col-span-1 order-2 lg:order-1">
+              <div className="flex flex-col items-center gap-4">
+                <PlayerRadar roomId={roomId} />
+                <div className="w-full bg-gray-900/50 border border-gray-700 rounded-lg p-4 hidden lg:block">
+                  <h3 className="text-gray-400 font-mono text-sm mb-2">PLAYER STATS</h3>
+                  {/* 玩家统计 */}
+                </div>
+              </div>
+            </div>
+
+            {/* 中间：聊天终端 */}
+            <div className="lg:col-span-2 order-1 lg:order-2">
+              <ArenaTerminal roomId={roomId} />
+
+              {/* 投票面板 - 桌面端并排，移动端堆叠 */}
+              <div className="mt-4">
+                <VotePanel roomId={roomId} currentAddress={address} />
+              </div>
+            </div>
+          </div>
+
+          {/* 移动端底部：玩家列表 */}
+          <div className="lg:hidden mt-4 bg-gray-900/50 border border-gray-700 rounded-lg p-4">
+            <h3 className="text-gray-400 font-mono text-sm mb-2">PLAYERS ({/* 玩家数量 */})</h3>
+            {/* 移动端玩家列表 */}
+          </div>
+        </main>
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+```
+
+### 8.13 视觉效果增强组件
+
+#### 8.13.1 粒子系统背景
+
+```tsx
+// packages/nextjs/app/arena/_components/ParticleBackground.tsx
+
+"use client";
+
+import { useEffect, useRef } from "react";
+
+export function ParticleBackground() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let particles: Array<{
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      size: number;
+      color: string;
+      alpha: number;
+    }> = [];
+
+    // 初始化粒子
+    for (let i = 0; i < 100; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: (Math.random() - 0.5) * 0.5,
+        size: Math.random() * 2 + 1,
+        color: ["#00ff00", "#00ffff", "#ff00ff"][Math.floor(Math.random() * 3)],
+        alpha: Math.random() * 0.5 + 0.1,
+      });
+    }
+
+    let animationId: number;
+
+    const animate = () => {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      particles.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+
+        // 边界反弹
+        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+        // 绘制粒子
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.alpha;
+        ctx.fill();
+
+        // 连线效果
+        particles.forEach((p2) => {
+          const dx = p.x - p2.x;
+          const dy = p.y - p2.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 80) {
+            ctx.beginPath();
+            ctx.strokeStyle = p.color;
+            ctx.globalAlpha = (1 - dist / 80) * 0.2;
+            ctx.lineWidth = 0.5;
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+          }
+        });
+      });
+
+      ctx.globalAlpha = 1;
+      animationId = requestAnimationFrame(animate);
+    };
+
+    animationId = requestAnimationFrame(animate);
+
+    return () => cancelAnimationFrame(animationId);
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fixed inset-0 pointer-events-none z-0"
+      style={{ width: "100%", height: "100%" }}
+    />
+  );
+}
+```
+
+#### 8.13.2 霓虹边框效果
+
+```tsx
+// packages/nextjs/app/arena/_components/NeonBorder.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+
+type Props = {
+  children: React.ReactNode;
+  color?: "cyan" | "purple" | "green" | "red" | "orange";
+  className?: string;
+};
+
+export function NeonBorder({ children, color = "cyan", className = "" }: Props) {
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  const colorMap = {
+    cyan: "0, 255, 255",
+    purple: "168, 85, 247",
+    green: "0, 255, 100",
+    red: "255, 0, 100",
+    orange: "255, 165, 0",
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMousePos({
+      x: ((e.clientX - rect.left) / rect.width) * 100,
+      y: ((e.clientY - rect.top) / rect.height) * 100,
+    });
+  };
+
+  return (
+    <div
+      onMouseMove={handleMouseMove}
+      className={`relative group ${className}`}
+    >
+      {/* 动态光晕边框 */}
+      <div
+        className="absolute inset-0 rounded-lg opacity-50 blur-sm transition-opacity group-hover:opacity-100"
+        style={{
+          background: `radial-gradient(circle at ${mousePos.x}% ${mousePos.y}%, rgba(${colorMap[color]}, 0.4) 0%, transparent 70%)`,
+        }}
+      />
+
+      {/* 扫描线边框 */}
+      <div className="absolute inset-0 rounded-lg">
+        <div
+          className="absolute inset-0 rounded-lg"
+          style={{
+            background: `conic-gradient(from 0deg at ${mousePos.x}% ${mousePos.y}%, transparent 0deg, rgba(${colorMap[color]}, 0.3) ${mousePos.x * 3.6}deg, transparent 180deg)`,
+            animation: "rotate 4s linear infinite",
+          }}
+        />
+      </div>
+
+      {/* 内容 */}
+      <div className="relative z-10">{children}</div>
+    </div>
+  );
+}
+```
+
+#### 8.13.3 赛博朋克标题效果
+
+```tsx
+// packages/nextjs/app/arena/_components/CyberTitle.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+
+export function CyberTitle({ text }: { text: string }) {
+  const [scrambleText, setScrambleText] = useState(text);
+
+  useEffect(() => {
+    const chars = "!<>-_\\/[]{}—~+=*:,#$%@"; // 赛博朋克风格字符
+    let iteration = 0;
+
+    const interval = setInterval(() => {
+      setScrambleText(
+        text
+          .split("")
+          .map((char, index) => {
+            if (index < iteration) {
+              return text[index];
+            }
+            return chars[Math.floor(Math.random() * chars.length)];
+          })
+          .join("")
+      );
+
+      if (iteration >= text.length) {
+        clearInterval(interval);
+        setScrambleText(text);
+      }
+      iteration += 1;
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [text]);
+
+  return (
+    <h1 className="font-mono font-bold text-transparent bg-clip-text">
+      {scrambleText}
+    </h1>
+  );
+}
+```
+
+#### 8.13.4 矩阵雨效果
+
+```tsx
+// packages/nextjs/app/arena/_components/MatrixRain.tsx
+
+"use client";
+
+import { useEffect, useRef } from "react";
+
+export function MatrixRain({ opacity = 0.1 }: { opacity?: number }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const columns = Math.floor(canvas.width / 20);
+    const drops: number[] = Array(columns).fill(1);
+
+    const chars = "0123456789ABCDEF@#$%^&*";
+
+    const draw = () => {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#0F0";
+      ctx.font = "15px monospace";
+
+      for (let i = 0; i < drops.length; i++) {
+        const text = chars[Math.floor(Math.random() * chars.length)];
+        ctx.fillText(text, i * 20, drops[i] * 20);
+
+        if (drops[i] * 20 > canvas.height && Math.random() > 0.975) {
+          drops[i] = 0;
+        }
+        drops[i]++;
+      }
+    };
+
+    const interval = setInterval(draw, 50);
+    return () => clearInterval(interval);
+  }, [opacity]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fixed inset-0 pointer-events-none z-0"
+      style={{ opacity }}
+    />
+  );
+}
+```
+
+#### 8.13.5 脉冲发光卡片
+
+```tsx
+// packages/nextjs/app/arena/_components/PulseCard.tsx
+
+"use client";
+
+import { ReactNode } from "react";
+
+type Props = {
+  children: ReactNode;
+  className?: string;
+  glowColor?: "cyan" | "green" | "red" | "purple";
+  intensity?: "low" | "medium" | "high";
+};
+
+export function PulseCard({ children, className = "", glowColor = "cyan", intensity = "medium" }: Props) {
+  const glowClassMap = {
+    cyan: "shadow-cyan-500/50 hover:shadow-cyan-500/100",
+    green: "shadow-green-500/50 hover:shadow-green-500/100",
+    red: "shadow-red-500/50 hover:shadow-red-500/100",
+    purple: "shadow-purple-500/50 hover:shadow-purple-500/100",
+  };
+
+  return (
+    <div
+      className={`
+        relative bg-black/80 backdrop-blur-sm border rounded-xl
+        transition-all duration-300
+        hover:scale-105
+        ${glowClassMap[glowColor]}
+        ${className}
+      `}
+    >
+      {/* 内部发光边框 */}
+      <div
+        className={`absolute inset-0 rounded-xl border-2 opacity-0 transition-opacity group-hover:opacity-100`}
+        style={{ borderColor: glowColor === "cyan" ? "#0ff" : glowColor === "green" ? "#0f0" : glowColor === "red" ? "#f00" : "#a0f" }}
+      />
+
+      {/* 角落装饰 */}
+      <div className="absolute top-0 left-0 w-4 h-4 border-l-2 border-t-2 border-cyan-400" />
+      <div className="absolute top-0 right-0 w-4 h-4 border-r-2 border-t-2 border-cyan-400" />
+      <div className="absolute bottom-0 left-0 w-4 h-4 border-l-2 border-b-2 border-cyan-400" />
+      <div className="absolute bottom-0 right-0 w-4 h-4 border-r-2 border-b-2 border-cyan-400" />
+
+      {children}
+    </div>
+  );
+}
+```
+
+#### 8.13.6 数字翻页计数器
+
+```tsx
+// packages/nextjs/app/arena/_components/FlipNumber.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+
+type Props = {
+  value: number;
+  size?: "sm" | "md" | "lg";
+};
+
+export function FlipNumber({ value, size = "md" }: Props) {
+  const [displayValue, setDisplayValue] = useState(value);
+  const [isFlipping, setIsFlipping] = useState(false);
+
+  const sizeMap = {
+    sm: "w-8 h-12 text-lg",
+    md: "w-12 h-16 text-2xl",
+    lg: "w-16 h-20 text-3xl",
+  };
+
+  useEffect(() => {
+    if (value !== displayValue) {
+      setIsFlipping(true);
+      setTimeout(() => {
+        setDisplayValue(value);
+        setIsFlipping(false);
+      }, 150);
+    }
+  }, [value, displayValue]);
+
+  const padValue = displayValue.toString().padStart(2, "0");
+
+  return (
+    <div className={`${sizeMap[size]} relative bg-black border border-green-500/50 rounded flex items-center justify-center overflow-hidden`}>
+      {/* 背景数字 */}
+      <div className={`absolute inset-0 flex items-center justify-center font-mono text-green-900`}>
+        {padValue}
+      </div>
+
+      {/* 前景数字（带动画） */}
+      <div
+        className={`
+          relative z-10 font-mono font-bold text-green-400
+          transition-transform duration-150
+          ${isFlipping ? "-translate-y-full" : "translate-y-0"}
+        `}
+      >
+        {padValue}
+      </div>
+
+      {/* 发光效果 */}
+      <div className="absolute inset-0 bg-green-500/20 blur-sm" />
+    </div>
+  );
+}
+```
+
+#### 8.13.7 霓虹加载进度条
+
+```tsx
+// packages/nextjs/app/arena/_components/CyberProgressBar.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+
+type Props = {
+  progress: number; // 0-100
+  label?: string;
+  color?: "cyan" | "green" | "red" | "purple" | "rainbow";
+};
+
+export function CyberProgressBar({ progress, label, color = "cyan" }: Props) {
+  const [displayProgress, setDisplayProgress] = useState(0);
+
+  useEffect(() => {
+    setDisplayProgress(progress);
+  }, [progress]);
+
+  const colorGradients = {
+    cyan: "from-cyan-400 to-blue-500",
+    green: "from-green-400 to-emerald-500",
+    red: "from-red-400 to-rose-500",
+    purple: "from-purple-400 to-pink-500",
+    rainbow: "from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500",
+  };
+
+  return (
+    <div className="w-full">
+      {label && (
+        <div className="flex justify-between mb-2 font-mono text-xs">
+          <span className="text-gray-400">{label}</span>
+          <span className={`font-bold ${displayProgress >= 80 ? "text-green-400" : displayProgress >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+            {Math.round(displayProgress)}%
+          </span>
+        </div>
+      )}
+
+      <div className="relative h-3 bg-gray-900 rounded-full overflow-hidden border border-gray-700">
+        {/* 进度条背景动画 */}
+        <div
+          className={`absolute inset-0 bg-gradient-to-r ${colorGradients[color]} opacity-20 blur-sm`}
+        />
+
+        {/* 实际进度条 */}
+        <div
+          className={`h-full bg-gradient-to-r ${colorGradients[color]} transition-all duration-300 ease-out relative`}
+          style={{ width: `${displayProgress}%` }}
+        >
+          {/* 发光前沿 */}
+          <div
+            className="absolute right-0 top-0 h-full w-2 bg-white/50 blur-sm"
+          style={{ boxShadow: "0 0 10px rgba(255,255,255,0.8)" }}
+          />
+        </div>
+
+        {/* 网格覆盖 */}
+        <div className="absolute inset-0" style={{
+          backgroundImage: `
+            linear-gradient(90deg, transparent 1px, transparent 1px),
+            linear-gradient(transparent 1px, transparent 1px)
+          `,
+          backgroundSize: "10px 10px",
+          opacity: 0.1,
+        }} />
+      </div>
+    </div>
+  );
+}
+```
+
+#### 8.13.8 打字机文本效果
+
+```tsx
+// packages/nextjs/app/arena/_components/TypewriterText.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+
+type Props = {
+  text: string;
+  delay?: number;
+  speed?: number;
+  className?: string;
+  cursor?: boolean;
+};
+
+export function TypewriterText({ text, delay = 0, speed = 50, className = "", cursor = true }: Props) {
+  const [displayText, setDisplayText] = useState("");
+  const [isComplete, setIsComplete] = useState(false);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      let index = 0;
+      const interval = setInterval(() => {
+        setDisplayText(text.slice(0, index + 1));
+        index++;
+
+        if (index === text.length) {
+          clearInterval(interval);
+          setIsComplete(true);
+        }
+      }, speed);
+
+      return () => clearInterval(interval);
+    }, delay);
+
+    return () => clearTimeout(timeout);
+  }, [text, delay, speed]);
+
+  return (
+    <span className={className}>
+      {displayText}
+      {cursor && (
+        <span className={`
+          inline-block w-2 h-4 bg-green-400 ml-1 animate-pulse
+          ${isComplete ? "opacity-0" : "opacity-100"}
+        `} />
+      )}
+    </span>
+  );
+}
+```
+
+#### 8.13.9 3D 悬停卡片效果
+
+```tsx
+// packages/nextjs/app/arena/_components/HolographicCard.tsx
+
+"use client";
+
+import { useRef, useState } from "react";
+
+type Props = {
+  children: React.ReactNode;
+  className?: string;
+};
+
+export function HolographicCard({ children, className = "" }: Props) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [rotateX, setRotateX] = useState(0);
+  const [rotateY, setRotateY] = useState(0);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current) return;
+
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+
+    // 计算旋转角度 (最大 15 度)
+    const rotateX = ((y - centerY) / centerY) * -15;
+    const rotateY = ((x - centerX) / centerX) * 15;
+
+    setRotateX(rotateX);
+    setRotateY(rotateY);
+  };
+
+  const handleMouseLeave = () => {
+    setRotateX(0);
+    setRotateY(0);
+  };
+
+  return (
+    <div
+      ref={cardRef}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      className={className}
+      style={{
+        perspective: "1000px",
+        transformStyle: "preserve-3d",
+      }}
+    >
+      <div
+        className="relative w-full h-full transition-transform duration-100 ease-out"
+        style={{
+          transform: `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
+          transformStyle: "preserve-3d",
+        }}
+      >
+        {/* 全息光泽层 */}
+        <div
+          className="absolute inset-0 rounded-lg opacity-0 pointer-events-none transition-opacity duration-300"
+          style={{
+            background: `linear-gradient(135deg, rgba(255,255,255,0.4) 0%, transparent 50%, rgba(0,255,255,0.4) 100%)`,
+            transform: "translateZ(20px)",
+          }}
+        />
+
+        {/* 扫描线效果 */}
+        <div
+          className="absolute inset-0 rounded-lg overflow-hidden pointer-events-none"
+        >
+          <div
+            className="w-full h-full animate-scanline"
+            style={{
+              background: "linear-gradient(180deg, transparent 40%, rgba(0,255,255,0.1) 50%, transparent 60%)",
+            }}
+          />
+        </div>
+
+        {/* 内容 */}
+        <div style={{ transform: "translateZ(10px)" }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+#### 8.13.10 故障文字效果
+
+```tsx
+// packages/nextjs/app/arena/_components/GlitchText.tsx
+
+"use client";
+
+import { ReactNode } from "react";
+
+type Props = {
+  children: ReactNode;
+  trigger?: "hover" | "always" | "never";
+  intensity?: "low" | "medium" | "high";
+};
+
+export function GlitchText({ children, trigger = "hover", intensity = "medium" }: Props) {
+  const intensityMap = {
+    low: "0.02s 0.06s 0.12s infinite",
+    medium: "0.02s 0.04s 0.08s infinite",
+    high: "0.01s 0.02s 0.04s infinite",
+  };
+
+  return (
+    <span className={`inline-block ${trigger === "hover" ? "hover:glitch" : "glitch"}`} style={{
+      animation: trigger === "never" ? "none" : intensityMap[intensity],
+    }}>
+      {/* 主文字 */}
+      <span className="relative z-10">{children}</span>
+
+      {/* 故障层 */}
+      <span className="absolute left-0 top-0 z-0 text-red-500" style={{ clipPath: "polygon(0 0, 100% 0, 100% 20%, 0 20%, 0 100%, 0 0)" }}>
+        {children}
+      </span>
+      <span className="absolute left-0 top-0 z-0 text-cyan-500" style={{ clipPath: "polygon(0 0, 0 0, 100% 0, 100% 20%, 0 20%, 0 100%, 0 0)" }}>
+        {children}
+      </span>
+    </span>
+  );
+}
+```
+
+#### 8.13.11 全局 CSS 动画定义 (添加到 globals.css)
+
+```css
+/* packages/nextjs/app/globals.css */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============ 赛博朋克主题动画 ============ */
+
+/* 霓虹文字发光 */
+@keyframes rainbow-glow {
+  0%, 100% {
+    text-shadow:
+      0 0 5px #fff,
+      0 0 10px #fff,
+      0 0 20px #ff00ff,
+      0 0 40px #ff00ff,
+      0 0 80px #ff00ff;
+  }
+  50% {
+    text-shadow:
+      0 0 5px #fff,
+      0 0 10px #fff,
+      0 0 20px #00ffff,
+      0 0 40px #00ffff,
+      0 0 80px #00ffff;
+  }
+}
+
+.rainbow-glow {
+  animation: rainbow-glow 3s ease-in-out infinite;
+}
+
+/* 边框流光 */
+@keyframes border-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.border-flow {
+  background: linear-gradient(90deg, #0ff, #0f0, #ff0, #f0f, #0ff);
+  background-size: 400% 400%;
+  animation: border-flow 8s linear infinite;
+}
+
+/* 脉冲环 */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.pulse-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+/* 故障闪屏 */
+@keyframes glitch-flash {
+  0%, 90%, 92%, 94%, 96%, 100% {
+    opacity: 1;
+  }
+  91%, 93%, 95%, 97% {
+    opacity: 0.8;
+    background: rgba(255, 0, 100, 0.1);
+  }
+}
+
+/* 数字滚动 */
+@keyframes number-scroll {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-100%); }
+}
+
+/* 霓虹边框 */
+@keyframes rainbow-border {
+  0% { border-color: #ff0000; box-shadow: 0 0 5px #ff0000; }
+  14% { border-color: #ff8800; box-shadow: 0 0 5px #ff8800; }
+  28% { border-color: #ffff00; box-shadow: 0 0 5px #ffff00; }
+  42% { border-color: #88ff00; box-shadow: 0 0 5px #88ff00; }
+  57% { border-color: #00ff00; box-shadow: 0 0 5px #00ff00; }
+  71% { border-color: #00ff88; box-shadow: 0 0 5px #00ff88; }
+  85% { border-color: #0088ff; box-shadow: 0 0 5px #0088ff; }
+  100% { border-color: #0000ff; box-shadow: 0 0 5px #0000ff; }
+}
+
+.rainbow-border {
+  animation: rainbow-border 3s linear infinite;
+}
+
+/* 文字解码动画 */
+@keyframes decode {
+  0% { opacity: 0; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.decode-text::after {
+  content: attr(data-text);
+  animation: decode 0.5s ease-out;
+}
+
+/* 信号干扰效果 */
+@keyframes signal-noise {
+  0%, 100% { background-position: 0% 0%; }
+  10% { background-position: -5% -10%; }
+  20% { background-position: 10% 5%; }
+  30% { background-position: -3% 10%; }
+  40% { background-position: 5% -5%; }
+  50% { background-position: 0% 0%; }
+  60% { background-position: -2% -8%; }
+  70% { background-position: 7% 3%; }
+  80% { background-position: -4% 6%; }
+  90% { background-position: 3% -4%; }
+}
+
+.signal-noise {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3C/svg%3E");
+  animation: signal-noise 0.5s steps(10) infinite;
+}
+
+/* 闪烁文字 */
+@keyframes flicker {
+  0%, 18%, 22%, 25%, 53%, 57%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 4px currentColor;
+  }
+  20%, 24%, 55% {
+    opacity: 0.4;
+    text-shadow: none;
+  }
+}
+
+.flicker {
+  animation: flicker 3s infinite;
+}
+
+/* 旋转 (NeonBorder 边框扫描) */
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 二进制雨下落 (LoadingScreen) */
+@keyframes fall {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.animate-fall {
+  animation: fall linear infinite;
+}
+
+/* 扫描线 (HolographicCard) */
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.animate-scanline {
+  animation: scanline 3s linear infinite;
+}
+
+/* 故障效果 (GlitchText) */
+@keyframes glitch {
+  0% { transform: translate(0); }
+  20% { transform: translate(-2px, 2px); }
+  40% { transform: translate(-2px, -2px); }
+  60% { transform: translate(2px, 2px); }
+  80% { transform: translate(2px, -2px); }
+  100% { transform: translate(0); }
+}
+
+.glitch:hover::before,
+.glitch:hover::after {
+  content: attr(data-text);
+}
+```
+
+### 8.14 完整的主页面实现 (整合所有特效)
+
+```tsx
+// packages/nextjs/app/arena/page.tsx
+
+"use client";
+
+import { Suspense, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
+import { useAccount } from "wagmi";
+
+// Zustand Store
+import { useGameStore } from "~~/services/store/gameStore";
+
+// 组件
+import { ErrorBoundary } from "./_components/ErrorBoundary";
+import { ArenaTerminal } from "./_components/ArenaTerminal";
+import { PlayerRadar } from "./_components/PlayerRadar";
+import { VotePanel } from "./_components/VotePanel";
+import { PhaseTimer } from "./_components/PhaseTimer";
+import { SessionKeyManager } from "./_components/SessionKeyManager";
+import { LoadingScreen } from "./_components/LoadingScreen";
+import { GlitchOverlay } from "./_components/GlitchOverlay";
+import { ParticleBackground } from "./_components/ParticleBackground";
+import { MatrixRain } from "./_components/MatrixRain";
+import { CyberTitle } from "./_components/CyberTitle";
+import { NeonBorder } from "./_components/NeonBorder";
+import { PulseCard } from "./_components/PulseCard";
+import { FlipNumber } from "./_components/FlipNumber";
+import { HolographicCard } from "./_components/HolographicCard";
+import { GlitchText } from "./_components/GlitchText";
+
+// 新增组件
+import { GameHUD } from "./_components/GameHUD";
+import { KillFeed } from "./_components/KillFeed";
+import { GameCountdown } from "./_components/GameCountdown";
+import { PhaseTransition } from "./_components/PhaseTransition";
+import { VictoryScreen } from "./_components/VictoryScreen";
+import { DataStream } from "./_components/DataStream";
+import { VotingGraph } from "./_components/VotingGraph";
+
+export default function ArenaPage() {
+  const searchParams = useSearchParams();
+  const roomId = searchParams.get("roomId") || "1";
+  const { address } = useAccount();
+  const [showMatrix, setShowMatrix] = useState(true);
+
+  // 从 gameStore 读取 UI 状态
+  const uiFlags = useGameStore((s) => s.uiFlags);
+  const gamePhase = useGameStore((s) => s.gamePhase);
+  const setUIFlag = useGameStore((s) => s.setUIFlag);
+
+  const handleCountdownComplete = useCallback(() => {
+    setUIFlag("showCountdown", false);
+  }, [setUIFlag]);
+
+  const handlePhaseTransitionComplete = useCallback(() => {
+    setUIFlag("showPhaseTransition", false);
+  }, [setUIFlag]);
+
+  const handleVictoryDismiss = useCallback(() => {
+    setUIFlag("showVictory", false);
+  }, [setUIFlag]);
+
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<LoadingScreen message="INITIALIZING NEURAL LINK..." />}>
+        {/* ===== 全屏覆盖层 ===== */}
+
+        {/* 开局倒计时 (8.21) */}
+        {uiFlags.showCountdown && (
+          <GameCountdown onComplete={handleCountdownComplete} />
+        )}
+
+        {/* Phase 切换过渡 (8.22) */}
+        {uiFlags.showPhaseTransition && gamePhase !== "WAITING" && gamePhase !== "ENDED" && (
+          <PhaseTransition
+            phase={gamePhase as "PHASE_1" | "PHASE_2" | "PHASE_3"}
+            onComplete={handlePhaseTransitionComplete}
+          />
+        )}
+
+        {/* 胜利结算 (8.23) */}
+        {uiFlags.showVictory && (
+          <VictoryScreen
+            roomId={roomId}
+            champion=""   // 由实际合约数据填充
+            rewardAmount={0n}
+            onDismiss={handleVictoryDismiss}
+          />
+        )}
+
+        {/* 背景特效层 */}
+        <div className="fixed inset-0 pointer-events-none z-0">
+          <ParticleBackground />
+          {showMatrix && <MatrixRain opacity={0.05} />}
+        </div>
+
+        {/* 实时淘汰通知 (8.24) */}
+        {uiFlags.showKillFeed && <KillFeed roomId={roomId} />}
+
+        {/* 顶部 HUD (8.25) */}
+        <GameHUD roomId={roomId} />
+
+        <main className="min-h-screen bg-black text-white p-2 md:p-4 lg:p-8 relative z-10">
+          {/* 淘汰覆盖层 */}
+          <GlitchOverlay
+            isActive={false} // 由实际淘汰状态控制
+            eliminatedPlayer={""}
+          />
+
+          {/* 页面标题 - 赛博朋克风格 */}
+          <div className="mb-6 flex items-center justify-between border-b border-cyan-500/30 pb-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 border-2 border-cyan-400 flex items-center justify-center">
+                <span className="text-2xl">◈</span>
+              </div>
+              <div>
+                <CyberTitle text="REVERSE TURING TEST" />
+                <div className="text-cyan-400 font-mono text-xs tracking-widest rainbow-glow">
+                  ARENA PROTOCOL v2.066
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <FlipNumber value={Number(roomId)} />
+              <SessionKeyManager roomId={roomId} />
+            </div>
+          </div>
+
+          {/* Phase 倒计时 - 霓虹边框 */}
+          <NeonBorder color="purple" className="mb-4">
+            <PhaseTimer roomId={roomId} />
+          </NeonBorder>
+
+          {/* 主内容区 - 全息卡片风格 */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 max-w-7xl mx-auto">
+            {/* 左侧：玩家雷达 + 投票关系图 (8.27) */}
+            <div className="lg:col-span-1 order-2 lg:order-1 space-y-4">
+              <HolographicCard>
+                <PulseCard glowColor="green" intensity="low">
+                  <div className="p-4">
+                    <h3 className="text-green-400 font-mono text-sm mb-4 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      ENTROPY RADAR
+                    </h3>
+                    <PlayerRadar roomId={roomId} />
+                  </div>
+                </PulseCard>
+              </HolographicCard>
+
+              {/* 投票网络图 */}
+              <HolographicCard>
+                <div className="p-4">
+                  <h3 className="text-purple-400 font-mono text-sm mb-2 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                    VOTE NETWORK
+                  </h3>
+                  <VotingGraph />
+                </div>
+              </HolographicCard>
+            </div>
+
+            {/* 中间：聊天终端 + 投票面板 */}
+            <div className="lg:col-span-2 order-1 lg:order-2">
+              <NeonBorder color="cyan">
+                <ArenaTerminal roomId={roomId} />
+              </NeonBorder>
+
+              {/* 投票面板 */}
+              <div className="mt-4">
+                <HolographicCard>
+                  <PulseCard glowColor="red" intensity="medium">
+                    <div className="p-4">
+                      <h3 className="text-red-400 font-mono text-sm mb-4 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                        VOTE TERMINAL
+                      </h3>
+                      <VotePanel roomId={roomId} currentAddress={address || "0x0"} />
+                    </div>
+                  </PulseCard>
+                </HolographicCard>
+              </div>
+            </div>
+
+            {/* 右侧：链上数据流 (8.28) */}
+            <div className="lg:col-span-1 order-3">
+              <DataStream roomId={roomId} />
+            </div>
+          </div>
+
+          {/* 底部状态栏 - 流光边框 */}
+          <div className="mt-6 border-flow border-2 rounded-lg p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center font-mono text-xs">
+              <div>
+                <div className="text-gray-500">NODES</div>
+                <div className="text-green-400 flicker">ONLINE</div>
+              </div>
+              <div>
+                <div className="text-gray-500">LATENCY</div>
+                <div className="text-cyan-400">
+                  <FlipNumber value={12} />ms
+                </div>
+              </div>
+              <div>
+                <div className="text-gray-500">BLOCK</div>
+                <div className="text-purple-400">#12,456,789</div>
+              </div>
+              <div>
+                <div className="text-gray-500">STATUS</div>
+                <div className="text-green-400 flex items-center justify-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-ping" />
+                  ACTIVE
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        {/* 视觉特效切换按钮 */}
+        <button
+          onClick={() => setShowMatrix(!showMatrix)}
+          className="fixed bottom-4 right-4 z-50 btn btn-sm btn-ghost btn-outline"
+        >
+          {showMatrix ? "HIDE" : "SHOW"} MATRIX
+        </button>
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+```
+
+### 8.15 音效提示系统
+
+```tsx
+// packages/nextjs/app/arena/_components/SoundIndicator.tsx
+
+"use client";
+
+import { createContext, useContext, useState, ReactNode } from "react";
+
+type SoundEffect = "message" | "vote" | "eliminate" | "phase" | "join";
+
+interface SoundContextType {
+  playSound: (effect: SoundEffect) => void;
+  isMuted: boolean;
+  toggleMute: () => void;
+}
+
+const SoundContext = createContext<SoundContextType | null>(null);
+
+export function useSound() {
+  const context = useContext(SoundContext);
+  if (!context) {
+    return { playSound: () => {}, isMuted: true, toggleMute: () => {} };
+  }
+  return context;
+}
+
+export function SoundProvider({ children }: { children: ReactNode }) {
+  const [isMuted, setIsMuted] = useState(true);
+
+  const playSound = (effect: SoundEffect) => {
+    if (isMuted) return;
+
+    const sounds = {
+      message: "/sounds/message.mp3",
+      vote: "/sounds/vote.mp3",
+      eliminate: "/sounds/eliminate.mp3",
+      phase: "/sounds/phase.mp3",
+      join: "/sounds/join.mp3",
+    };
+
+    const audio = new Audio(sounds[effect]);
+    audio.volume = 0.3;
+    audio.play().catch(console.error);
+  };
+
+  return (
+    <SoundContext.Provider value={{ playSound, isMuted, toggleMute: () => setIsMuted(!isMuted) }}>
+      {children}
+    </SoundContext.Provider>
+  );
+}
+
+// 音效指示器组件
+export function SoundToggle() {
+  const { isMuted, toggleMute } = useSound();
+
+  return (
+    <button
+      onClick={toggleMute}
+      className="fixed top-4 right-4 z-50 btn btn-circle btn-sm btn-ghost"
+      title={isMuted ? "Enable Sound" : "Mute Sound"}
+    >
+      {isMuted ? "🔇" : "🔊"}
+    </button>
+  );
+}
+```
+
+### 8.16 视觉效果使用示例
+
+```tsx
+// 在页面中使用各种特效
+
+// 1. 赛博朋克标题 + 霓虹发光
+<CyberTitle text="WELCOME TO THE ARENA" />
+<span className="rainbow-glow">SURVIVE IF YOU CAN</span>
+
+// 2. 霓虹边框包裹内容
+<NeonBorder color="purple">
+  <div className="p-6">Your content here</div>
+</NeonBorder>
+
+// 3. 故障文字效果
+<GlitchText intensity="high">
+  <span className="text-4xl font-bold">ELIMINATED</span>
+</GlitchText>
+
+// 4. 脉冲发光卡片
+<PulseCard glowColor="cyan" intensity="high">
+  <div className="p-8">
+    <h2>URGENT: Phase 2 Starting</h2>
+  </div>
+</PulseCard>
+
+// 5. 数字翻页倒计时
+<FlipNumber value={30} />
+
+// 6. 赛博风格进度条
+<CyberProgressBar progress={75} label="ELIMINATION PROGRESS" color="red" />
+
+// 7. 全息卡片包裹
+<HolographicCard>
+  <div className="p-8">
+    Your content with 3D perspective effect
+  </div>
+</HolographicCard>
+
+// 8. 打字机文本
+<TypewriterText
+  text="Searching for human presence..."
+  speed={30}
+  cursor={true}
+/>
+```
+
+---
+
+### 8.17 响应式设计规范
+
+| 组件 | 移动端 (< 768px) | 平板 (768px - 1024px) | 桌面端 (> 1024px) |
+|------|------------------|----------------------|----------------------|
+| 布局 | 单列堆叠 | 两列 (1:2) | 三列 (1:2: 右侧边栏) |
+| ArenaTerminal 高度 | 400px | 500px | 600px |
+| PlayerRadar | 隐藏 | 显示 | 显示 + 悬停信息 |
+| PhaseTimer | 全宽 | 最大宽度 4xl | 最大宽度 4xl |
+| 玩家列表 | 底部折叠 | 右侧 | 右侧边栏 |
+| 投票面板 | 底部 | 并排 | 并排 |
+
+### 8.18 性能优化策略
+
+| 优化点 | 实现方式 |
+|--------|----------|
+| **事件查询优化** | 使用 `roomInfo.startBlock` 作为 `fromBlock` |
+| **组件懒加载** | 使用 `React.lazy` 动态导入重型组件 |
+| **图片优化** | 使用 Next.js Image 组件 + WebP 格式 |
+| **Canvas 动画** | 使用 `requestAnimationFrame` + 节流 |
+| **状态管理** | 使用 Zustand + React Query 的缓存机制 |
+| **乐观更新** | 消息发送立即显示 UI，失败时回滚 |
+| **错误重试** | 使用 React Query 的 `retry` 配置 |
+
+### 8.19 Game State Store (`gameStore.ts`)
+
+使用 Zustand 构建全局游戏状态管理，驱动所有 arena 内的 UI 组件。
+
+**文件**: `packages/nextjs/services/store/gameStore.ts`
+
+```typescript
+// packages/nextjs/services/store/gameStore.ts
+
+import { create } from "zustand";
+
+// ============ 类型定义 ============
+
+type GamePhase = "WAITING" | "PHASE_1" | "PHASE_2" | "PHASE_3" | "ENDED";
+
+type MessageType = "chat" | "system" | "vote" | "elimination" | "phase";
+
+type ChatMessage = {
+  id: string;
+  sender: string;        // 地址或 "SYSTEM"
+  content: string;
+  type: MessageType;
+  timestamp: number;
+  txHash?: string;
+};
+
+type PlayerInfo = {
+  address: string;
+  personaId: string;
+  humanityScore: number;
+  isAlive: boolean;
+  joinBlock: number;
+  eliminationRank?: number;
+  votesCast: number;
+  votesReceived: number;
+};
+
+type Elimination = {
+  player: string;
+  eliminatedBy: string;
+  reason: string;
+  block: number;
+  timestamp: number;
+};
+
+type UIFlags = {
+  showCountdown: boolean;
+  showPhaseTransition: boolean;
+  showVictory: boolean;
+  showKillFeed: boolean;
+  showVotingGraph: boolean;
+};
+
+type GameState = {
+  // 房间信息
+  currentRoom: string | null;
+  roomTier: "Bronze" | "Silver" | "Gold" | null;
+  entryFee: bigint;
+
+  // 游戏状态
+  gamePhase: GamePhase;
+  previousPhase: GamePhase | null;
+  phaseStartBlock: number;
+  roundNumber: number;
+
+  // 玩家
+  players: PlayerInfo[];
+  myPlayer: PlayerInfo | null;
+  aliveCount: number;
+
+  // 聊天
+  chatMessages: ChatMessage[];
+
+  // 投票与淘汰
+  pendingVotes: Record<string, string>;  // voter -> target
+  eliminations: Elimination[];
+
+  // UI 控制
+  uiFlags: UIFlags;
+
+  // ============ Actions ============
+
+  setRoom: (roomId: string, tier: "Bronze" | "Silver" | "Gold", entryFee: bigint) => void;
+  addMessage: (message: ChatMessage) => void;
+  addMessages: (messages: ChatMessage[]) => void;
+  setPlayers: (players: PlayerInfo[]) => void;
+  setMyPlayer: (player: PlayerInfo) => void;
+  eliminatePlayer: (elimination: Elimination) => void;
+  transitionPhase: (newPhase: GamePhase, startBlock: number) => void;
+  setVictory: () => void;
+  registerVote: (voter: string, target: string) => void;
+  clearVotes: () => void;
+  setUIFlag: (flag: keyof UIFlags, value: boolean) => void;
+  reset: () => void;
+};
+
+// ============ 初始状态 ============
+
+const initialState = {
+  currentRoom: null,
+  roomTier: null,
+  entryFee: 0n,
+  gamePhase: "WAITING" as GamePhase,
+  previousPhase: null as GamePhase | null,
+  phaseStartBlock: 0,
+  roundNumber: 0,
+  players: [],
+  myPlayer: null,
+  aliveCount: 0,
+  chatMessages: [],
+  pendingVotes: {},
+  eliminations: [],
+  uiFlags: {
+    showCountdown: false,
+    showPhaseTransition: false,
+    showVictory: false,
+    showKillFeed: true,
+    showVotingGraph: false,
+  },
+};
+
+// ============ Store ============
+
+export const useGameStore = create<GameState>((set, get) => ({
+  ...initialState,
+
+  setRoom: (roomId, tier, entryFee) =>
+    set({ currentRoom: roomId, roomTier: tier, entryFee }),
+
+  addMessage: (message) =>
+    set((state) => ({
+      chatMessages: [...state.chatMessages.slice(-199), message], // 保留最近 200 条
+    })),
+
+  addMessages: (messages) =>
+    set((state) => ({
+      chatMessages: [...state.chatMessages, ...messages].slice(-200),
+    })),
+
+  setPlayers: (players) =>
+    set({
+      players,
+      aliveCount: players.filter((p) => p.isAlive).length,
+    }),
+
+  setMyPlayer: (player) => set({ myPlayer: player }),
+
+  eliminatePlayer: (elimination) =>
+    set((state) => {
+      const updatedPlayers = state.players.map((p) =>
+        p.address === elimination.player ? { ...p, isAlive: false } : p,
+      );
+      return {
+        players: updatedPlayers,
+        aliveCount: updatedPlayers.filter((p) => p.isAlive).length,
+        eliminations: [...state.eliminations, elimination],
+        uiFlags: { ...state.uiFlags, showKillFeed: true },
+      };
+    }),
+
+  transitionPhase: (newPhase, startBlock) =>
+    set((state) => ({
+      previousPhase: state.gamePhase,
+      gamePhase: newPhase,
+      phaseStartBlock: startBlock,
+      roundNumber: state.roundNumber + 1,
+      uiFlags: { ...state.uiFlags, showPhaseTransition: true },
+    })),
+
+  setVictory: () =>
+    set((state) => ({
+      gamePhase: "ENDED",
+      uiFlags: { ...state.uiFlags, showVictory: true },
+    })),
+
+  registerVote: (voter, target) =>
+    set((state) => ({
+      pendingVotes: { ...state.pendingVotes, [voter]: target },
+    })),
+
+  clearVotes: () => set({ pendingVotes: {} }),
+
+  setUIFlag: (flag, value) =>
+    set((state) => ({
+      uiFlags: { ...state.uiFlags, [flag]: value },
+    })),
+
+  reset: () => set(initialState),
+}));
+```
+
+**关键设计决策**:
+
+| 决策 | 原因 |
+|------|------|
+| 消息上限 200 条 | 防止超长游戏内存泄漏 |
+| `previousPhase` 字段 | Phase Transition 动画需要知道 from → to |
+| `uiFlags` 独立对象 | 避免 UI 动画与游戏逻辑耦合 |
+| `pendingVotes` 使用 Record | 每个 voter 只有一个 pending vote |
+
+### 8.20 Lobby 页面 (`LobbyPage`)
+
+替换默认 SE-2 首页为 RTTA 大厅页面。玩家在此浏览、筛选并加入竞技场房间。
+
+#### 8.20.1 HeroSection
+
+**文件**: `packages/nextjs/app/_components/HeroSection.tsx`
+
+```tsx
+// packages/nextjs/app/_components/HeroSection.tsx
+
+"use client";
+
+import { useEffect, useRef } from "react";
+import { motion } from "framer-motion";
+import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+
+export const HeroSection = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // 读取全局统计
+  const { data: totalRooms } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "roomCount",
+  });
+
+  const { data: totalRewards } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "totalRewardsDistributed",
+  });
+
+  // 网格粒子背景
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    canvas.width = window.innerWidth;
+    canvas.height = 400;
+
+    const particles: { x: number; y: number; vx: number; vy: number }[] = [];
+    for (let i = 0; i < 50; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: (Math.random() - 0.5) * 0.5,
+      });
+    }
+
+    let animationId: number;
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "rgba(0, 255, 255, 0.1)";
+
+      particles.forEach((p, i) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+        // 绘制连线
+        particles.slice(i + 1).forEach((q) => {
+          const dist = Math.hypot(p.x - q.x, p.y - q.y);
+          if (dist < 150) {
+            ctx.globalAlpha = 1 - dist / 150;
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(q.x, q.y);
+            ctx.stroke();
+          }
+        });
+
+        // 绘制节点
+        ctx.fillStyle = "rgba(0, 255, 255, 0.6)";
+        ctx.globalAlpha = 1;
+        ctx.fillRect(p.x - 1, p.y - 1, 2, 2);
+      });
+
+      animationId = requestAnimationFrame(animate);
+    };
+    animate();
+
+    return () => cancelAnimationFrame(animationId);
+  }, []);
+
+  return (
+    <section className="relative overflow-hidden py-16 md:py-24">
+      <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />
+
+      <div className="relative z-10 text-center">
+        {/* Glitch 标题 */}
+        <motion.h1
+          className="text-4xl md:text-6xl lg:text-8xl font-bold font-mono tracking-tighter glitch-text"
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+        >
+          <span className="text-cyan-400">REVERSE</span>{" "}
+          <span className="text-white">TURING TEST</span>
+          <br />
+          <span className="text-purple-400 neon-pulse">ARENA</span>
+        </motion.h1>
+
+        <motion.p
+          className="mt-4 text-gray-400 font-mono text-sm md:text-base tracking-widest"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+        >
+          &gt; PROVE YOUR HUMANITY. SURVIVE THE MACHINES.
+        </motion.p>
+
+        {/* 统计栏 */}
+        <motion.div
+          className="mt-8 flex justify-center gap-8 md:gap-16"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8 }}
+        >
+          <div className="text-center">
+            <div className="text-2xl md:text-3xl font-mono text-cyan-400">
+              {totalRooms?.toString() || "0"}
+            </div>
+            <div className="text-xs text-gray-500 font-mono uppercase tracking-wider">
+              Total Rooms
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl md:text-3xl font-mono text-green-400">
+              --
+            </div>
+            <div className="text-xs text-gray-500 font-mono uppercase tracking-wider">
+              Active Players
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl md:text-3xl font-mono text-purple-400">
+              {totalRewards ? `${(Number(totalRewards) / 1e18).toFixed(1)}` : "0"} MON
+            </div>
+            <div className="text-xs text-gray-500 font-mono uppercase tracking-wider">
+              Rewards Paid
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+};
+```
+
+#### 8.20.2 RoomCard
+
+**文件**: `packages/nextjs/app/_components/RoomCard.tsx`
+
+```tsx
+// packages/nextjs/app/_components/RoomCard.tsx
+
+"use client";
+
+import { useRouter } from "next/navigation";
+import { formatEther } from "viem";
+import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+
+type RoomTier = "Bronze" | "Silver" | "Gold";
+
+const TIER_STYLES: Record<RoomTier, { border: string; badge: string; glow: string }> = {
+  Bronze: {
+    border: "border-orange-600/50",
+    badge: "bg-orange-600 text-white",
+    glow: "shadow-orange-600/20",
+  },
+  Silver: {
+    border: "border-gray-400/50",
+    badge: "bg-gray-400 text-black",
+    glow: "shadow-gray-400/20",
+  },
+  Gold: {
+    border: "border-yellow-400/50",
+    badge: "bg-yellow-400 text-black",
+    glow: "shadow-yellow-400/20",
+  },
+};
+
+const TIER_MAP: Record<number, RoomTier> = { 0: "Bronze", 1: "Silver", 2: "Gold" };
+
+export const RoomCard = ({ roomId }: { roomId: number }) => {
+  const router = useRouter();
+
+  const { data: roomInfo } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getRoomInfo",
+    args: [BigInt(roomId)],
+  });
+
+  if (!roomInfo) return null;
+
+  const tier = TIER_MAP[Number(roomInfo.tier)] || "Bronze";
+  const styles = TIER_STYLES[tier];
+  const playerCount = Number(roomInfo.playerCount);
+  const maxPlayers = Number(roomInfo.maxPlayers);
+  const entryFee = roomInfo.entryFee;
+  const isWaiting = !roomInfo.isActive;
+  const aliveCount = Number(roomInfo.aliveCount);
+
+  const phaseLabel = !roomInfo.isActive
+    ? "WAITING"
+    : roomInfo.isEnded
+      ? "COMPLETED"
+      : `PHASE ${roomInfo.currentPhase}`;
+
+  return (
+    <div
+      className={`
+        relative p-4 border ${styles.border} rounded-lg bg-black/80
+        hover:shadow-lg ${styles.glow} transition-all duration-300
+        cursor-pointer group room-glow
+      `}
+      onClick={() => router.push(`/arena?roomId=${roomId}`)}
+    >
+      {/* Tier 徽章 */}
+      <div className="flex items-center justify-between mb-3">
+        <span className={`px-2 py-0.5 text-xs font-mono rounded ${styles.badge}`}>
+          {tier.toUpperCase()}
+        </span>
+        <span className="text-xs font-mono text-gray-500">
+          #{roomId}
+        </span>
+      </div>
+
+      {/* 玩家数 */}
+      <div className="mb-3">
+        <div className="flex justify-between items-baseline">
+          <span className="text-gray-400 font-mono text-xs">PLAYERS</span>
+          <span className="text-white font-mono">
+            {isWaiting ? `${playerCount}/${maxPlayers}` : `${aliveCount}/${playerCount} alive`}
+          </span>
+        </div>
+        <div className="mt-1 h-1 bg-gray-800 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-cyan-400 transition-all duration-500"
+            style={{ width: `${(playerCount / maxPlayers) * 100}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Entry fee */}
+      <div className="flex justify-between items-center mb-3">
+        <span className="text-gray-400 font-mono text-xs">ENTRY</span>
+        <span className="text-green-400 font-mono text-sm">
+          {formatEther(entryFee)} MON
+        </span>
+      </div>
+
+      {/* Phase 状态 */}
+      <div className="flex justify-between items-center">
+        <span className="text-gray-400 font-mono text-xs">STATUS</span>
+        <span
+          className={`font-mono text-xs px-2 py-0.5 rounded ${
+            isWaiting
+              ? "text-cyan-400 bg-cyan-400/10"
+              : roomInfo.isEnded
+                ? "text-gray-500 bg-gray-500/10"
+                : "text-red-400 bg-red-400/10 animate-pulse"
+          }`}
+        >
+          {phaseLabel}
+        </span>
+      </div>
+
+      {/* Hover 提示 */}
+      {isWaiting && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+          <span className="text-cyan-400 font-mono text-sm tracking-wider">
+            [ JOIN ARENA ]
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+```
+
+#### 8.20.3 CreateRoomModal
+
+**文件**: `packages/nextjs/app/_components/CreateRoomModal.tsx`
+
+```tsx
+// packages/nextjs/app/_components/CreateRoomModal.tsx
+
+"use client";
+
+import { useState } from "react";
+import { parseEther } from "viem";
+import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+
+type TierOption = {
+  id: number;
+  name: string;
+  label: string;
+  players: string;
+  fee: string;
+  feeWei: bigint;
+  color: string;
+};
+
+const TIERS: TierOption[] = [
+  {
+    id: 0,
+    name: "Quick",
+    label: "BRONZE",
+    players: "5-10",
+    fee: "0.01",
+    feeWei: parseEther("0.01"),
+    color: "text-orange-400 border-orange-400",
+  },
+  {
+    id: 1,
+    name: "Standard",
+    label: "SILVER",
+    players: "10-20",
+    fee: "0.05",
+    feeWei: parseEther("0.05"),
+    color: "text-gray-300 border-gray-300",
+  },
+  {
+    id: 2,
+    name: "Epic",
+    label: "GOLD",
+    players: "20-50",
+    fee: "0.1",
+    feeWei: parseEther("0.1"),
+    color: "text-yellow-400 border-yellow-400",
+  },
+];
+
+export const CreateRoomModal = ({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) => {
+  const [selectedTier, setSelectedTier] = useState<TierOption>(TIERS[0]);
+  const [maxPlayers, setMaxPlayers] = useState(10);
+
+  const { writeContractAsync, isPending } = useScaffoldWriteContract({
+    contractName: "TuringArena",
+  });
+
+  const handleCreate = async () => {
+    try {
+      await writeContractAsync({
+        functionName: "createRoom",
+        args: [selectedTier.id, maxPlayers],
+      });
+      onClose();
+    } catch (err) {
+      console.error("Failed to create room:", err);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      <div className="w-full max-w-md border border-cyan-500/30 bg-black/95 rounded-lg p-6 cyber-border">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-cyan-400 font-mono text-lg tracking-wider">
+            CREATE ARENA
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-white font-mono"
+          >
+            [X]
+          </button>
+        </div>
+
+        {/* Tier 选择 */}
+        <div className="mb-6">
+          <label className="text-gray-400 font-mono text-xs block mb-2">
+            SELECT TIER
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {TIERS.map((tier) => (
+              <button
+                key={tier.id}
+                onClick={() => setSelectedTier(tier)}
+                className={`
+                  p-3 border rounded text-center font-mono text-xs transition-all
+                  ${
+                    selectedTier.id === tier.id
+                      ? `${tier.color} bg-white/5`
+                      : "border-gray-700 text-gray-500 hover:border-gray-500"
+                  }
+                `}
+              >
+                <div className="text-sm font-bold">{tier.label}</div>
+                <div className="text-[10px] mt-1">{tier.players} players</div>
+                <div className="text-[10px]">{tier.fee} MON</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Player limit slider */}
+        <div className="mb-6">
+          <label className="text-gray-400 font-mono text-xs block mb-2">
+            MAX PLAYERS: <span className="text-cyan-400">{maxPlayers}</span>
+          </label>
+          <input
+            type="range"
+            min={5}
+            max={50}
+            value={maxPlayers}
+            onChange={(e) => setMaxPlayers(Number(e.target.value))}
+            className="range range-xs range-primary w-full"
+          />
+        </div>
+
+        {/* Entry fee 显示 */}
+        <div className="mb-6 p-3 bg-gray-900/50 rounded border border-gray-800">
+          <div className="flex justify-between font-mono text-xs">
+            <span className="text-gray-400">ENTRY FEE</span>
+            <span className="text-green-400">{selectedTier.fee} MON</span>
+          </div>
+          <div className="flex justify-between font-mono text-xs mt-1">
+            <span className="text-gray-400">MAX PRIZE POOL</span>
+            <span className="text-purple-400">
+              {(parseFloat(selectedTier.fee) * maxPlayers).toFixed(2)} MON
+            </span>
+          </div>
+        </div>
+
+        {/* 创建按钮 */}
+        <button
+          onClick={handleCreate}
+          disabled={isPending}
+          className="btn btn-primary w-full font-mono tracking-wider"
+        >
+          {isPending ? "DEPLOYING ARENA..." : "INITIALIZE ARENA"}
+        </button>
+      </div>
+    </div>
+  );
+};
+```
+
+#### 8.20.4 Lobby 主页面
+
+**文件**: `packages/nextjs/app/page.tsx`
+
+```tsx
+// packages/nextjs/app/page.tsx
+
+"use client";
+
+import { useState } from "react";
+import type { NextPage } from "next";
+import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+import { HeroSection } from "./_components/HeroSection";
+import { RoomCard } from "./_components/RoomCard";
+import { CreateRoomModal } from "./_components/CreateRoomModal";
+
+type FilterTab = "all" | "waiting" | "active" | "completed";
+
+const Home: NextPage = () => {
+  const [filter, setFilter] = useState<FilterTab>("all");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const { data: roomCount } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "roomCount",
+  });
+
+  const totalRooms = Number(roomCount || 0);
+  const roomIds = Array.from({ length: totalRooms }, (_, i) => i + 1);
+
+  const FILTER_TABS: { key: FilterTab; label: string }[] = [
+    { key: "all", label: "ALL" },
+    { key: "waiting", label: "WAITING" },
+    { key: "active", label: "IN PROGRESS" },
+    { key: "completed", label: "COMPLETED" },
+  ];
+
+  return (
+    <div className="min-h-screen bg-black text-white">
+      <HeroSection />
+
+      {/* 控制栏 */}
+      <div className="max-w-7xl mx-auto px-4 md:px-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+          {/* Filter tabs */}
+          <div className="flex gap-1 bg-gray-900/50 p-1 rounded-lg">
+            {FILTER_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setFilter(tab.key)}
+                className={`
+                  px-4 py-1.5 font-mono text-xs rounded transition-all
+                  ${
+                    filter === tab.key
+                      ? "bg-cyan-500/20 text-cyan-400"
+                      : "text-gray-500 hover:text-gray-300"
+                  }
+                `}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Create room 按钮 */}
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn btn-primary btn-sm font-mono tracking-wider"
+          >
+            + CREATE ARENA
+          </button>
+        </div>
+
+        {/* Room 列表 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-16">
+          {roomIds.length === 0 ? (
+            <div className="col-span-full text-center py-16">
+              <div className="text-gray-600 font-mono text-sm">
+                &gt; NO ACTIVE ARENAS DETECTED
+              </div>
+              <div className="text-gray-700 font-mono text-xs mt-2">
+                Create the first arena to begin.
+              </div>
+            </div>
+          ) : (
+            roomIds.map((id) => <RoomCard key={id} roomId={id} />)
+          )}
+        </div>
+      </div>
+
+      <CreateRoomModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+      />
+    </div>
+  );
+};
+
+export default Home;
+```
+
+> **说明**: Filter 功能的实际筛选逻辑需要在 `RoomCard` 组件内部根据合约返回的房间状态进行判断，或在父组件中批量查询后过滤。此处为简化起见，直接渲染所有房间卡片。
+
+### 8.21 Game Countdown (`GameCountdown`)
+
+全屏倒计时覆盖层，在游戏开始或新 Phase 进入时播放 3-2-1-FIGHT 动画。
+
+**文件**: `packages/nextjs/app/arena/_components/GameCountdown.tsx`
+
+```tsx
+// packages/nextjs/app/arena/_components/GameCountdown.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+
+const SEQUENCE = ["3", "2", "1", "FIGHT"];
+
+export const GameCountdown = ({ onComplete }: { onComplete: () => void }) => {
+  const [current, setCurrent] = useState(0);
+  const [isVisible, setIsVisible] = useState(true);
+
+  useEffect(() => {
+    if (current >= SEQUENCE.length) {
+      // 最后一帧停留 600ms 后消失
+      const timeout = setTimeout(() => {
+        setIsVisible(false);
+        onComplete();
+      }, 600);
+      return () => clearTimeout(timeout);
+    }
+
+    const timeout = setTimeout(() => {
+      setCurrent((prev) => prev + 1);
+    }, 800);
+
+    return () => clearTimeout(timeout);
+  }, [current, onComplete]);
+
+  if (!isVisible) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm">
+      <AnimatePresence mode="wait">
+        {current < SEQUENCE.length && (
+          <motion.div
+            key={SEQUENCE[current]}
+            className={`
+              font-mono font-black text-center
+              ${current === 3 ? "text-red-500 text-8xl md:text-[12rem]" : "text-cyan-400 text-9xl md:text-[16rem]"}
+            `}
+            initial={{ scale: 3, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.5, opacity: 0 }}
+            transition={{
+              type: "spring",
+              stiffness: 300,
+              damping: 20,
+              duration: 0.4,
+            }}
+          >
+            {SEQUENCE[current]}
+
+            {/* 冲击波纹 */}
+            <motion.div
+              className="absolute inset-0 rounded-full border-2 border-cyan-400/30"
+              initial={{ scale: 0.8, opacity: 1 }}
+              animate={{ scale: 3, opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 底部扫描线 */}
+      <div className="absolute bottom-0 left-0 right-0 h-1 scanline-horizontal" />
+    </div>
+  );
+};
+```
+
+**动画分解**:
+
+| 阶段 | 动画效果 | 时长 |
+|------|----------|------|
+| 数字进入 | `scale: 3 → 1`，弹簧动画 | 400ms |
+| 冲击波 | `scale: 0.8 → 3`，`opacity: 1 → 0` | 800ms |
+| 数字退出 | `scale: 1 → 0.5`，渐隐 | 300ms |
+| "FIGHT" | 红色高亮 + 更小字号 + 停留 600ms | 600ms |
+
+### 8.22 Phase Transition (`PhaseTransition`)
+
+Phase 切换时的全屏电影化过渡效果，配合色彩和扫描线变化。
+
+**文件**: `packages/nextjs/app/arena/_components/PhaseTransition.tsx`
+
+```tsx
+// packages/nextjs/app/arena/_components/PhaseTransition.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+
+type Phase = "PHASE_1" | "PHASE_2" | "PHASE_3";
+
+const PHASE_CONFIG: Record<Phase, { label: string; subtitle: string; color: string; bg: string }> = {
+  PHASE_1: {
+    label: "PHASE I",
+    subtitle: "OBSERVATION",
+    color: "text-green-400",
+    bg: "from-green-900/30 to-transparent",
+  },
+  PHASE_2: {
+    label: "PHASE II",
+    subtitle: "SUSPICION",
+    color: "text-yellow-400",
+    bg: "from-yellow-900/30 to-transparent",
+  },
+  PHASE_3: {
+    label: "PHASE III",
+    subtitle: "ELIMINATION",
+    color: "text-red-400",
+    bg: "from-red-900/30 to-transparent",
+  },
+};
+
+export const PhaseTransition = ({
+  phase,
+  onComplete,
+}: {
+  phase: Phase;
+  onComplete: () => void;
+}) => {
+  const [isVisible, setIsVisible] = useState(true);
+  const config = PHASE_CONFIG[phase];
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setIsVisible(false);
+      onComplete();
+    }, 2500);
+    return () => clearTimeout(timeout);
+  }, [onComplete]);
+
+  if (!isVisible) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        {/* 背景渐变 */}
+        <div className={`absolute inset-0 bg-gradient-to-b ${config.bg}`} />
+
+        {/* 水平扫描线 wipe */}
+        <motion.div
+          className="absolute left-0 right-0 h-[2px] bg-white/80"
+          initial={{ top: "-2px" }}
+          animate={{ top: "100%" }}
+          transition={{ duration: 1.5, ease: "easeInOut" }}
+        />
+
+        {/* Phase 名称 */}
+        <div className="relative text-center">
+          <motion.div
+            className={`text-6xl md:text-8xl font-mono font-black ${config.color} tracking-widest`}
+            initial={{ x: -100, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.3 }}
+          >
+            {config.label}
+          </motion.div>
+
+          <motion.div
+            className="text-xl md:text-2xl font-mono text-gray-400 tracking-[0.5em] mt-2"
+            initial={{ x: 100, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.6 }}
+          >
+            {config.subtitle}
+          </motion.div>
+        </div>
+
+        {/* 顶部+底部扫描线 */}
+        <div className="absolute top-0 left-0 right-0 h-16 scanline opacity-50" />
+        <div className="absolute bottom-0 left-0 right-0 h-16 scanline opacity-50" />
+      </motion.div>
+    </AnimatePresence>
+  );
+};
+```
+
+**Phase 颜色编码**:
+
+| Phase | 颜色 | 语义 |
+|-------|------|------|
+| Phase 1 | 🟢 Green | 观察期，安全 |
+| Phase 2 | 🟡 Yellow | 怀疑期，紧张升级 |
+| Phase 3 | 🔴 Red | 淘汰期，危险 |
+
+### 8.23 Victory Screen (`VictoryScreen`)
+
+游戏结束后的冠军展示与奖励领取界面。
+
+**文件**: `packages/nextjs/app/arena/_components/VictoryScreen.tsx`
+
+```tsx
+// packages/nextjs/app/arena/_components/VictoryScreen.tsx
+
+"use client";
+
+import { useEffect, useRef, useCallback } from "react";
+import { motion } from "framer-motion";
+import { formatEther } from "viem";
+import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { Address } from "~~/components/scaffold-eth";
+import { useGameStore } from "~~/services/store/gameStore";
+
+export const VictoryScreen = ({
+  roomId,
+  champion,
+  rewardAmount,
+  onDismiss,
+}: {
+  roomId: string;
+  champion: string;
+  rewardAmount: bigint;
+  onDismiss: () => void;
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const myPlayer = useGameStore((s) => s.myPlayer);
+  const isChampion = myPlayer?.address.toLowerCase() === champion.toLowerCase();
+
+  const { writeContractAsync, isPending } = useScaffoldWriteContract({
+    contractName: "TuringArena",
+  });
+
+  // 金色粒子庆祝效果
+  const initParticles = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const particles: {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      size: number;
+      alpha: number;
+      color: string;
+    }[] = [];
+
+    const COLORS = ["#FFD700", "#FFA500", "#FFEC8B", "#DAA520", "#F0E68C"];
+
+    for (let i = 0; i < 150; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height - canvas.height,
+        vx: (Math.random() - 0.5) * 3,
+        vy: Math.random() * 2 + 1,
+        size: Math.random() * 4 + 1,
+        alpha: Math.random() * 0.8 + 0.2,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      });
+    }
+
+    let animationId: number;
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.02; // 重力
+        if (p.y > canvas.height) {
+          p.y = -10;
+          p.vy = Math.random() * 2 + 1;
+        }
+
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+      });
+      ctx.globalAlpha = 1;
+      animationId = requestAnimationFrame(animate);
+    };
+    animate();
+
+    return () => cancelAnimationFrame(animationId);
+  }, []);
+
+  useEffect(() => {
+    const cleanup = initParticles();
+    return cleanup;
+  }, [initParticles]);
+
+  const handleClaim = async () => {
+    try {
+      await writeContractAsync({
+        functionName: "claimReward",
+        args: [BigInt(roomId)],
+      });
+    } catch (err) {
+      console.error("Claim failed:", err);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95">
+      <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />
+
+      <motion.div
+        className="relative z-10 text-center max-w-lg mx-auto px-4"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.5 }}
+      >
+        {/* 皇冠 */}
+        <motion.div
+          className="text-7xl md:text-9xl mb-4 crown-float"
+          animate={{ y: [0, -15, 0] }}
+          transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+        >
+          👑
+        </motion.div>
+
+        <div className="text-yellow-400 font-mono text-lg tracking-[0.3em] mb-2">
+          {isChampion ? "YOU ARE THE" : "THE CHAMPION IS"}
+        </div>
+
+        <div className="text-4xl md:text-6xl font-mono font-black text-white mb-4 neon-text">
+          CHAMPION
+        </div>
+
+        {/* 冠军地址 */}
+        <div className="mb-6">
+          <Address address={champion} />
+        </div>
+
+        {/* 统计 */}
+        <div className="grid grid-cols-2 gap-4 mb-8 max-w-sm mx-auto">
+          <div className="bg-gray-900/50 border border-gray-800 rounded p-3">
+            <div className="text-gray-500 font-mono text-xs">REWARD</div>
+            <div className="text-green-400 font-mono text-lg">
+              {formatEther(rewardAmount)} MON
+            </div>
+          </div>
+          <div className="bg-gray-900/50 border border-gray-800 rounded p-3">
+            <div className="text-gray-500 font-mono text-xs">HUMANITY</div>
+            <div className="text-cyan-400 font-mono text-lg">
+              {myPlayer?.humanityScore ?? "--"}
+            </div>
+          </div>
+        </div>
+
+        {/* 领取按钮 (仅冠军可见) */}
+        {isChampion && (
+          <motion.button
+            onClick={handleClaim}
+            disabled={isPending}
+            className="btn btn-lg font-mono tracking-widest bg-yellow-500 text-black hover:bg-yellow-400 border-none"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            {isPending ? "CLAIMING..." : "CLAIM REWARD"}
+          </motion.button>
+        )}
+
+        {/* 关闭 */}
+        <button
+          onClick={onDismiss}
+          className="mt-4 block mx-auto text-gray-500 hover:text-gray-300 font-mono text-xs"
+        >
+          [ BACK TO LOBBY ]
+        </button>
+      </motion.div>
+    </div>
+  );
+};
+```
+
+### 8.24 Kill Feed (`KillFeed`)
+
+实时淘汰信息侧边栏，监听 `PlayerEliminated` 事件并以滑入动画逐条显示。
+
+**文件**: `packages/nextjs/app/arena/_components/KillFeed.tsx`
+
+```tsx
+// packages/nextjs/app/arena/_components/KillFeed.tsx
+
+"use client";
+
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useScaffoldEventHistory } from "~~/hooks/scaffold-eth";
+
+type KillEntry = {
+  id: string;
+  player: string;
+  eliminatedBy: string;
+  reason: string;
+  timestamp: number;
+};
+
+export const KillFeed = ({ roomId }: { roomId: string }) => {
+  const [entries, setEntries] = useState<KillEntry[]>([]);
+
+  const { data: events } = useScaffoldEventHistory({
+    contractName: "TuringArena",
+    eventName: "PlayerEliminated",
+    watch: true,
+    fromBlock: 0n,
+  });
+
+  // 将链上事件映射为 KillEntry
+  useEffect(() => {
+    if (!events) return;
+
+    const roomEvents = events
+      .filter((e) => e.args.roomId?.toString() === roomId)
+      .map((e) => ({
+        id: e.log.transactionHash || `${e.args.player}-${e.log.blockNumber}`,
+        player: truncateAddr(e.args.player as string),
+        eliminatedBy: truncateAddr(e.args.eliminatedBy as string),
+        reason: (e.args.reason as string) || "VOTED OUT",
+        timestamp: Date.now(),
+      }));
+
+    setEntries(roomEvents.slice(-10)); // 保留最近 10 条
+  }, [events, roomId]);
+
+  // 10 秒后自动淡出
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setEntries((prev) => prev.filter((e) => now - e.timestamp < 10_000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="fixed right-4 top-20 w-72 z-40 pointer-events-none space-y-2">
+      <AnimatePresence>
+        {entries.map((entry) => (
+          <motion.div
+            key={entry.id}
+            className="
+              bg-black/80 border border-red-500/30 rounded px-3 py-2
+              font-mono text-xs text-red-400 backdrop-blur-sm
+              pointer-events-auto
+            "
+            initial={{ x: 300, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 300, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          >
+            <span className="text-gray-500">💀</span>{" "}
+            <span className="text-white">{entry.player}</span>{" "}
+            <span className="text-red-500">ELIMINATED</span>{" "}
+            <span className="text-gray-500">by</span>{" "}
+            <span className="text-yellow-400">{entry.eliminatedBy}</span>
+            <div className="text-gray-600 text-[10px] mt-0.5">
+              — {entry.reason}
+            </div>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+function truncateAddr(addr: string): string {
+  if (!addr) return "???";
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+```
+
+### 8.25 Game HUD (`GameHUD`)
+
+游戏进行时的顶部状态栏，始终可见，显示关键游戏信息。
+
+**文件**: `packages/nextjs/app/arena/_components/GameHUD.tsx`
+
+```tsx
+// packages/nextjs/app/arena/_components/GameHUD.tsx
+
+"use client";
+
+import { useGameStore } from "~~/services/store/gameStore";
+
+const PHASE_COLORS: Record<string, string> = {
+  WAITING: "text-gray-400 bg-gray-400/10",
+  PHASE_1: "text-green-400 bg-green-400/10",
+  PHASE_2: "text-yellow-400 bg-yellow-400/10",
+  PHASE_3: "text-red-400 bg-red-400/10",
+  ENDED: "text-gray-500 bg-gray-500/10",
+};
+
+export const GameHUD = ({ roomId }: { roomId: string }) => {
+  const gamePhase = useGameStore((s) => s.gamePhase);
+  const aliveCount = useGameStore((s) => s.aliveCount);
+  const players = useGameStore((s) => s.players);
+  const myPlayer = useGameStore((s) => s.myPlayer);
+
+  const phaseStyle = PHASE_COLORS[gamePhase] || PHASE_COLORS.WAITING;
+  const totalPlayers = players.length;
+
+  return (
+    <div className="sticky top-0 z-50 bg-black/90 backdrop-blur-sm border-b border-gray-800">
+      <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between font-mono text-xs">
+        {/* 左侧: 房间 + Phase */}
+        <div className="flex items-center gap-3">
+          <span className="text-gray-500">ROOM #{roomId}</span>
+          <span className={`px-2 py-0.5 rounded ${phaseStyle}`}>
+            {gamePhase.replace("_", " ")}
+          </span>
+        </div>
+
+        {/* 中间: 存活人数 */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-green-400">{aliveCount}</span>
+            <span className="text-gray-600">/ {totalPlayers} ALIVE</span>
+          </div>
+
+          {/* 人性分 (如果当前用户在场) */}
+          {myPlayer && (
+            <div className="flex items-center gap-1.5">
+              <span className={`${myPlayer.humanityScore < 30 ? "text-red-400 hp-critical" : "text-cyan-400"}`}>
+                ♥ {myPlayer.humanityScore}
+              </span>
+              <span className="text-gray-600">HP</span>
+            </div>
+          )}
+        </div>
+
+        {/* 右侧: Round */}
+        <div className="text-gray-500">
+          RND <span className="text-white">{useGameStore.getState().roundNumber}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+```
+
+### 8.26 Chat Message Types (`ChatMessage`)
+
+终端风格消息组件，支持多种消息类型和动画。
+
+**文件**: `packages/nextjs/app/arena/_components/ChatMessage.tsx`
+
+```tsx
+// packages/nextjs/app/arena/_components/ChatMessage.tsx
+
+"use client";
+
+import { motion } from "framer-motion";
+
+type MessageType = "chat" | "system" | "vote" | "elimination" | "phase";
+
+type ChatMessageProps = {
+  sender: string;
+  content: string;
+  type: MessageType;
+  timestamp: number;
+};
+
+const TYPE_STYLES: Record<MessageType, { color: string; prefix: string; animate: boolean }> = {
+  chat: {
+    color: "text-gray-300",
+    prefix: "",
+    animate: false,
+  },
+  system: {
+    color: "text-yellow-400",
+    prefix: "[SYS] ",
+    animate: true,
+  },
+  vote: {
+    color: "text-red-400",
+    prefix: "[VOTE] ",
+    animate: true,
+  },
+  elimination: {
+    color: "text-red-600",
+    prefix: "💀 ",
+    animate: true,
+  },
+  phase: {
+    color: "text-purple-400",
+    prefix: "[PHASE] ",
+    animate: true,
+  },
+};
+
+export const ChatMessage = ({ sender, content, type, timestamp }: ChatMessageProps) => {
+  const style = TYPE_STYLES[type];
+  const time = new Date(timestamp).toLocaleTimeString("en-US", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  const Wrapper = style.animate ? motion.div : "div";
+  const animationProps = style.animate
+    ? {
+        initial: { opacity: 0, x: -10 },
+        animate: { opacity: 1, x: 0 },
+        transition: { duration: 0.3 },
+      }
+    : {};
+
+  return (
+    <Wrapper
+      className={`font-mono text-xs leading-relaxed ${style.color}`}
+      {...animationProps}
+    >
+      <span className="text-gray-600 mr-2">[{time}]</span>
+      {type === "chat" && (
+        <span className="text-cyan-400 mr-1">
+          {sender.slice(0, 6)}...{sender.slice(-4)}&gt;
+        </span>
+      )}
+      <span>
+        {style.prefix}
+        {content}
+      </span>
+    </Wrapper>
+  );
+};
+```
+
+**消息类型对照**:
+
+| 类型 | 颜色 | 前缀 | 动画 | 用途 |
+|------|------|------|------|------|
+| `chat` | 灰白 | 无 | 无 | 普通聊天消息 |
+| `system` | 黄色 | `[SYS]` | 滑入 | 系统通知 (房间加入等) |
+| `vote` | 红色 | `[VOTE]` | 滑入 | 投票动作 |
+| `elimination` | 深红 | 💀 | 滑入 | 玩家被淘汰 |
+| `phase` | 紫色 | `[PHASE]` | 滑入 | Phase 变更通知 |
+
+### 8.27 Voting Network Graph (`VotingGraph`)
+
+Canvas 绘制的投票关系网络图，实时展示玩家间的投票行为。
+
+**文件**: `packages/nextjs/app/arena/_components/VotingGraph.tsx`
+
+```tsx
+// packages/nextjs/app/arena/_components/VotingGraph.tsx
+
+"use client";
+
+import { useEffect, useRef, useCallback } from "react";
+import { useGameStore } from "~~/services/store/gameStore";
+
+type NodeStatus = "alive" | "eliminated" | "suspected";
+
+const STATUS_COLORS: Record<NodeStatus, string> = {
+  alive: "#22c55e",      // green-500
+  eliminated: "#ef4444", // red-500
+  suspected: "#eab308",  // yellow-500
+};
+
+export const VotingGraph = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const players = useGameStore((s) => s.players);
+  const pendingVotes = useGameStore((s) => s.pendingVotes);
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const W = canvas.width;
+    const H = canvas.height;
+    const cx = W / 2;
+    const cy = H / 2;
+    const radius = Math.min(W, H) * 0.35;
+
+    ctx.clearRect(0, 0, W, H);
+
+    if (players.length === 0) return;
+
+    // 计算节点位置 (环形布局)
+    const nodes = players.map((p, i) => {
+      const angle = (2 * Math.PI * i) / players.length - Math.PI / 2;
+      const status: NodeStatus = !p.isAlive
+        ? "eliminated"
+        : p.humanityScore < 40
+          ? "suspected"
+          : "alive";
+      return {
+        x: cx + radius * Math.cos(angle),
+        y: cy + radius * Math.sin(angle),
+        address: p.address,
+        status,
+        label: `${p.address.slice(0, 4)}..${p.address.slice(-2)}`,
+      };
+    });
+
+    // 绘制投票连线 (边)
+    Object.entries(pendingVotes).forEach(([voter, target]) => {
+      const fromNode = nodes.find((n) => n.address === voter);
+      const toNode = nodes.find((n) => n.address === target);
+      if (!fromNode || !toNode) return;
+
+      ctx.beginPath();
+      ctx.moveTo(fromNode.x, fromNode.y);
+      ctx.lineTo(toNode.x, toNode.y);
+      ctx.strokeStyle = "rgba(239, 68, 68, 0.5)"; // red
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 箭头
+      const angle = Math.atan2(toNode.y - fromNode.y, toNode.x - fromNode.x);
+      const arrowLen = 8;
+      const ax = toNode.x - 12 * Math.cos(angle);
+      const ay = toNode.y - 12 * Math.sin(angle);
+
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(
+        ax - arrowLen * Math.cos(angle - Math.PI / 6),
+        ay - arrowLen * Math.sin(angle - Math.PI / 6),
+      );
+      ctx.lineTo(
+        ax - arrowLen * Math.cos(angle + Math.PI / 6),
+        ay - arrowLen * Math.sin(angle + Math.PI / 6),
+      );
+      ctx.closePath();
+      ctx.fillStyle = "rgba(239, 68, 68, 0.7)";
+      ctx.fill();
+    });
+
+    // 绘制节点
+    const pulse = (Math.sin(Date.now() / 500) + 1) / 2; // 0-1 脉冲
+
+    nodes.forEach((node) => {
+      const color = STATUS_COLORS[node.status];
+
+      // 脉冲光晕 (仅存活节点)
+      if (node.status === "alive") {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 10 + pulse * 4, 0, Math.PI * 2);
+        ctx.fillStyle = color + "20"; // 12% opacity
+        ctx.fill();
+      }
+
+      // 实心圆
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = node.status === "eliminated" ? color + "60" : color;
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // 标签
+      ctx.fillStyle = "#9ca3af"; // gray-400
+      ctx.font = "9px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(node.label, node.x, node.y + 20);
+    });
+  }, [players, pendingVotes]);
+
+  useEffect(() => {
+    let animationId: number;
+    const loop = () => {
+      draw();
+      animationId = requestAnimationFrame(loop);
+    };
+    loop();
+    return () => cancelAnimationFrame(animationId);
+  }, [draw]);
+
+  return (
+    <div className="w-full aspect-square max-w-md mx-auto">
+      <canvas
+        ref={canvasRef}
+        width={400}
+        height={400}
+        className="w-full h-full"
+      />
+    </div>
+  );
+};
+```
+
+**节点颜色编码**:
+
+| 状态 | 颜色 | 条件 |
+|------|------|------|
+| Alive | 🟢 绿色 | `isAlive === true && humanityScore >= 40` |
+| Suspected | 🟡 黄色 | `isAlive === true && humanityScore < 40` |
+| Eliminated | 🔴 红色 | `isAlive === false` |
+
+### 8.28 Data Stream (`DataStream`)
+
+实时区块链交易流，展示当前房间相关的链上活动。
+
+**文件**: `packages/nextjs/app/arena/_components/DataStream.tsx`
+
+```tsx
+// packages/nextjs/app/arena/_components/DataStream.tsx
+
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useScaffoldEventHistory } from "~~/hooks/scaffold-eth";
+
+type StreamEntry = {
+  id: string;
+  txHash: string;
+  action: "CHAT" | "VOTE" | "JOIN" | "ELIMINATE" | "CLAIM";
+  actor: string;
+  blockNumber: number;
+};
+
+const ACTION_COLORS: Record<StreamEntry["action"], string> = {
+  CHAT: "text-green-400",
+  VOTE: "text-red-400",
+  JOIN: "text-cyan-400",
+  ELIMINATE: "text-yellow-400",
+  CLAIM: "text-purple-400",
+};
+
+export const DataStream = ({ roomId }: { roomId: string }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [entries, setEntries] = useState<StreamEntry[]>([]);
+
+  // 监听多种事件
+  const { data: chatEvents } = useScaffoldEventHistory({
+    contractName: "TuringArena",
+    eventName: "MessageSent",
+    watch: true,
+    fromBlock: 0n,
+  });
+
+  const { data: voteEvents } = useScaffoldEventHistory({
+    contractName: "TuringArena",
+    eventName: "VoteCast",
+    watch: true,
+    fromBlock: 0n,
+  });
+
+  useEffect(() => {
+    const newEntries: StreamEntry[] = [];
+
+    chatEvents
+      ?.filter((e) => e.args.roomId?.toString() === roomId)
+      .forEach((e) => {
+        newEntries.push({
+          id: e.log.transactionHash || "",
+          txHash: e.log.transactionHash || "0x???",
+          action: "CHAT",
+          actor: (e.args.sender as string) || "",
+          blockNumber: Number(e.log.blockNumber),
+        });
+      });
+
+    voteEvents
+      ?.filter((e) => e.args.roomId?.toString() === roomId)
+      .forEach((e) => {
+        newEntries.push({
+          id: e.log.transactionHash || "",
+          txHash: e.log.transactionHash || "0x???",
+          action: "VOTE",
+          actor: (e.args.voter as string) || "",
+          blockNumber: Number(e.log.blockNumber),
+        });
+      });
+
+    // 按 block 排序，保留最近 50 条
+    newEntries.sort((a, b) => a.blockNumber - b.blockNumber);
+    setEntries(newEntries.slice(-50));
+  }, [chatEvents, voteEvents, roomId]);
+
+  // 自动滚动到底部
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [entries]);
+
+  return (
+    <div className="bg-black/90 border border-green-500/20 rounded p-3 font-mono">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+        <span className="text-green-400 text-xs tracking-wider">
+          BLOCKCHAIN STREAM
+        </span>
+      </div>
+
+      <div
+        ref={scrollRef}
+        className="h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-green-900 scrollbar-track-transparent"
+      >
+        {entries.map((entry, i) => (
+          <div key={`${entry.id}-${i}`} className="text-[10px] leading-5 terminal-text">
+            <span className="text-gray-600">
+              [{entry.blockNumber}]
+            </span>{" "}
+            <span className={ACTION_COLORS[entry.action]}>
+              {entry.action.padEnd(10)}
+            </span>{" "}
+            <span className="text-gray-500">
+              {entry.actor.slice(0, 6)}..{entry.actor.slice(-4)}
+            </span>{" "}
+            <span className="text-green-800">
+              tx:{entry.txHash.slice(0, 10)}..
+            </span>
+          </div>
+        ))}
+
+        {entries.length === 0 && (
+          <div className="text-green-800 text-[10px]">
+            &gt; Awaiting transactions...
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+```
+
+### 8.29 Player Identity Card (`PlayerIdentityCard`)
+
+点击玩家名称弹出的详细信息卡片，包含人性分仪表、投票历史和快速操作按钮。
+
+**文件**: `packages/nextjs/app/arena/_components/PlayerIdentityCard.tsx`
+
+```tsx
+// packages/nextjs/app/arena/_components/PlayerIdentityCard.tsx
+
+"use client";
+
+import { motion } from "framer-motion";
+import { Address } from "~~/components/scaffold-eth";
+import { useGameStore } from "~~/services/store/gameStore";
+
+export const PlayerIdentityCard = ({
+  playerAddress,
+  onClose,
+  onSuspect,
+  onTrust,
+}: {
+  playerAddress: string;
+  onClose: () => void;
+  onSuspect: (addr: string) => void;
+  onTrust: (addr: string) => void;
+}) => {
+  const players = useGameStore((s) => s.players);
+  const chatMessages = useGameStore((s) => s.chatMessages);
+  const pendingVotes = useGameStore((s) => s.pendingVotes);
+
+  const player = players.find(
+    (p) => p.address.toLowerCase() === playerAddress.toLowerCase(),
+  );
+
+  if (!player) return null;
+
+  // 计算该玩家的聊天频率
+  const playerMessages = chatMessages.filter(
+    (m) => m.sender.toLowerCase() === playerAddress.toLowerCase() && m.type === "chat",
+  );
+
+  // 谁投了他 / 他投了谁
+  const votedBy = Object.entries(pendingVotes)
+    .filter(([, target]) => target.toLowerCase() === playerAddress.toLowerCase())
+    .map(([voter]) => voter);
+
+  const votedFor = pendingVotes[playerAddress] || null;
+
+  // 人性分仪表 (SVG 弧线)
+  const scorePercent = Math.max(0, Math.min(100, player.humanityScore));
+  const scoreColor =
+    scorePercent > 60 ? "#22c55e" : scorePercent > 30 ? "#eab308" : "#ef4444";
+
+  return (
+    <motion.div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="w-80 bg-black/95 border border-cyan-500/30 rounded-lg p-5 cyber-border"
+        initial={{ scale: 0.8, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.8, y: 20 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 头部 */}
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <div className="text-cyan-400 font-mono text-xs tracking-wider mb-1">
+              IDENTITY SCAN
+            </div>
+            <Address address={playerAddress} />
+          </div>
+          <span
+            className={`px-2 py-0.5 text-xs font-mono rounded ${
+              player.isAlive
+                ? "text-green-400 bg-green-400/10"
+                : "text-red-400 bg-red-400/10"
+            }`}
+          >
+            {player.isAlive ? "ALIVE" : "ELIMINATED"}
+          </span>
+        </div>
+
+        {/* 人性分仪表 */}
+        <div className="flex items-center justify-center my-4">
+          <svg width="120" height="70" viewBox="0 0 120 70">
+            {/* 背景弧 */}
+            <path
+              d="M 10 65 A 50 50 0 0 1 110 65"
+              fill="none"
+              stroke="#333"
+              strokeWidth="6"
+              strokeLinecap="round"
+            />
+            {/* 前景弧 */}
+            <path
+              d="M 10 65 A 50 50 0 0 1 110 65"
+              fill="none"
+              stroke={scoreColor}
+              strokeWidth="6"
+              strokeLinecap="round"
+              strokeDasharray={`${scorePercent * 1.57} 157`}
+            />
+            <text
+              x="60"
+              y="55"
+              textAnchor="middle"
+              fill={scoreColor}
+              fontFamily="monospace"
+              fontSize="20"
+              fontWeight="bold"
+            >
+              {player.humanityScore}
+            </text>
+            <text
+              x="60"
+              y="68"
+              textAnchor="middle"
+              fill="#666"
+              fontFamily="monospace"
+              fontSize="8"
+            >
+              HUMANITY SCORE
+            </text>
+          </svg>
+        </div>
+
+        {/* 统计 */}
+        <div className="grid grid-cols-3 gap-2 mb-4 text-center font-mono text-xs">
+          <div className="bg-gray-900/50 rounded p-2">
+            <div className="text-gray-500">MSGS</div>
+            <div className="text-white">{playerMessages.length}</div>
+          </div>
+          <div className="bg-gray-900/50 rounded p-2">
+            <div className="text-gray-500">V.CAST</div>
+            <div className="text-white">{player.votesCast}</div>
+          </div>
+          <div className="bg-gray-900/50 rounded p-2">
+            <div className="text-gray-500">V.RECV</div>
+            <div className="text-white">{player.votesReceived}</div>
+          </div>
+        </div>
+
+        {/* 投票关系 */}
+        {(votedBy.length > 0 || votedFor) && (
+          <div className="mb-4 text-xs font-mono">
+            {votedFor && (
+              <div className="text-red-400">
+                TARGETING → {votedFor.slice(0, 6)}..{votedFor.slice(-4)}
+              </div>
+            )}
+            {votedBy.length > 0 && (
+              <div className="text-yellow-400">
+                TARGETED BY ← {votedBy.length} player(s)
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 快速操作 */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => onSuspect(playerAddress)}
+            className="flex-1 btn btn-sm btn-error btn-outline font-mono text-xs"
+          >
+            SUSPECT
+          </button>
+          <button
+            onClick={() => onTrust(playerAddress)}
+            className="flex-1 btn btn-sm btn-success btn-outline font-mono text-xs"
+          >
+            TRUST
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+```
+
+### 8.30 赛博朋克 CSS 主题 (`globals.css`)
+
+全局 CSS 增强，包含赛博朋克主题变量、关键帧动画和工具类。以下样式应添加到 `packages/nextjs/app/globals.css` 中。
+
+```css
+/* ============================================
+   RTTA Cyberpunk Theme - globals.css additions
+   ============================================ */
+
+/* ============ DaisyUI Theme Overrides ============ */
+
+[data-theme="rtta-dark"] {
+  --b1: 0 0% 3%;            /* base-100: near-black */
+  --b2: 0 0% 6%;            /* base-200 */
+  --b3: 0 0% 9%;            /* base-300 */
+  --bc: 210 20% 90%;        /* base-content */
+  --p: 185 100% 50%;        /* primary: cyan */
+  --pc: 0 0% 0%;            /* primary-content */
+  --s: 270 80% 60%;         /* secondary: purple */
+  --sc: 0 0% 100%;          /* secondary-content */
+  --a: 120 60% 50%;         /* accent: green */
+  --ac: 0 0% 0%;            /* accent-content */
+  --er: 0 80% 55%;          /* error: red */
+  --wa: 45 90% 55%;         /* warning: yellow */
+  --su: 120 60% 50%;        /* success: green */
+}
+
+/* ============ Keyframe Animations ============ */
+
+@keyframes countdown-slam {
+  0% { transform: scale(3); opacity: 0; }
+  50% { transform: scale(0.9); opacity: 1; }
+  70% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes countdown-shockwave {
+  0% { transform: scale(0.8); opacity: 0.8; border-width: 2px; }
+  100% { transform: scale(3); opacity: 0; border-width: 0.5px; }
+}
+
+@keyframes phase-wipe {
+  0% { transform: translateY(-100%); }
+  40% { transform: translateY(0); }
+  60% { transform: translateY(0); }
+  100% { transform: translateY(100%); }
+}
+
+@keyframes crown-float {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-15px) rotate(3deg); }
+}
+
+@keyframes killfeed-slide {
+  0% { transform: translateX(100%); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes room-glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(0, 255, 255, 0.1); }
+  50% { box-shadow: 0 0 20px rgba(0, 255, 255, 0.2); }
+}
+
+@keyframes hp-critical {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; color: #ff0000; }
+}
+
+@keyframes scanline {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 100%; }
+}
+
+@keyframes matrix-fall {
+  0% { transform: translateY(-100%); opacity: 1; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+
+@keyframes glitch {
+  0% { clip-path: inset(40% 0 61% 0); transform: translate(-2px, 2px); }
+  20% { clip-path: inset(92% 0 1% 0); transform: translate(1px, -1px); }
+  40% { clip-path: inset(43% 0 1% 0); transform: translate(-1px, 3px); }
+  60% { clip-path: inset(25% 0 58% 0); transform: translate(3px, 1px); }
+  80% { clip-path: inset(54% 0 7% 0); transform: translate(-3px, -2px); }
+  100% { clip-path: inset(58% 0 43% 0); transform: translate(2px, -3px); }
+}
+
+@keyframes neon-pulse {
+  0%, 100% {
+    text-shadow: 0 0 7px currentColor, 0 0 10px currentColor, 0 0 21px currentColor;
+  }
+  50% {
+    text-shadow: 0 0 4px currentColor, 0 0 7px currentColor;
+  }
+}
+
+@keyframes border-flow {
+  0% { border-image-source: linear-gradient(0deg, #00ffff, #8b00ff, #00ffff); }
+  33% { border-image-source: linear-gradient(120deg, #00ffff, #8b00ff, #00ffff); }
+  66% { border-image-source: linear-gradient(240deg, #00ffff, #8b00ff, #00ffff); }
+  100% { border-image-source: linear-gradient(360deg, #00ffff, #8b00ff, #00ffff); }
+}
+
+/* ============ Utility Classes ============ */
+
+.cyber-border {
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.1), inset 0 0 10px rgba(0, 255, 255, 0.05);
+}
+
+.neon-text {
+  text-shadow: 0 0 7px currentColor, 0 0 10px currentColor, 0 0 21px currentColor,
+    0 0 42px currentColor;
+}
+
+.neon-pulse {
+  animation: neon-pulse 2s ease-in-out infinite;
+}
+
+.terminal-text {
+  font-family: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
+  letter-spacing: 0.02em;
+}
+
+.glass-panel {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glitch-text {
+  position: relative;
+}
+
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.glitch-text::before {
+  animation: glitch 2s infinite;
+  color: #ff0000;
+  z-index: -1;
+  left: 2px;
+}
+
+.glitch-text::after {
+  animation: glitch 2s infinite reverse;
+  color: #0000ff;
+  z-index: -2;
+  left: -2px;
+}
+
+.scanline {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 255, 255, 0.03) 2px,
+    rgba(0, 255, 255, 0.03) 4px
+  );
+  pointer-events: none;
+}
+
+.scanline-horizontal {
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 255, 0.4), transparent);
+  animation: phase-wipe 2s linear infinite;
+}
+
+.room-glow {
+  animation: room-glow 3s ease-in-out infinite;
+}
+
+.hp-critical {
+  animation: hp-critical 0.8s ease-in-out infinite;
+}
+
+.crown-float {
+  animation: crown-float 2s ease-in-out infinite;
+}
+
+.border-flow {
+  border-image-slice: 1;
+  animation: border-flow 3s linear infinite;
+}
+
+.flicker {
+  animation: neon-pulse 1.5s ease-in-out infinite;
+}
+
+.rainbow-glow {
+  background: linear-gradient(90deg, #00ffff, #8b00ff, #ff0080, #00ffff);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: rainbow-shift 4s linear infinite;
+}
+
+@keyframes rainbow-shift {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+```
+
+**动画速查表**:
+
+| 动画名 | 用途 | 组件 |
+|--------|------|------|
+| `countdown-slam` | 倒计时数字弹入 | GameCountdown |
+| `countdown-shockwave` | 数字冲击波纹 | GameCountdown |
+| `phase-wipe` | Phase 切换扫描线 | PhaseTransition |
+| `crown-float` | 冠军皇冠漂浮 | VictoryScreen |
+| `killfeed-slide` | 淘汰信息滑入 | KillFeed |
+| `room-glow` | 房间卡片呼吸光晕 | RoomCard |
+| `hp-critical` | 低血量闪烁 | GameHUD |
+| `scanline` | CRT 扫描线纹理 | PhaseTransition |
+| `matrix-fall` | 矩阵数字雨下落 | MatrixRain |
+| `glitch` | 文字故障错位 | HeroSection / CyberTitle |
+| `neon-pulse` | 霓虹呼吸灯 | 全局 |
+| `border-flow` | 流光边框 | ArenaPage 底部栏 |
 
 ---
 
@@ -1976,7 +6416,7 @@ deployAgents();
 ├──────────┼──────────────┼───────────────┼────────────────────────┤
 │ 人数     │  6-10 人      │  12-20 人     │  30-50 人              │
 │ 时长     │  ~15 分钟     │  ~30 分钟     │  ~45 分钟              │
-│ 入场费   │  0.05 MON     │  0.1 MON      │  0.2 MON              │
+│ 入场费   │  0.005 MON    │  0.01 MON     │  0.02 MON              │
 │ 淘汰模式 │  固定节奏     │  两阶段加速    │  三阶段加速 + 毒圈      │
 │ 排名奖励 │  前 3 名      │  前 5 名      │  前 5 名               │
 │ 适合场景 │  Demo/测试    │  日常对局      │  锦标赛/直播           │
@@ -2078,7 +6518,7 @@ Phase 3 (终局决战):
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 10.2 投票与人性分机制
+### 10.4 投票与人性分机制
 
 #### 核心规则：人性分只减不加 + 强制投票
 
@@ -2187,46 +6627,46 @@ Phase 3: 投票 + 重毒圈
   - 激励玩家尽早行动而非观望
 ```
 
-### 10.4 分层奖励机制
+### 10.5 分层奖励机制
 
 #### 奖池总览
 
-以 50 人房间、入场费 0.1 MON 为例（总奖池 = 5 MON）：
+以 50 人房间、入场费 0.02 MON 为例（总奖池 = 1 MON）：
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    奖池分配流向图                               │
 │                                                              │
-│  总奖池: 5 MON                                                │
+│  总奖池: 1 MON                                                │
 │     │                                                        │
-│     ├── 🏆 冠军 (35%) ─────────────── 1.750 MON              │
+│     ├── 🏆 冠军 (35%) ─────────────── 0.35 MON               │
 │     │                                                        │
-│     ├── 🥈 排名 (25%) ─────────────── 1.250 MON              │
-│     │     ├── 第1名: 0.500 MON (40%)                         │
-│     │     ├── 第2名: 0.312 MON (25%)                         │
-│     │     ├── 第3名: 0.225 MON (18%)                         │
-│     │     ├── 第4名: 0.125 MON (10%)                         │
-│     │     └── 第5名: 0.088 MON  (7%)                         │
+│     ├── 🥈 排名 (25%) ─────────────── 0.25 MON               │
+│     │     ├── 第1名: 0.10 MON (40%)                          │
+│     │     ├── 第2名: 0.0625 MON (25%)                        │
+│     │     ├── 第3名: 0.045 MON (18%)                         │
+│     │     ├── 第4名: 0.025 MON (10%)                         │
+│     │     └── 第5名: 0.0175 MON  (7%)                        │
 │     │                                                        │
-│     ├── ⏱️ 存活 (25%) ─────────────── 1.250 MON              │
+│     ├── ⏱️ 存活 (25%) ─────────────── 0.25 MON               │
 │     │     └── 存活 > 50% 时长的所有玩家平分                     │
 │     │                                                        │
-│     ├── 🏛️ 协议 (10%) ─────────────── 0.500 MON              │
+│     ├── 🏛️ 协议 (10%) ─────────────── 0.10 MON               │
 │     │     └── 进入 Protocol Treasury                          │
 │     │                                                        │
-│     └── 🎖️ 成就 (5%) ──────────────── 0.250 MON              │
-│           └── 5 种成就各 0.050 MON + NFT                      │
+│     └── 🎖️ 成就 (5%) ──────────────── 0.05 MON               │
+│           └── 5 种成就各 0.01 MON + NFT                       │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 **冠军实际总收入**（叠加多种奖励）：
 ```
-冠军奖励:     1.750 MON (35%)
-+ 排名第1:    0.500 MON
-+ 存活奖励:   ~0.083 MON (假设 15 人有资格)
-+ 可能的成就: 0.050 MON
+冠军奖励:     0.35 MON (35%)
++ 排名第1:    0.10 MON
++ 存活奖励:   ~0.017 MON (假设 15 人有资格)
++ 可能的成就: 0.01 MON
 ──────────────────────────
-最高可达:     ~2.383 MON (约 48% 总奖池)
+最高可达:     ~0.477 MON (约 48% 总奖池)
 ```
 
 #### 存活奖励资格判定
@@ -2256,7 +6696,7 @@ Phase 3: 投票 + 重毒圈
 | 🎭 完美伪装者 | 冠军 && `isVerifiedHuman == false` | 1% 奖池 + NFT | 游戏结束 |
 | 👤 最后人类 | 最后一个被淘汰的 `isVerifiedHuman` 玩家 | 1% 奖池 + NFT | 每次淘汰更新 |
 | ⚡ 闪电猎杀 | 前 10% 时间内 `successfulVotes >= 3` | 1% 奖池 + NFT | 游戏结束 |
-| 🛡️ 钢铁意志 | `peakHumanityScore >= 50 && humanityScore >= 50` | 1% 奖池 + NFT | 游戏结束 |
+| 🛡️ 钢铁意志 | `humanityScore >= 50` (最终人性分不低于 50) | 1% 奖池 + NFT | 游戏结束 |
 
 **成就 NFT**：
 - ERC-721 标准
