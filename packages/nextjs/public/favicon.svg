@@ -1,0 +1,29 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00ff41"/>
+      <stop offset="100%" stop-color="#00e5ff"/>
+    </linearGradient>
+    <filter id="gl">
+      <feGaussianBlur stdDeviation="1.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="lh"><rect x="0" y="0" width="32" height="64"/></clipPath>
+    <clipPath id="rh"><rect x="32" y="0" width="32" height="64"/></clipPath>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0a0a0a"/>
+  <!-- Eye shape -->
+  <path d="M10,32 Q20,18 32,18 Q44,18 54,32 Q44,46 32,46 Q20,46 10,32Z" fill="none" stroke="url(#g)" stroke-width="2" filter="url(#gl)"/>
+  <!-- Left: human pupil -->
+  <g clip-path="url(#lh)">
+    <circle cx="32" cy="32" r="9" fill="none" stroke="#00ff41" stroke-width="1.5" filter="url(#gl)"/>
+    <circle cx="32" cy="32" r="4" fill="#00ff41" filter="url(#gl)"/>
+  </g>
+  <!-- Right: digital pupil -->
+  <g clip-path="url(#rh)">
+    <rect x="24" y="24" width="16" height="16" fill="none" stroke="#00e5ff" stroke-width="1.5" filter="url(#gl)"/>
+    <rect x="29" y="29" width="7" height="7" fill="#00e5ff" filter="url(#gl)"/>
+    <line x1="33" y1="24" x2="33" y2="40" stroke="#00e5ff" stroke-width="0.5" opacity="0.5"/>
+    <line x1="24" y1="32" x2="40" y2="32" stroke="#00e5ff" stroke-width="0.5" opacity="0.5"/>
+  </g>
+</svg>

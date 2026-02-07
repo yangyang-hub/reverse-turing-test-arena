@@ -1,10 +1,129 @@
-<svg width="103" height="102" viewBox="0 0 103 102" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect x="0.72229" y="0.99707" width="101.901" height="100.925" rx="19.6606" fill="black"/>
-<path d="M69.4149 42.5046L70.9118 39.812L72.5438 42.5046L83.0241 59.1906L70.9533 65.9361L59.1193 59.1906L69.4149 42.5046Z" fill="white"/>
-<path d="M70.9533 69.2496L60.6577 63.6876L70.9533 79.0719L81.184 63.4985L70.9533 69.2496Z" fill="white"/>
-<path d="M70.953 65.9259V41.8533V39.8499L83.063 59.1785L70.953 65.9259Z" fill="#DFDFDF"/>
-<path d="M70.9617 79.0499L71.0409 69.2969L81.2062 63.4629L70.9617 79.0499Z" fill="#DFDFDF"/>
-<path d="M34.409 21.6931V24.6125H34.4132L34.4124 27.747H26.8093L26.8093 27.7566H25.5383L21.3839 36.4914H34.4135V39.9723H34.4091L34.4135 69.4549C34.4135 73.5268 31.1126 76.8277 27.0408 76.8277H24.7346L19.8064 84.0772H62.4172L57.3539 76.8277H51.7795C47.7076 76.8277 44.4067 73.5268 44.4067 69.4549L44.4024 43.665C44.5071 39.7076 47.7304 36.5273 51.7046 36.4914H79.5481L74.6584 27.7566H53.6021L53.6021 27.747L44.3987 27.7469L44.3994 24.6125H44.4022V18.3245L34.409 21.6931Z" fill="white"/>
-<path d="M39.882 19.8517V76.5496C39.9731 74.9642 41.0475 70.8554 44.3648 69.1027V50.8665L44.4703 50.8998V43.8309C44.4703 39.7591 47.7712 36.4582 51.843 36.4582H79.5812L76.9508 31.8656H49.9083C46.1286 31.8656 44.3648 34.556 44.3648 34.556L44.4435 18.3066L39.882 19.8517Z" fill="#DFDFDF"/>
-<path d="M23.622 31.7927L21.3295 36.5083H34.4247V31.7927H23.622Z" fill="#DFDFDF"/>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="neonGlow" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00ff41"/>
+      <stop offset="100%" stop-color="#00e5ff"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glowStrong">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="leftHalf">
+      <rect x="0" y="0" width="256" height="512"/>
+    </clipPath>
+    <clipPath id="rightHalf">
+      <rect x="256" y="0" width="256" height="512"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#0a0a0a"/>
+
+  <!-- Hex arena frame -->
+  <polygon
+    points="256,52 432,154 432,358 256,460 80,358 80,154"
+    fill="none"
+    stroke="url(#neonGlow)"
+    stroke-width="3"
+    filter="url(#glow)"
+    opacity="0.4"
+  />
+  <polygon
+    points="256,72 416,164 416,348 256,440 96,348 96,164"
+    fill="none"
+    stroke="url(#neonGlow)"
+    stroke-width="2"
+    filter="url(#glow)"
+    opacity="0.2"
+  />
+
+  <!-- Eye shape — outer almond -->
+  <path
+    d="M108,256 Q180,160 256,160 Q332,160 404,256 Q332,352 256,352 Q180,352 108,256Z"
+    fill="none"
+    stroke="url(#neonGlow)"
+    stroke-width="4"
+    filter="url(#glow)"
+  />
+
+  <!-- Left side: Human — organic smooth iris + pupil -->
+  <g clip-path="url(#leftHalf)">
+    <!-- Iris circle -->
+    <circle cx="256" cy="256" r="64" fill="none" stroke="#00ff41" stroke-width="3" filter="url(#glow)"/>
+    <!-- Iris texture — organic curves -->
+    <path d="M220,230 Q240,250 220,280" fill="none" stroke="#00ff41" stroke-width="1.5" opacity="0.6"/>
+    <path d="M230,220 Q250,256 230,290" fill="none" stroke="#00ff41" stroke-width="1.5" opacity="0.5"/>
+    <path d="M210,245 Q235,256 210,268" fill="none" stroke="#00ff41" stroke-width="1.5" opacity="0.4"/>
+    <!-- Pupil -->
+    <circle cx="256" cy="256" r="24" fill="#00ff41" opacity="0.9" filter="url(#glowStrong)"/>
+    <!-- Light reflection -->
+    <circle cx="244" cy="244" r="6" fill="#0a0a0a" opacity="0.6"/>
+  </g>
+
+  <!-- Right side: AI — digital circuit iris -->
+  <g clip-path="url(#rightHalf)">
+    <!-- Iris — octagonal digital shape -->
+    <polygon
+      points="283,195 320,210 320,302 283,317 256,310 256,202"
+      fill="none"
+      stroke="#00e5ff"
+      stroke-width="3"
+      filter="url(#glow)"
+    />
+    <!-- Circuit traces inside iris -->
+    <line x1="270" y1="220" x2="310" y2="220" stroke="#00e5ff" stroke-width="1.5" opacity="0.7"/>
+    <line x1="270" y1="240" x2="300" y2="240" stroke="#00e5ff" stroke-width="1.5" opacity="0.5"/>
+    <line x1="270" y1="260" x2="310" y2="260" stroke="#00e5ff" stroke-width="1.5" opacity="0.7"/>
+    <line x1="270" y1="280" x2="295" y2="280" stroke="#00e5ff" stroke-width="1.5" opacity="0.5"/>
+    <line x1="270" y1="300" x2="310" y2="300" stroke="#00e5ff" stroke-width="1.5" opacity="0.7"/>
+    <!-- Vertical traces -->
+    <line x1="285" y1="210" x2="285" y2="310" stroke="#00e5ff" stroke-width="1" opacity="0.3"/>
+    <line x1="300" y1="215" x2="300" y2="305" stroke="#00e5ff" stroke-width="1" opacity="0.3"/>
+    <!-- Circuit nodes -->
+    <rect x="282" y="217" width="6" height="6" fill="#00e5ff" opacity="0.8"/>
+    <rect x="296" y="237" width="6" height="6" fill="#00e5ff" opacity="0.8"/>
+    <rect x="282" y="257" width="6" height="6" fill="#00e5ff" opacity="0.8"/>
+    <rect x="296" y="277" width="6" height="6" fill="#00e5ff" opacity="0.8"/>
+    <rect x="282" y="297" width="6" height="6" fill="#00e5ff" opacity="0.8"/>
+    <!-- Pupil — pixelated square -->
+    <rect x="256" y="238" width="36" height="36" fill="#00e5ff" opacity="0.85" filter="url(#glowStrong)"/>
+    <!-- Scanline across pupil -->
+    <line x1="256" y1="252" x2="292" y2="252" stroke="#0a0a0a" stroke-width="2" opacity="0.4"/>
+    <line x1="256" y1="260" x2="292" y2="260" stroke="#0a0a0a" stroke-width="1" opacity="0.3"/>
+  </g>
+
+  <!-- Center dividing line -->
+  <line x1="256" y1="160" x2="256" y2="352" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+
+  <!-- Question mark below eye — "who is human?" -->
+  <text
+    x="256" y="410"
+    text-anchor="middle"
+    font-family="monospace"
+    font-weight="bold"
+    font-size="48"
+    fill="url(#neonGlow)"
+    filter="url(#glow)"
+    opacity="0.8"
+  >?</text>
+
+  <!-- Corner accents -->
+  <line x1="40" y1="40" x2="90" y2="40" stroke="#00ff41" stroke-width="2" opacity="0.5"/>
+  <line x1="40" y1="40" x2="40" y2="90" stroke="#00ff41" stroke-width="2" opacity="0.5"/>
+  <line x1="472" y1="40" x2="422" y2="40" stroke="#00e5ff" stroke-width="2" opacity="0.5"/>
+  <line x1="472" y1="40" x2="472" y2="90" stroke="#00e5ff" stroke-width="2" opacity="0.5"/>
+  <line x1="40" y1="472" x2="90" y2="472" stroke="#00ff41" stroke-width="2" opacity="0.5"/>
+  <line x1="40" y1="472" x2="40" y2="422" stroke="#00ff41" stroke-width="2" opacity="0.5"/>
+  <line x1="472" y1="472" x2="422" y2="472" stroke="#00e5ff" stroke-width="2" opacity="0.5"/>
+  <line x1="472" y1="472" x2="472" y2="422" stroke="#00e5ff" stroke-width="2" opacity="0.5"/>
 </svg>
