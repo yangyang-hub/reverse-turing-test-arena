@@ -1,0 +1,200 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { formatEther, parseEther } from "viem";
+import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+
+const TIER_CONFIG = [
+  {
+    name: "QUICK",
+    label: "Bronze",
+    color: "#CD7F32",
+    borderClass: "tier-quick-border",
+    textClass: "tier-quick",
+    fee: parseEther("0.01"),
+  },
+  {
+    name: "STANDARD",
+    label: "Silver",
+    color: "#C0C0C0",
+    borderClass: "tier-standard-border",
+    textClass: "tier-standard",
+    fee: parseEther("0.05"),
+  },
+  {
+    name: "EPIC",
+    label: "Gold",
+    color: "#FFD700",
+    borderClass: "tier-epic-border",
+    textClass: "tier-epic",
+    fee: parseEther("0.1"),
+  },
+] as const;
+
+const PHASE_LABELS = ["Waiting", "Phase 1", "Phase 2", "Phase 3", "Ended"] as const;
+const PHASE_CLASSES = ["text-secondary", "phase-1", "phase-2", "phase-3", "phase-ended"] as const;
+
+type RoomCardProps = {
+  roomId: bigint;
+};
+
+const RoomCard = ({ roomId }: RoomCardProps) => {
+  const router = useRouter();
+
+  const { data: roomInfo, isLoading } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getRoomInfo",
+    args: [roomId],
+  });
+
+  const { data: players } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getAllPlayers",
+    args: [roomId],
+  });
+
+  const { writeContractAsync, isMining } = useScaffoldWriteContract({
+    contractName: "TuringArena",
+  });
+
+  if (isLoading || !roomInfo) {
+    return (
+      <div className="glass-panel cyber-border flex h-52 animate-pulse items-center justify-center rounded-lg p-4">
+        <span className="terminal-text text-sm">LOADING ROOM #{roomId.toString()}...</span>
+      </div>
+    );
+  }
+
+  // roomInfo is a struct returned as an array/object depending on ABI
+  // Destructure the room data - adapt to actual struct shape
+  const room = roomInfo as unknown as {
+    tier: number;
+    phase: number;
+    entryFee: bigint;
+    prizePool: bigint;
+    maxPlayers: number;
+    playerCount: number;
+    host: string;
+  };
+
+  const tierIndex = Number(room.tier);
+  const phaseIndex = Number(room.phase);
+  const tier = TIER_CONFIG[tierIndex] ?? TIER_CONFIG[0];
+  const phaseLabel = PHASE_LABELS[phaseIndex] ?? "Unknown";
+  const phaseClass = PHASE_CLASSES[phaseIndex] ?? "text-base-content";
+  const playerCount = players ? players.length : Number(room.playerCount ?? 0);
+  const maxPlayers = Number(room.maxPlayers ?? 8);
+  const entryFee = room.entryFee ?? tier.fee;
+  const prizePool = room.prizePool ?? 0n;
+  const isWaiting = phaseIndex === 0;
+  const isActive = phaseIndex >= 1 && phaseIndex <= 3;
+  const isEnded = phaseIndex === 4;
+
+  const handleJoin = async () => {
+    try {
+      await writeContractAsync({
+        functionName: "joinRoom",
+        args: [roomId],
+        value: entryFee,
+      });
+    } catch (e) {
+      console.error("Failed to join room:", e);
+    }
+  };
+
+  const handleSpectate = () => {
+    router.push(`/arena?roomId=${roomId.toString()}`);
+  };
+
+  return (
+    <div
+      className={`glass-panel relative flex flex-col gap-3 rounded-lg border p-5 transition-all duration-300 hover:scale-[1.02] ${tier.borderClass}`}
+      style={{ animation: isWaiting ? "room-glow 3s ease-in-out infinite" : undefined }}
+    >
+      {/* Header row: Room ID + Tier Badge */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs tracking-widest text-base-content/50">ROOM #{roomId.toString()}</span>
+        <span
+          className={`rounded px-2 py-0.5 text-xs font-bold tracking-wider ${tier.textClass}`}
+          style={{
+            border: `1px solid ${tier.color}`,
+            backgroundColor: `${tier.color}15`,
+          }}
+        >
+          {tier.name}
+        </span>
+      </div>
+
+      {/* Phase status */}
+      <div className="flex items-center gap-2">
+        <div
+          className={`h-2 w-2 rounded-full ${isEnded ? "bg-gray-500" : "animate-pulse"}`}
+          style={{ backgroundColor: isEnded ? undefined : tier.color }}
+        />
+        <span className={`text-sm font-semibold tracking-wider ${phaseClass}`}>{phaseLabel}</span>
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col">
+          <span className="text-xs text-base-content/40">PLAYERS</span>
+          <span className="font-mono text-sm text-base-content">
+            {playerCount}/{maxPlayers}
+          </span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xs text-base-content/40">ENTRY FEE</span>
+          <span className="font-mono text-sm text-secondary">{formatEther(entryFee)} ETH</span>
+        </div>
+        <div className="col-span-2 flex flex-col">
+          <span className="text-xs text-base-content/40">PRIZE POOL</span>
+          <span className={`font-mono text-lg font-bold ${tier.textClass}`}>{formatEther(prizePool)} ETH</span>
+        </div>
+      </div>
+
+      {/* Player bar visualization */}
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-base-300">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{
+            width: `${maxPlayers > 0 ? (playerCount / maxPlayers) * 100 : 0}%`,
+            backgroundColor: tier.color,
+            boxShadow: `0 0 8px ${tier.color}`,
+          }}
+        />
+      </div>
+
+      {/* Action button */}
+      <div className="mt-1">
+        {isWaiting && (
+          <button
+            className={`btn btn-sm w-full border font-bold tracking-widest ${tier.textClass}`}
+            style={{
+              borderColor: tier.color,
+              backgroundColor: `${tier.color}10`,
+            }}
+            onClick={handleJoin}
+            disabled={isMining}
+          >
+            {isMining ? <span className="loading loading-spinner loading-xs" /> : "JOIN"}
+          </button>
+        )}
+        {isActive && (
+          <button
+            className="btn btn-sm btn-outline btn-secondary w-full font-bold tracking-widest"
+            onClick={handleSpectate}
+          >
+            SPECTATE
+          </button>
+        )}
+        {isEnded && (
+          <button className="btn btn-sm btn-disabled w-full font-bold tracking-widest text-base-content/30" disabled>
+            ENDED
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default RoomCard;

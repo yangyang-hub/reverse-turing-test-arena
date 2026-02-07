@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
-
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
 @theme {
   --shadow-center: 0 0 12px -2px rgb(0 0 0 / 0.05);
   --animate-pulse-fast: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
 }
 
 @plugin "daisyui" {
@@ -15,65 +15,60 @@
     dark --prefersdark;
 }
 
-@plugin "daisyui/theme" {
-  name: "light";
-
-  --color-primary: #93bbfb;
-  --color-primary-content: #212638;
-  --color-secondary: #dae8ff;
-  --color-secondary-content: #212638;
-  --color-accent: #93bbfb;
-  --color-accent-content: #212638;
-  --color-neutral: #212638;
-  --color-neutral-content: #ffffff;
-  --color-base-100: #ffffff;
-  --color-base-200: #f4f8ff;
-  --color-base-300: #dae8ff;
-  --color-base-content: #212638;
-  --color-info: #93bbfb;
-  --color-success: #34eeb6;
-  --color-warning: #ffcf72;
-  --color-error: #ff8863;
-
-  --radius-field: 9999rem;
-  --radius-box: 1rem;
-  --tt-tailw: 6px;
-}
-
+/* ============ RTTA Cyberpunk Dark Theme ============ */
 @plugin "daisyui/theme" {
   name: "dark";
 
-  --color-primary: #212638;
-  --color-primary-content: #f9fbff;
-  --color-secondary: #323f61;
-  --color-secondary-content: #f9fbff;
-  --color-accent: #4969a6;
-  --color-accent-content: #f9fbff;
-  --color-neutral: #f9fbff;
-  --color-neutral-content: #385183;
-  --color-base-100: #385183;
-  --color-base-200: #2a3655;
-  --color-base-300: #212638;
-  --color-base-content: #f9fbff;
-  --color-info: #385183;
-  --color-success: #34eeb6;
-  --color-warning: #ffcf72;
-  --color-error: #ff8863;
+  --color-primary: #00ff41;
+  --color-primary-content: #0a0a0a;
+  --color-secondary: #00e5ff;
+  --color-secondary-content: #0a0a0a;
+  --color-accent: #bd00ff;
+  --color-accent-content: #f0f0f0;
+  --color-neutral: #1a1a2e;
+  --color-neutral-content: #e0e0e0;
+  --color-base-100: #0d0d1a;
+  --color-base-200: #0a0a14;
+  --color-base-300: #06060e;
+  --color-base-content: #e0e0e0;
+  --color-info: #00e5ff;
+  --color-success: #00ff41;
+  --color-warning: #ffcc00;
+  --color-error: #ff0040;
 
-  --radius-field: 9999rem;
-  --radius-box: 1rem;
-
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
   --tt-tailw: 6px;
   --tt-bg: var(--color-primary);
 }
 
-/*
-  The default border color has changed to `currentColor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
+@plugin "daisyui/theme" {
+  name: "light";
 
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
+  --color-primary: #00cc33;
+  --color-primary-content: #0a0a0a;
+  --color-secondary: #00b8d4;
+  --color-secondary-content: #0a0a0a;
+  --color-accent: #9c27b0;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1a1a2e;
+  --color-neutral-content: #e0e0e0;
+  --color-base-100: #0d0d1a;
+  --color-base-200: #0a0a14;
+  --color-base-300: #06060e;
+  --color-base-content: #e0e0e0;
+  --color-info: #00b8d4;
+  --color-success: #00cc33;
+  --color-warning: #ffb300;
+  --color-error: #d50000;
+
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --tt-tailw: 6px;
+}
+
+/*
+  Tailwind CSS v4 compatibility styles
 */
 @layer base {
   *,
@@ -90,6 +85,8 @@
 
   body {
     min-height: 100vh;
+    font-family: var(--font-mono), monospace;
+    background: var(--color-base-300);
   }
 
   h1,
@@ -103,7 +100,7 @@
 
 :root,
 [data-theme] {
-  background: var(--color-base-200);
+  background: var(--color-base-300);
 }
 
 .btn {
@@ -120,4 +117,451 @@
 
 .link:hover {
   opacity: 80%;
+}
+
+/* ============ Cyberpunk Utility Classes ============ */
+
+.cyber-border {
+  border: 1px solid #00ff41;
+  box-shadow:
+    0 0 8px rgba(0, 255, 65, 0.3),
+    inset 0 0 8px rgba(0, 255, 65, 0.1);
+}
+
+.cyber-border-cyan {
+  border: 1px solid #00e5ff;
+  box-shadow:
+    0 0 8px rgba(0, 229, 255, 0.3),
+    inset 0 0 8px rgba(0, 229, 255, 0.1);
+}
+
+.cyber-border-red {
+  border: 1px solid #ff0040;
+  box-shadow:
+    0 0 8px rgba(255, 0, 64, 0.3),
+    inset 0 0 8px rgba(255, 0, 64, 0.1);
+}
+
+.neon-text {
+  text-shadow:
+    0 0 7px #00ff41,
+    0 0 10px #00ff41,
+    0 0 21px #00ff41;
+}
+
+/* Breathing neon glow — slow pulse between dim and bright */
+@keyframes neon-breathe {
+  0%,
+  100% {
+    text-shadow:
+      0 0 4px #00ff41,
+      0 0 8px #00ff41;
+  }
+  50% {
+    text-shadow:
+      0 0 10px #00ff41,
+      0 0 20px #00ff41,
+      0 0 40px #00ff41;
+  }
+}
+
+.neon-text-breathe {
+  animation: neon-breathe 3s ease-in-out infinite;
+}
+
+.neon-text-cyan {
+  text-shadow:
+    0 0 7px #00e5ff,
+    0 0 10px #00e5ff,
+    0 0 21px #00e5ff;
+}
+
+.neon-text-red {
+  text-shadow:
+    0 0 7px #ff0040,
+    0 0 10px #ff0040,
+    0 0 21px #ff0040;
+}
+
+.neon-text-gold {
+  text-shadow:
+    0 0 7px #ffd700,
+    0 0 10px #ffd700,
+    0 0 21px #ffd700;
+}
+
+.terminal-text {
+  font-family: var(--font-mono), monospace;
+  color: #00ff41;
+}
+
+.glass-panel {
+  background: rgba(13, 13, 26, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 255, 65, 0.15);
+}
+
+.scanline-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 255, 65, 0.03) 2px,
+    rgba(0, 255, 65, 0.03) 4px
+  );
+}
+
+/* ============ Phase Color Coding ============ */
+
+.phase-1 {
+  color: #00ff41;
+} /* Green */
+.phase-2 {
+  color: #ffcc00;
+} /* Yellow */
+.phase-3 {
+  color: #ff0040;
+} /* Red */
+.phase-ended {
+  color: #888888;
+}
+
+.phase-1-bg {
+  background-color: rgba(0, 255, 65, 0.1);
+}
+.phase-2-bg {
+  background-color: rgba(255, 204, 0, 0.1);
+}
+.phase-3-bg {
+  background-color: rgba(255, 0, 64, 0.1);
+}
+
+/* ============ Tier Colors ============ */
+
+.tier-quick {
+  color: #cd7f32;
+} /* Bronze */
+.tier-standard {
+  color: #c0c0c0;
+} /* Silver */
+.tier-epic {
+  color: #ffd700;
+} /* Gold */
+
+.tier-quick-border {
+  border-color: #cd7f32;
+  box-shadow: 0 0 8px rgba(205, 127, 50, 0.3);
+}
+.tier-standard-border {
+  border-color: #c0c0c0;
+  box-shadow: 0 0 8px rgba(192, 192, 192, 0.3);
+}
+.tier-epic-border {
+  border-color: #ffd700;
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.3);
+}
+
+/* ============ Keyframe Animations ============ */
+
+@keyframes countdown-slam {
+  0% {
+    transform: scale(3);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes countdown-shockwave {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.8;
+    border-width: 4px;
+  }
+  100% {
+    transform: scale(3);
+    opacity: 0;
+    border-width: 0;
+  }
+}
+
+@keyframes phase-wipe {
+  0% {
+    clip-path: inset(0 100% 0 0);
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes crown-float {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(-5deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(5deg);
+  }
+}
+
+@keyframes killfeed-slide {
+  0% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  10% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  90% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes room-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(0, 255, 65, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(0, 255, 65, 0.4);
+  }
+}
+
+@keyframes scanline {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+@keyframes matrix-fall {
+  0% {
+    transform: translateY(-100%);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+
+@keyframes glitch {
+  0% {
+    transform: translate(0);
+  }
+  20% {
+    transform: translate(-2px, 2px);
+  }
+  40% {
+    transform: translate(-2px, -2px);
+  }
+  60% {
+    transform: translate(2px, 2px);
+  }
+  80% {
+    transform: translate(2px, -2px);
+  }
+  100% {
+    transform: translate(0);
+  }
+}
+
+@keyframes neon-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes border-flow {
+  0% {
+    border-color: #00ff41;
+  }
+  33% {
+    border-color: #00e5ff;
+  }
+  66% {
+    border-color: #bd00ff;
+  }
+  100% {
+    border-color: #00ff41;
+  }
+}
+
+@keyframes hp-critical {
+  0%,
+  100% {
+    color: #ff0040;
+    opacity: 1;
+  }
+  50% {
+    color: #ff0040;
+    opacity: 0.3;
+  }
+}
+
+/* ============ Glitch Text Effect ============ */
+
+.glitch-text {
+  position: relative;
+  display: inline-block;
+  animation: glitch 2.5s infinite;
+}
+
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.glitch-text::before {
+  color: #00e5ff;
+  animation: glitch-clip-1 3s infinite linear alternate-reverse;
+  clip-path: inset(20% 0 60% 0);
+  transform: translate(-2px, -1px);
+}
+
+.glitch-text::after {
+  color: #ff0040;
+  animation: glitch-clip-2 3s infinite linear alternate-reverse;
+  clip-path: inset(60% 0 10% 0);
+  transform: translate(2px, 1px);
+}
+
+@keyframes glitch-clip-1 {
+  0% {
+    clip-path: inset(20% 0 60% 0);
+  }
+  10% {
+    clip-path: inset(45% 0 30% 0);
+  }
+  20% {
+    clip-path: inset(10% 0 70% 0);
+  }
+  30% {
+    clip-path: inset(55% 0 20% 0);
+  }
+  40% {
+    clip-path: inset(30% 0 50% 0);
+  }
+  50% {
+    clip-path: inset(65% 0 15% 0);
+  }
+  60% {
+    clip-path: inset(5% 0 80% 0);
+  }
+  70% {
+    clip-path: inset(40% 0 35% 0);
+  }
+  80% {
+    clip-path: inset(75% 0 5% 0);
+  }
+  90% {
+    clip-path: inset(25% 0 55% 0);
+  }
+  100% {
+    clip-path: inset(50% 0 30% 0);
+  }
+}
+
+@keyframes glitch-clip-2 {
+  0% {
+    clip-path: inset(60% 0 10% 0);
+  }
+  10% {
+    clip-path: inset(15% 0 65% 0);
+  }
+  20% {
+    clip-path: inset(70% 0 5% 0);
+  }
+  30% {
+    clip-path: inset(25% 0 50% 0);
+  }
+  40% {
+    clip-path: inset(80% 0 0% 0);
+  }
+  50% {
+    clip-path: inset(10% 0 75% 0);
+  }
+  60% {
+    clip-path: inset(50% 0 25% 0);
+  }
+  70% {
+    clip-path: inset(0% 0 85% 0);
+  }
+  80% {
+    clip-path: inset(35% 0 40% 0);
+  }
+  90% {
+    clip-path: inset(70% 0 10% 0);
+  }
+  100% {
+    clip-path: inset(20% 0 60% 0);
+  }
+}
+
+/* ============ Cursor Blink ============ */
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.animate-blink {
+  animation: blink 1s step-end infinite;
+}
+
+/* ============ Floating Animation ============ */
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* ============ Grid Background ============ */
+
+.cyber-grid-bg {
+  background-image:
+    linear-gradient(rgba(0, 255, 65, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 65, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
 }
