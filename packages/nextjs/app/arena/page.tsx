@@ -46,7 +46,7 @@ function ArenaContent() {
 
   if (!rawRoomId || roomId === undefined) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-black">
+      <div className="flex items-center justify-center flex-1 bg-black">
         <div className="text-center p-8 border border-red-500/50 bg-red-950/20 rounded-lg max-w-md">
           <div className="text-red-400 text-6xl mb-4 font-mono">!</div>
           <h2 className="text-red-400 text-xl font-mono mb-2">NO ROOM ID</h2>
@@ -66,7 +66,7 @@ function ArenaContent() {
 
   if (roomLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-black">
+      <div className="flex items-center justify-center flex-1 bg-black">
         <div className="text-center">
           <div className="text-cyan-400 font-mono text-lg animate-pulse mb-4">CONNECTING TO ARENA...</div>
           <div className="flex justify-center gap-1">
@@ -85,7 +85,7 @@ function ArenaContent() {
 
   if (!roomInfo) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-black">
+      <div className="flex items-center justify-center flex-1 bg-black">
         <div className="text-center p-8 border border-red-500/50 bg-red-950/20 rounded-lg max-w-md">
           <div className="text-red-400 text-6xl mb-4 font-mono">404</div>
           <h2 className="text-red-400 text-xl font-mono mb-2">ROOM NOT FOUND</h2>
@@ -118,7 +118,7 @@ function ArenaContent() {
   const isPlayerInGame = connectedAddress && allPlayers ? (allPlayers as string[]).includes(connectedAddress) : false;
 
   return (
-    <div className="flex flex-col min-h-screen bg-black text-gray-100">
+    <div className="flex flex-col flex-1 overflow-hidden bg-black text-gray-100">
       {/* HUD Top Bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-900/50 bg-gray-950/80 backdrop-blur-sm">
         <div className="flex items-center gap-6">
@@ -189,7 +189,7 @@ export default function ArenaPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center min-h-screen bg-black">
+        <div className="flex items-center justify-center flex-1 bg-black">
           <div className="text-cyan-400 font-mono text-lg animate-pulse">INITIALIZING ARENA...</div>
         </div>
       }

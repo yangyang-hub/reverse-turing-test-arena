@@ -13,8 +13,8 @@ const HeroSection = () => {
   const totalRooms = roomCount !== undefined ? Number(roomCount) : 0;
 
   return (
-    <section className="relative w-full overflow-hidden py-16 md:py-24">
-      <div className="relative z-10 flex flex-col items-center gap-8 px-4">
+    <section className="relative w-full overflow-hidden py-8 md:py-12">
+      <div className="relative z-10 flex flex-col items-center gap-4 px-4">
         {/* Main title with float effect */}
         <div className="text-center animate-float">
           <h1 className="text-4xl font-black tracking-wider text-primary md:text-6xl lg:text-7xl neon-text-breathe">
@@ -35,7 +35,7 @@ const HeroSection = () => {
         </div>
 
         {/* Stats bar */}
-        <div className="glass-panel mt-4 flex flex-wrap items-center justify-center gap-6 rounded px-6 py-3 md:gap-10 md:px-10 md:py-4">
+        <div className="glass-panel mt-2 flex flex-wrap items-center justify-center gap-6 rounded px-6 py-2 md:gap-10 md:px-10 md:py-3">
           <StatItem label="TOTAL ROOMS" value={totalRooms.toString()} />
           <div className="h-8 w-px bg-primary/30" />
           <StatItem label="PROTOCOL" value="MONAD EVM" />
