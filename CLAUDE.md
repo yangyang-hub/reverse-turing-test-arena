@@ -45,7 +45,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-06 — All 8 phases implemented
+> **Last updated**: 2026-02-07 — All 8 phases implemented, page restructure (landing/lobby split)
 
 ### Current Status: Phase 8 (Complete)
 
@@ -59,7 +59,8 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Zustand gameStore | DONE | gameStore.ts with types and actions |
 | Cyberpunk CSS | DONE | globals.css with glitch text, cyber-grid-bg, tier/phase classes |
 | scaffold.config.ts | DONE | Monad Testnet chain, 1000ms polling |
-| Lobby Page | DONE | page.tsx with HeroSection, RoomCard, CreateRoomModal, filter tabs |
+| Landing Page | DONE | page.tsx — HeroSection, How It Works, live stats, CTA to /lobby |
+| Lobby Page | DONE | lobby/page.tsx — room browser with filter tabs (All/Waiting/Active/Ended/My Games) |
 | Lobby Components | DONE | HeroSection.tsx, RoomCard.tsx, CreateRoomModal.tsx |
 | Arena Page | DONE | arena/page.tsx with 3-column grid, HUD top bar, Suspense |
 | ArenaTerminal | DONE | Terminal chat UI, on-chain messages via NewMessage events |

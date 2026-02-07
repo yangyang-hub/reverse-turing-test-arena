@@ -54,7 +54,7 @@ function ArenaContent() {
             Access denied. No room identifier provided in query parameters.
           </p>
           <Link
-            href="/"
+            href="/lobby"
             className="inline-block mt-6 px-6 py-2 border border-cyan-500/50 text-cyan-400 font-mono text-sm hover:bg-cyan-500/10 transition-colors"
           >
             RETURN TO LOBBY
@@ -93,7 +93,7 @@ function ArenaContent() {
             Room #{rawRoomId} does not exist or has been purged from the chain.
           </p>
           <Link
-            href="/"
+            href="/lobby"
             className="inline-block mt-6 px-6 py-2 border border-cyan-500/50 text-cyan-400 font-mono text-sm hover:bg-cyan-500/10 transition-colors"
           >
             RETURN TO LOBBY
