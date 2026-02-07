@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAccount } from "wagmi";
@@ -29,6 +29,15 @@ function ArenaContent() {
   const searchParams = useSearchParams();
   const rawRoomId = searchParams.get("roomId");
   const { address: connectedAddress } = useAccount();
+
+  // Lock page scroll so only inner panels scroll
+  useEffect(() => {
+    const root = document.querySelector(".min-h-screen");
+    if (root) root.classList.add("arena-lock-scroll");
+    return () => {
+      if (root) root.classList.remove("arena-lock-scroll");
+    };
+  }, []);
 
   const roomId = rawRoomId ? BigInt(rawRoomId) : undefined;
 
@@ -118,9 +127,9 @@ function ArenaContent() {
   const isPlayerInGame = connectedAddress && allPlayers ? (allPlayers as string[]).includes(connectedAddress) : false;
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden bg-black text-gray-100">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-black text-gray-100">
       {/* HUD Top Bar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-900/50 bg-gray-950/80 backdrop-blur-sm">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-900/50 bg-gray-950/80 backdrop-blur-sm shrink-0">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <span className="text-gray-500 font-mono text-xs">ROOM</span>
@@ -165,14 +174,14 @@ function ArenaContent() {
       </div>
 
       {/* Main Arena Grid */}
-      <div className="flex-1 grid grid-cols-12 gap-0 overflow-hidden">
+      <div className="flex-1 grid grid-cols-12 gap-0 min-h-0">
         {/* Left Sidebar - Player Radar */}
         <div className="col-span-3 border-r border-cyan-900/30 overflow-y-auto">
           <PlayerRadar roomId={roomId} />
         </div>
 
         {/* Center - Chat Terminal */}
-        <div className="col-span-6 flex flex-col overflow-hidden">
+        <div className="col-span-6 flex flex-col min-h-0">
           <ArenaTerminal roomId={roomId} />
         </div>
 

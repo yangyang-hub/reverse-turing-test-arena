@@ -565,3 +565,10 @@
     linear-gradient(90deg, rgba(0, 255, 65, 0.05) 1px, transparent 1px);
   background-size: 40px 40px;
 }
+
+/* ============ Arena Full-Viewport Layout ============ */
+/* When active, locks body to viewport height so only inner panels scroll */
+.arena-lock-scroll {
+  height: 100dvh;
+  overflow: hidden;
+}
