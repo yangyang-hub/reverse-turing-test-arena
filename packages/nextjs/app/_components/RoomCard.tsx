@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { formatEther, parseEther } from "viem";
+import { useAccount } from "wagmi";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
 const TIER_CONFIG = [
@@ -40,6 +41,7 @@ type RoomCardProps = {
 
 const RoomCard = ({ roomId }: RoomCardProps) => {
   const router = useRouter();
+  const { address: connectedAddress } = useAccount();
 
   const { data: roomInfo, isLoading } = useScaffoldReadContract({
     contractName: "TuringArena",
@@ -89,6 +91,10 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
   const isWaiting = phaseIndex === 0;
   const isActive = phaseIndex >= 1 && phaseIndex <= 3;
   const isEnded = phaseIndex === 4;
+  const hasJoined =
+    connectedAddress && players
+      ? (players as string[]).some(p => p.toLowerCase() === connectedAddress.toLowerCase())
+      : false;
 
   const handleJoin = async () => {
     try {
@@ -97,12 +103,13 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
         args: [roomId],
         value: entryFee,
       });
+      router.push(`/arena?roomId=${roomId.toString()}`);
     } catch (e) {
       console.error("Failed to join room:", e);
     }
   };
 
-  const handleSpectate = () => {
+  const handleEnter = () => {
     router.push(`/arena?roomId=${roomId.toString()}`);
   };
 
@@ -166,7 +173,12 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
 
       {/* Action button */}
       <div className="mt-1">
-        {isWaiting && (
+        {isWaiting && hasJoined && (
+          <button className="btn btn-sm btn-secondary w-full font-bold tracking-widest" onClick={handleEnter}>
+            ENTER ARENA
+          </button>
+        )}
+        {isWaiting && !hasJoined && (
           <button
             className={`btn btn-sm w-full border font-bold tracking-widest ${tier.textClass}`}
             style={{
@@ -182,9 +194,9 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
         {isActive && (
           <button
             className="btn btn-sm btn-outline btn-secondary w-full font-bold tracking-widest"
-            onClick={handleSpectate}
+            onClick={handleEnter}
           >
-            SPECTATE
+            {hasJoined ? "ENTER ARENA" : "SPECTATE"}
           </button>
         )}
         {isEnded && (
