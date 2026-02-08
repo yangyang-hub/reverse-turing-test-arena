@@ -2,12 +2,12 @@
 
 import { Suspense, useEffect } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAccount } from "wagmi";
 import { ArenaTerminal } from "~~/app/arena/_components/ArenaTerminal";
 import { PlayerRadar } from "~~/app/arena/_components/PlayerRadar";
 import { VotePanel } from "~~/app/arena/_components/VotePanel";
-import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
 const PHASE_LABELS: Record<number, string> = {
   0: "WAITING",
@@ -29,6 +29,11 @@ function ArenaContent() {
   const searchParams = useSearchParams();
   const rawRoomId = searchParams.get("roomId");
   const { address: connectedAddress } = useAccount();
+  const router = useRouter();
+
+  const { writeContractAsync: writeArena } = useScaffoldWriteContract({
+    contractName: "TuringArena",
+  });
 
   // Lock page scroll so only inner panels scroll
   useEffect(() => {
@@ -134,6 +139,16 @@ function ArenaContent() {
       ? (allPlayers as string[]).some(p => p.toLowerCase() === connectedAddress.toLowerCase())
       : false;
 
+  const handleLeave = async () => {
+    if (!roomId) return;
+    try {
+      await writeArena({ functionName: "leaveRoom", args: [roomId] });
+      router.push("/lobby");
+    } catch (e) {
+      console.error("Failed to leave room:", e);
+    }
+  };
+
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-black text-gray-100">
       {/* HUD Top Bar */}
@@ -176,6 +191,17 @@ function ArenaContent() {
                 <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                 <span className="text-green-400 font-mono text-xs">IN GAME</span>
               </div>
+            </>
+          )}
+          {phase === 0 && isPlayerInGame && (
+            <>
+              <div className="h-4 w-px bg-gray-700" />
+              <button
+                onClick={handleLeave}
+                className="px-3 py-1 border border-red-500/50 text-red-400 font-mono text-xs hover:bg-red-900/20 hover:border-red-500 transition-colors rounded"
+              >
+                LEAVE ROOM
+              </button>
             </>
           )}
         </div>

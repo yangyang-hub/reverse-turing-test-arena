@@ -143,6 +143,8 @@ contract TuringArena is ReentrancyGuard {
     event PhaseChanged(uint256 indexed roomId, GamePhase newPhase);
     event GameEnded(uint256 indexed roomId, address winner, uint256 totalPrize);
     event RewardClaimed(uint256 indexed roomId, address indexed player, uint256 amount);
+    event PlayerLeft(uint256 indexed roomId, address indexed player, uint256 refund);
+    event RoomCancelled(uint256 indexed roomId, address indexed creator);
 
     // ============ Constructor ============
 
@@ -209,14 +211,14 @@ contract TuringArena is ReentrancyGuard {
             tier: _tier,
             phase: GamePhase.Waiting,
             entryFee: _entryFee,
-            prizePool: 0,
+            prizePool: _entryFee,
             startBlock: 0,
             halfwayBlock: 0,
             baseInterval: config.baseInterval,
             currentInterval: config.baseInterval,
             maxPlayers: _maxPlayers,
-            playerCount: 0,
-            aliveCount: 0,
+            playerCount: 1,
+            aliveCount: 1,
             eliminatedCount: 0,
             currentDecay: 0,
             lastSettleBlock: 0,
@@ -224,7 +226,24 @@ contract TuringArena is ReentrancyGuard {
             isEnded: false
         });
 
+        // Auto-join creator
+        paymentToken.safeTransferFrom(msg.sender, address(this), _entryFee);
+        players[roomId][msg.sender] = Player({
+            addr: msg.sender,
+            humanityScore: 100,
+            isAlive: true,
+            isVerifiedHuman: false,
+            joinBlock: block.number,
+            eliminationBlock: 0,
+            eliminationRank: 0,
+            lastActionBlock: block.number,
+            actionCount: 0,
+            successfulVotes: 0
+        });
+        roomPlayers[roomId].push(msg.sender);
+
         emit RoomCreated(roomId, msg.sender, _tier, _entryFee, _maxPlayers);
+        emit PlayerJoined(roomId, msg.sender);
     }
 
     function joinRoom(uint256 _roomId) external {
@@ -255,6 +274,75 @@ contract TuringArena is ReentrancyGuard {
 
         roomPlayers[_roomId].push(msg.sender);
         emit PlayerJoined(_roomId, msg.sender);
+    }
+
+    function leaveRoom(uint256 _roomId) external nonReentrant {
+        Room storage room = rooms[_roomId];
+        require(room.id != 0, "Room does not exist");
+        require(room.phase == GamePhase.Waiting, "Game already started");
+        require(players[_roomId][msg.sender].addr != address(0), "Not in room");
+
+        if (msg.sender == room.creator) {
+            _cancelRoom(_roomId);
+        } else {
+            _removePlayer(_roomId, msg.sender);
+        }
+    }
+
+    function _removePlayer(uint256 _roomId, address _player) internal {
+        Room storage room = rooms[_roomId];
+        uint256 refund = room.entryFee;
+
+        delete players[_roomId][_player];
+
+        address[] storage playerList = roomPlayers[_roomId];
+        for (uint256 i = 0; i < playerList.length; i++) {
+            if (playerList[i] == _player) {
+                playerList[i] = playerList[playerList.length - 1];
+                playerList.pop();
+                break;
+            }
+        }
+
+        room.playerCount--;
+        room.aliveCount--;
+        room.prizePool -= refund;
+
+        paymentToken.safeTransfer(_player, refund);
+        emit PlayerLeft(_roomId, _player, refund);
+
+        // Auto-close room when no players remain
+        if (room.playerCount == 0) {
+            room.phase = GamePhase.Ended;
+            room.isEnded = true;
+            emit RoomCancelled(_roomId, room.creator);
+        }
+    }
+
+    function _cancelRoom(uint256 _roomId) internal {
+        Room storage room = rooms[_roomId];
+        address[] storage playerList = roomPlayers[_roomId];
+
+        for (uint256 i = 0; i < playerList.length; i++) {
+            address player = playerList[i];
+            if (players[_roomId][player].addr != address(0)) {
+                uint256 refund = room.entryFee;
+                delete players[_roomId][player];
+                paymentToken.safeTransfer(player, refund);
+                emit PlayerLeft(_roomId, player, refund);
+            }
+        }
+
+        // Clear the player list so getAllPlayers returns empty for cancelled rooms
+        delete roomPlayers[_roomId];
+
+        room.phase = GamePhase.Ended;
+        room.isEnded = true;
+        room.playerCount = 0;
+        room.aliveCount = 0;
+        room.prizePool = 0;
+
+        emit RoomCancelled(_roomId, room.creator);
     }
 
     function startGame(uint256 _roomId) external {

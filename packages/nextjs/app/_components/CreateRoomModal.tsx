@@ -1,7 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useRouter } from "next/navigation";
+import { waitForTransactionReceipt } from "@wagmi/core";
+import { erc20Abi } from "viem";
+import { useConfig, useWriteContract } from "wagmi";
+import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { notification } from "~~/utils/scaffold-eth";
 
 const TIERS = [
   {
@@ -48,14 +53,30 @@ type CreateRoomModalProps = {
 };
 
 const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
+  const router = useRouter();
   const [selectedTier, setSelectedTier] = useState<number>(1);
   const [customMaxPlayers, setCustomMaxPlayers] = useState<string>(String(TIERS[1].defaultMaxPlayers));
   const [customEntryFee, setCustomEntryFee] = useState<string>(String(TIERS[1].defaultFee));
+  const [isCreating, setIsCreating] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  const { writeContractAsync, isMining } = useScaffoldWriteContract({
+  const { writeContractAsync } = useScaffoldWriteContract({
     contractName: "TuringArena",
   });
+
+  const config = useConfig();
+
+  // Read paymentToken address from TuringArena
+  const { data: paymentTokenAddr } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "paymentToken",
+  });
+
+  // Get arena contract address for approve target
+  const { data: arenaContractInfo } = useDeployedContractInfo({ contractName: "TuringArena" });
+
+  // For ERC20 approve call
+  const { writeContractAsync: writeErc20 } = useWriteContract();
 
   // Sync dialog open/close with isOpen prop
   if (dialogRef.current) {
@@ -80,15 +101,40 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
 
   const handleCreate = async () => {
     if (!isFormValid) return;
+    if (!paymentTokenAddr || !arenaContractInfo?.address) {
+      notification.error("Contract data not loaded yet. Please wait and try again.");
+      return;
+    }
+    setIsCreating(true);
     try {
       const feeInUnits = BigInt(Math.round(parsedEntryFee * 1e6));
+
+      // Step 1: Approve USDC spend (createRoom auto-joins, so needs approval)
+      const approveHash = await writeErc20({
+        address: paymentTokenAddr as `0x${string}`,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [arenaContractInfo.address, feeInUnits],
+      });
+      await waitForTransactionReceipt(config, { hash: approveHash });
+
+      // Step 2: Create room (auto-joins creator)
       await writeContractAsync({
         functionName: "createRoom",
         args: [selectedTier, BigInt(parsedMaxPlayers), feeInUnits],
       });
+
       onClose();
-    } catch (e) {
+      // Navigate to lobby — room card will appear via polling
+      router.push("/lobby");
+    } catch (e: any) {
+      const msg = e?.shortMessage || e?.message || "Unknown error";
+      if (!msg.includes("User rejected")) {
+        notification.error(`Failed to create room: ${msg}`);
+      }
       console.error("Failed to create room:", e);
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -225,7 +271,7 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
           <button
             className="btn btn-ghost btn-sm tracking-widest text-base-content/50"
             onClick={onClose}
-            disabled={isMining}
+            disabled={isCreating}
           >
             CANCEL
           </button>
@@ -237,9 +283,9 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
               boxShadow: `0 0 12px ${TIERS[selectedTier].color}30`,
             }}
             onClick={handleCreate}
-            disabled={isMining || !isFormValid}
+            disabled={isCreating || !isFormValid}
           >
-            {isMining ? (
+            {isCreating ? (
               <>
                 <span className="loading loading-spinner loading-xs" />
                 DEPLOYING...

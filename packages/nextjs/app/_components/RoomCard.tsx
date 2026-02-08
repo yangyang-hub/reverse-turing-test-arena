@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { waitForTransactionReceipt } from "@wagmi/core";
 import { erc20Abi, formatUnits } from "viem";
 import { useAccount, useConfig, useWriteContract } from "wagmi";
 import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { notification } from "~~/utils/scaffold-eth";
 
 const TIER_CONFIG = [
   {
@@ -43,6 +45,8 @@ type RoomCardProps = {
 const RoomCard = ({ roomId }: RoomCardProps) => {
   const router = useRouter();
   const { address: connectedAddress } = useAccount();
+  const [isJoining, setIsJoining] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
 
   const { data: roomInfo, isLoading } = useScaffoldReadContract({
     contractName: "TuringArena",
@@ -112,7 +116,11 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
       : false;
 
   const handleJoin = async () => {
-    if (!paymentTokenAddr || !arenaContractInfo?.address) return;
+    if (!paymentTokenAddr || !arenaContractInfo?.address) {
+      notification.error("Contract data not loaded yet. Please wait and try again.");
+      return;
+    }
+    setIsJoining(true);
     try {
       // Step 1: Approve USDC spend
       const approveHash = await writeErc20({
@@ -129,8 +137,14 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
         args: [roomId],
       });
       router.push(`/arena?roomId=${roomId.toString()}`);
-    } catch (e) {
+    } catch (e: any) {
+      const msg = e?.shortMessage || e?.message || "Unknown error";
+      if (!msg.includes("User rejected")) {
+        notification.error(`Failed to join: ${msg}`);
+      }
       console.error("Failed to join room:", e);
+    } finally {
+      setIsJoining(false);
     }
   };
 
@@ -138,7 +152,22 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
     router.push(`/arena?roomId=${roomId.toString()}`);
   };
 
-  const isBusy = isMining || isApproving;
+  const handleLeave = async () => {
+    setIsLeaving(true);
+    try {
+      await writeArena({ functionName: "leaveRoom", args: [roomId] });
+    } catch (e: any) {
+      const msg = e?.shortMessage || e?.message || "Unknown error";
+      if (!msg.includes("User rejected")) {
+        notification.error(`Failed to leave: ${msg}`);
+      }
+      console.error("Failed to leave room:", e);
+    } finally {
+      setIsLeaving(false);
+    }
+  };
+
+  const isBusy = isMining || isApproving || isJoining || isLeaving;
 
   return (
     <div
@@ -201,9 +230,18 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
       {/* Action button */}
       <div className="mt-1">
         {isWaiting && hasJoined && (
-          <button className="btn btn-sm btn-secondary w-full font-bold tracking-widest" onClick={handleEnter}>
-            ENTER ARENA
-          </button>
+          <div className="flex gap-2">
+            <button className="btn btn-sm btn-secondary flex-1 font-bold tracking-widest" onClick={handleEnter}>
+              ENTER
+            </button>
+            <button
+              className="btn btn-sm btn-outline border-red-500/50 text-red-400 hover:bg-red-900/20 hover:border-red-500 font-bold tracking-widest"
+              onClick={handleLeave}
+              disabled={isBusy}
+            >
+              {isBusy ? <span className="loading loading-spinner loading-xs" /> : "LEAVE"}
+            </button>
+          </div>
         )}
         {isWaiting && !hasJoined && (
           <button

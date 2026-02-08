@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   31337: {
     MockUSDC: {
-      address: "0x90bb87c6258ad0d309d2f3a263d3bc7b0b9f522d",
+      address: "0x127a31cc786aec5bc96f395b8d666b8e9c2a516b",
       abi: [
         {
           type: "constructor",
@@ -352,10 +352,10 @@ const deployedContracts = {
         transfer: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
         transferFrom: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
       },
-      deployedOnBlock: 6203,
+      deployedOnBlock: 6236,
     },
     TuringArena: {
-      address: "0x38381d63418ff752dba93ee018e36a6814388fa7",
+      address: "0x0e4b6314d9756d40ee0b3d68cf3999d29eefb147",
       abi: [
         {
           type: "constructor",
@@ -1036,6 +1036,19 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "leaveRoom",
+          inputs: [
+            {
+              name: "_roomId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
           name: "nextRoomId",
           inputs: [],
           outputs: [
@@ -1630,6 +1643,31 @@ const deployedContracts = {
         },
         {
           type: "event",
+          name: "PlayerLeft",
+          inputs: [
+            {
+              name: "roomId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "player",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "refund",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
           name: "RewardClaimed",
           inputs: [
             {
@@ -1649,6 +1687,25 @@ const deployedContracts = {
               type: "uint256",
               indexed: false,
               internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "RoomCancelled",
+          inputs: [
+            {
+              name: "roomId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "creator",
+              type: "address",
+              indexed: true,
+              internalType: "address",
             },
           ],
           anonymous: false,
@@ -1739,7 +1796,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 6204,
+      deployedOnBlock: 6237,
     },
   },
 } as const;
