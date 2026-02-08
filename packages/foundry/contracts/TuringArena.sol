@@ -2,10 +2,13 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title TuringArena - On-chain Reverse Turing Test Battle Royale
 /// @notice Players (humans & AI) chat, vote, and eliminate each other in social deduction rounds
 contract TuringArena is ReentrancyGuard {
+    using SafeERC20 for IERC20;
     // ============ Constants ============
 
     uint256 public constant CHAMPION_SHARE = 3500; // 35%
@@ -19,6 +22,11 @@ contract TuringArena is ReentrancyGuard {
 
     uint256 public constant VOTE_DAMAGE = 5;
     uint256 public constant NO_VOTE_PENALTY = 10;
+
+    uint256 public constant MIN_PLAYERS = 3;
+    uint256 public constant MAX_PLAYERS = 50;
+    uint256 public constant MIN_FEE = 1e6; // 1 USDC
+    uint256 public constant MAX_FEE = 100e6; // 100 USDC
 
     // ============ Enums ============
 
@@ -74,6 +82,7 @@ contract TuringArena is ReentrancyGuard {
         uint256 halfwayBlock;
         uint256 baseInterval;
         uint256 currentInterval;
+        uint256 maxPlayers;
         uint256 playerCount;
         uint256 aliveCount;
         uint256 eliminatedCount;
@@ -119,10 +128,11 @@ contract TuringArena is ReentrancyGuard {
 
     uint256 public nextRoomId = 1;
     address public protocolTreasury;
+    IERC20 public immutable paymentToken;
 
     // ============ Events ============
 
-    event RoomCreated(uint256 indexed roomId, address indexed creator, RoomTier tier, uint256 entryFee);
+    event RoomCreated(uint256 indexed roomId, address indexed creator, RoomTier tier, uint256 entryFee, uint256 maxPlayers);
     event PlayerJoined(uint256 indexed roomId, address indexed player);
     event GameStarted(uint256 indexed roomId, uint256 playerCount);
     event NewMessage(uint256 indexed roomId, address indexed sender, string content, uint256 timestamp);
@@ -136,16 +146,18 @@ contract TuringArena is ReentrancyGuard {
 
     // ============ Constructor ============
 
-    constructor(address _treasury) {
+    constructor(address _treasury, address _paymentToken) {
         require(_treasury != address(0), "Invalid treasury");
+        require(_paymentToken != address(0), "Invalid payment token");
         protocolTreasury = _treasury;
+        paymentToken = IERC20(_paymentToken);
 
         // Quick: 3-10 players (min lowered for testing)
         tierConfigs[RoomTier.Quick] = TierConfig({
             minPlayers: 3,
             maxPlayers: 10,
             baseInterval: 150,
-            entryFee: 0.01 ether,
+            entryFee: 10e6,
             phase1Threshold: 67,
             phase2Threshold: 33,
             phase3ElimsPerRound: 1,
@@ -159,7 +171,7 @@ contract TuringArena is ReentrancyGuard {
             minPlayers: 6,
             maxPlayers: 20,
             baseInterval: 150,
-            entryFee: 0.05 ether,
+            entryFee: 50e6,
             phase1Threshold: 67,
             phase2Threshold: 33,
             phase3ElimsPerRound: 1,
@@ -173,7 +185,7 @@ contract TuringArena is ReentrancyGuard {
             minPlayers: 12,
             maxPlayers: 50,
             baseInterval: 150,
-            entryFee: 0.1 ether,
+            entryFee: 100e6,
             phase1Threshold: 67,
             phase2Threshold: 33,
             phase3ElimsPerRound: 2,
@@ -185,7 +197,9 @@ contract TuringArena is ReentrancyGuard {
 
     // ============ Room Management ============
 
-    function createRoom(RoomTier _tier) external returns (uint256 roomId) {
+    function createRoom(RoomTier _tier, uint256 _maxPlayers, uint256 _entryFee) external returns (uint256 roomId) {
+        require(_maxPlayers >= MIN_PLAYERS && _maxPlayers <= MAX_PLAYERS, "Invalid player count");
+        require(_entryFee >= MIN_FEE && _entryFee <= MAX_FEE, "Invalid entry fee");
         TierConfig storage config = tierConfigs[_tier];
         roomId = nextRoomId++;
 
@@ -194,12 +208,13 @@ contract TuringArena is ReentrancyGuard {
             creator: msg.sender,
             tier: _tier,
             phase: GamePhase.Waiting,
-            entryFee: config.entryFee,
+            entryFee: _entryFee,
             prizePool: 0,
             startBlock: 0,
             halfwayBlock: 0,
             baseInterval: config.baseInterval,
             currentInterval: config.baseInterval,
+            maxPlayers: _maxPlayers,
             playerCount: 0,
             aliveCount: 0,
             eliminatedCount: 0,
@@ -209,23 +224,18 @@ contract TuringArena is ReentrancyGuard {
             isEnded: false
         });
 
-        emit RoomCreated(roomId, msg.sender, _tier, config.entryFee);
+        emit RoomCreated(roomId, msg.sender, _tier, _entryFee, _maxPlayers);
     }
 
-    function joinRoom(uint256 _roomId) external payable {
+    function joinRoom(uint256 _roomId) external {
         Room storage room = rooms[_roomId];
-        TierConfig storage config = tierConfigs[room.tier];
         require(room.id != 0, "Room does not exist");
         require(room.phase == GamePhase.Waiting, "Game already started");
-        require(msg.value >= room.entryFee, "Insufficient entry fee");
         require(players[_roomId][msg.sender].addr == address(0), "Already joined");
-        require(room.playerCount < config.maxPlayers, "Room is full");
+        require(room.playerCount < room.maxPlayers, "Room is full");
 
+        paymentToken.safeTransferFrom(msg.sender, address(this), room.entryFee);
         room.prizePool += room.entryFee;
-        if (msg.value > room.entryFee) {
-            (bool refundSuccess,) = payable(msg.sender).call{ value: msg.value - room.entryFee }("");
-            require(refundSuccess, "Refund failed");
-        }
 
         room.playerCount++;
         room.aliveCount++;
@@ -252,7 +262,7 @@ contract TuringArena is ReentrancyGuard {
         TierConfig storage config = tierConfigs[room.tier];
         require(room.id != 0, "Room does not exist");
         require(room.phase == GamePhase.Waiting, "Already started");
-        require(room.playerCount >= config.minPlayers, "Need more players");
+        require(room.playerCount >= MIN_PLAYERS, "Need more players");
         require(msg.sender == room.creator, "Only creator can start");
 
         room.isActive = true;
@@ -628,8 +638,7 @@ contract TuringArena is ReentrancyGuard {
         info.claimed = true;
         uint256 amount = info.amount;
 
-        (bool success,) = payable(msg.sender).call{ value: amount }("");
-        require(success, "Transfer failed");
+        paymentToken.safeTransfer(msg.sender, amount);
 
         emit RewardClaimed(_roomId, msg.sender, amount);
     }
@@ -661,9 +670,8 @@ contract TuringArena is ReentrancyGuard {
 
     function withdrawUnclaimed(uint256 _amount) external {
         require(msg.sender == protocolTreasury, "Only treasury");
-        require(_amount <= address(this).balance, "Insufficient balance");
-        (bool success,) = payable(protocolTreasury).call{ value: _amount }("");
-        require(success, "Transfer failed");
+        require(_amount <= paymentToken.balanceOf(address(this)), "Insufficient balance");
+        paymentToken.safeTransfer(protocolTreasury, _amount);
     }
 
     // ============ View Functions ============
@@ -698,8 +706,6 @@ contract TuringArena is ReentrancyGuard {
     }
 
     function getContractBalance() external view returns (uint256) {
-        return address(this).balance;
+        return paymentToken.balanceOf(address(this));
     }
-
-    receive() external payable { }
 }

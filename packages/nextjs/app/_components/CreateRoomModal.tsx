@@ -8,36 +8,36 @@ const TIERS = [
     id: 0,
     name: "Quick",
     label: "Bronze",
-    fee: "0.01",
+    defaultFee: 10,
+    defaultMaxPlayers: 10,
     color: "#CD7F32",
     borderClass: "tier-quick-border",
     textClass: "tier-quick",
     description: "Fast rounds, smaller stakes",
-    players: "4-6 players",
     duration: "~10 min",
   },
   {
     id: 1,
     name: "Standard",
     label: "Silver",
-    fee: "0.05",
+    defaultFee: 50,
+    defaultMaxPlayers: 20,
     color: "#C0C0C0",
     borderClass: "tier-standard-border",
     textClass: "tier-standard",
     description: "Balanced gameplay experience",
-    players: "6-8 players",
     duration: "~20 min",
   },
   {
     id: 2,
     name: "Epic",
     label: "Gold",
-    fee: "0.1",
+    defaultFee: 100,
+    defaultMaxPlayers: 50,
     color: "#FFD700",
     borderClass: "tier-epic-border",
     textClass: "tier-epic",
     description: "High stakes, extended battle",
-    players: "8-10 players",
     duration: "~30 min",
   },
 ] as const;
@@ -49,6 +49,8 @@ type CreateRoomModalProps = {
 
 const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
   const [selectedTier, setSelectedTier] = useState<number>(1);
+  const [customMaxPlayers, setCustomMaxPlayers] = useState<string>(String(TIERS[1].defaultMaxPlayers));
+  const [customEntryFee, setCustomEntryFee] = useState<string>(String(TIERS[1].defaultFee));
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   const { writeContractAsync, isMining } = useScaffoldWriteContract({
@@ -64,11 +66,25 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
     }
   }
 
+  const parsedMaxPlayers = parseInt(customMaxPlayers) || 0;
+  const parsedEntryFee = parseFloat(customEntryFee) || 0;
+  const isValidPlayers = parsedMaxPlayers >= 3 && parsedMaxPlayers <= 50;
+  const isValidFee = parsedEntryFee >= 1 && parsedEntryFee <= 100;
+  const isFormValid = isValidPlayers && isValidFee;
+
+  const handleTierSelect = (tierId: number) => {
+    setSelectedTier(tierId);
+    setCustomMaxPlayers(String(TIERS[tierId].defaultMaxPlayers));
+    setCustomEntryFee(String(TIERS[tierId].defaultFee));
+  };
+
   const handleCreate = async () => {
+    if (!isFormValid) return;
     try {
+      const feeInUnits = BigInt(Math.round(parsedEntryFee * 1e6));
       await writeContractAsync({
         functionName: "createRoom",
-        args: [selectedTier],
+        args: [selectedTier, BigInt(parsedMaxPlayers), feeInUnits],
       });
       onClose();
     } catch (e) {
@@ -109,7 +125,7 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                 style={{
                   backgroundColor: isSelected ? `${tier.color}10` : "transparent",
                 }}
-                onClick={() => setSelectedTier(tier.id)}
+                onClick={() => handleTierSelect(tier.id)}
               >
                 {/* Tier icon circle */}
                 <div
@@ -135,12 +151,12 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                 {/* Label */}
                 <span className="text-xs tracking-wider text-base-content/40">{tier.label}</span>
 
-                {/* Fee */}
-                <span className={`font-mono text-lg font-bold ${tier.textClass}`}>{tier.fee} ETH</span>
+                {/* Default fee */}
+                <span className={`font-mono text-lg font-bold ${tier.textClass}`}>{tier.defaultFee} USDC</span>
 
                 {/* Details */}
                 <div className="flex flex-col items-center gap-1 text-xs text-base-content/50">
-                  <span>{tier.players}</span>
+                  <span>up to {tier.defaultMaxPlayers} players</span>
                   <span>{tier.duration}</span>
                 </div>
 
@@ -151,6 +167,39 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
           })}
         </div>
 
+        {/* Custom inputs */}
+        <div className="mt-6 grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold tracking-widest text-base-content/50">MAX PLAYERS</label>
+            <input
+              type="number"
+              min={3}
+              max={50}
+              value={customMaxPlayers}
+              onChange={e => setCustomMaxPlayers(e.target.value)}
+              className={`input input-bordered input-sm w-full bg-base-300/50 font-mono ${
+                !isValidPlayers ? "input-error" : "border-primary/30"
+              }`}
+            />
+            {!isValidPlayers && <span className="text-xs text-error">Must be 3-50</span>}
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold tracking-widest text-base-content/50">ENTRY FEE (USDC)</label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              step="0.01"
+              value={customEntryFee}
+              onChange={e => setCustomEntryFee(e.target.value)}
+              className={`input input-bordered input-sm w-full bg-base-300/50 font-mono ${
+                !isValidFee ? "input-error" : "border-primary/30"
+              }`}
+            />
+            {!isValidFee && <span className="text-xs text-error">Must be 1-100 USDC</span>}
+          </div>
+        </div>
+
         {/* Summary bar */}
         <div className="mt-6 flex items-center justify-between rounded border border-primary/20 bg-base-300/50 px-4 py-3">
           <div className="flex flex-col">
@@ -159,10 +208,14 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
               {TIERS[selectedTier].name.toUpperCase()} ({TIERS[selectedTier].label})
             </span>
           </div>
+          <div className="flex flex-col items-center">
+            <span className="text-xs text-base-content/40">MAX PLAYERS</span>
+            <span className={`font-mono text-sm font-bold ${TIERS[selectedTier].textClass}`}>{customMaxPlayers}</span>
+          </div>
           <div className="flex flex-col items-end">
             <span className="text-xs text-base-content/40">ENTRY FEE</span>
             <span className={`font-mono text-sm font-bold ${TIERS[selectedTier].textClass}`}>
-              {TIERS[selectedTier].fee} ETH
+              {customEntryFee} USDC
             </span>
           </div>
         </div>
@@ -184,7 +237,7 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
               boxShadow: `0 0 12px ${TIERS[selectedTier].color}30`,
             }}
             onClick={handleCreate}
-            disabled={isMining}
+            disabled={isMining || !isFormValid}
           >
             {isMining ? (
               <>

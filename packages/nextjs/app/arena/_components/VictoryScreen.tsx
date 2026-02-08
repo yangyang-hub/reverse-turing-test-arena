@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { Address } from "@scaffold-ui/components";
 import { motion } from "framer-motion";
-import { formatEther } from "viem";
+import { formatUnits } from "viem";
 import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { useGameStore } from "~~/services/store/gameStore";
 
@@ -106,7 +106,7 @@ export const VictoryScreen = ({
           transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
         >
           <span role="img" aria-label="crown">
-            {"\\u{1F451}"}
+            {"\u{1F451}"}
           </span>
         </motion.div>
 
@@ -125,7 +125,7 @@ export const VictoryScreen = ({
         <div className="grid grid-cols-2 gap-4 mb-8 max-w-sm mx-auto">
           <div className="bg-gray-900/50 border border-gray-800 rounded p-3">
             <div className="text-gray-500 font-mono text-xs">REWARD</div>
-            <div className="text-green-400 font-mono text-lg">{formatEther(rewardAmount)} MON</div>
+            <div className="text-green-400 font-mono text-lg">{formatUnits(rewardAmount, 6)} USDC</div>
           </div>
           <div className="bg-gray-900/50 border border-gray-800 rounded p-3">
             <div className="text-gray-500 font-mono text-xs">HUMANITY</div>

@@ -1,9 +1,9 @@
 #!/bin/bash
-# SimulateGame.sh — Simulates a complete 4-player Quick-tier game on Anvil
+# SimulateGame.sh — Simulates a complete 4-player Quick-tier game on Anvil (USDC version)
 #
 # Usage:
 #   1. yarn chain          (start Anvil)
-#   2. yarn deploy          (deploy TuringArena)
+#   2. yarn deploy          (deploy MockUSDC + TuringArena)
 #   3. cd packages/foundry && bash script/SimulateGame.sh
 #   4. yarn start           (start frontend and observe the game)
 #
@@ -22,15 +22,27 @@ PLAYER2="0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
 PLAYER3="0x90F79bf6EB2c4f870365E785982E1f101E93b906"
 PLAYER4="0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65"
 
-FEE="0.01ether"
+FEE="10000000" # 10 USDC (6 decimals)
 
-# --- Find deployed TuringArena address from broadcast ---
+# --- Find deployed contract addresses from broadcast ---
 BROADCAST_FILE="broadcast/Deploy.s.sol/31337/run-latest.json"
 if [ ! -f "$BROADCAST_FILE" ]; then
     echo "ERROR: Broadcast file not found. Run 'yarn deploy' first."
     exit 1
 fi
 
+# Find MockUSDC address
+USDC=$(python3 -c "
+import json
+with open('$BROADCAST_FILE') as f:
+    data = json.load(f)
+for tx in data['transactions']:
+    if tx.get('contractName') == 'MockUSDC':
+        print(tx['contractAddress'])
+        break
+")
+
+# Find TuringArena address
 ARENA=$(python3 -c "
 import json
 with open('$BROADCAST_FILE') as f:
@@ -41,27 +53,20 @@ for tx in data['transactions']:
         break
 ")
 
+if [ -z "$USDC" ]; then
+    echo "ERROR: MockUSDC address not found in broadcast."
+    exit 1
+fi
+
 if [ -z "$ARENA" ]; then
     echo "ERROR: TuringArena address not found in broadcast."
     exit 1
 fi
 
-echo "=== RTTA Game Simulation ==="
+echo "=== RTTA Game Simulation (USDC) ==="
+echo "MockUSDC: $USDC"
 echo "TuringArena: $ARENA"
 echo ""
-
-# Helper: send a transaction
-send_tx() {
-    local pk=$1
-    local sig=$2
-    local value=${3:-"0"}
-    cast send --rpc-url "$RPC_URL" --private-key "$pk" "$ARENA" "$sig" --value "$value" > /dev/null 2>&1
-}
-
-# Helper: call a read function
-call_fn() {
-    cast call --rpc-url "$RPC_URL" "$ARENA" "$1"
-}
 
 # Helper: mine blocks
 mine_blocks() {
@@ -74,7 +79,6 @@ mine_blocks() {
 get_hp() {
     local room_id=$1
     local player=$2
-    # getPlayerInfo returns a tuple, humanityScore is the 2nd field (int256)
     local result=$(cast call --rpc-url "$RPC_URL" "$ARENA" "getPlayerInfo(uint256,address)(address,int256,bool,bool,uint256,uint256,uint256,uint256,uint256,uint256)" "$room_id" "$player" 2>/dev/null)
     echo "$result" | sed -n '2p'
 }
@@ -82,25 +86,22 @@ get_hp() {
 # Helper: get room info fields
 get_phase() {
     local room_id=$1
-    local result=$(cast call --rpc-url "$RPC_URL" "$ARENA" "getRoomInfo(uint256)" "$room_id" 2>/dev/null)
-    # phase is the 4th field in the Room struct (0-indexed: id, creator, tier, phase, ...)
-    # Using a simpler approach: read the phase directly
-    cast call --rpc-url "$RPC_URL" "$ARENA" "getRoomInfo(uint256)(uint256,address,uint8,uint8,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,int256,uint256,bool,bool)" "$room_id" 2>/dev/null | sed -n '4p'
+    cast call --rpc-url "$RPC_URL" "$ARENA" "getRoomInfo(uint256)(uint256,address,uint8,uint8,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,int256,uint256,bool,bool)" "$room_id" 2>/dev/null | sed -n '4p'
 }
 
 get_alive_count() {
     local room_id=$1
-    cast call --rpc-url "$RPC_URL" "$ARENA" "getRoomInfo(uint256)(uint256,address,uint8,uint8,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,int256,uint256,bool,bool)" "$room_id" 2>/dev/null | sed -n '12p'
+    cast call --rpc-url "$RPC_URL" "$ARENA" "getRoomInfo(uint256)(uint256,address,uint8,uint8,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,int256,uint256,bool,bool)" "$room_id" 2>/dev/null | sed -n '13p'
 }
 
 get_current_interval() {
     local room_id=$1
-    cast call --rpc-url "$RPC_URL" "$ARENA" "getRoomInfo(uint256)(uint256,address,uint8,uint8,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,int256,uint256,bool,bool)" "$room_id" 2>/dev/null | sed -n '10p'
+    cast call --rpc-url "$RPC_URL" "$ARENA" "getRoomInfo(uint256)(uint256,address,uint8,uint8,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,int256,uint256,bool,bool)" "$room_id" 2>/dev/null | sed -n '10p'
 }
 
 is_ended() {
     local room_id=$1
-    cast call --rpc-url "$RPC_URL" "$ARENA" "getRoomInfo(uint256)(uint256,address,uint8,uint8,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,int256,uint256,bool,bool)" "$room_id" 2>/dev/null | sed -n '17p'
+    cast call --rpc-url "$RPC_URL" "$ARENA" "getRoomInfo(uint256)(uint256,address,uint8,uint8,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,int256,uint256,bool,bool)" "$room_id" 2>/dev/null | sed -n '18p'
 }
 
 is_alive() {
@@ -110,9 +111,20 @@ is_alive() {
     echo "$result" | sed -n '3p'
 }
 
+# Helper: approve USDC and join room
+approve_and_join() {
+    local pk=$1
+    local player=$2
+    # Approve USDC
+    cast send --rpc-url "$RPC_URL" --private-key "$pk" "$USDC" "approve(address,uint256)" "$ARENA" "$FEE" > /dev/null 2>&1
+    # Join room
+    cast send --rpc-url "$RPC_URL" --private-key "$pk" "$ARENA" "joinRoom(uint256)" "$ROOM_ID" > /dev/null 2>&1
+    echo "  $player joined (approved + joined)"
+}
+
 # ========== Step 1: Create Room ==========
 echo "[Step 1] Creating Quick-tier room..."
-ROOM_ID=$(cast send --rpc-url "$RPC_URL" --private-key "$PK1" "$ARENA" "createRoom(uint8)" 0 --json 2>/dev/null | python3 -c "
+ROOM_ID=$(cast send --rpc-url "$RPC_URL" --private-key "$PK1" "$ARENA" "createRoom(uint8,uint256,uint256)" 0 10 10000000 --json 2>/dev/null | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 # Parse RoomCreated event (first log topic[1] = roomId)
@@ -127,22 +139,15 @@ else:
 ")
 
 echo "  Room ID: $ROOM_ID"
-echo "  Entry fee: 0.01 ETH"
+echo "  Entry fee: 10 USDC"
 echo ""
 
-# ========== Step 2: Join Players ==========
-echo "[Step 2] Players joining room..."
-cast send --rpc-url "$RPC_URL" --private-key "$PK1" "$ARENA" "joinRoom(uint256)" "$ROOM_ID" --value "$FEE" > /dev/null 2>&1
-echo "  Player 1 joined: $PLAYER1"
-
-cast send --rpc-url "$RPC_URL" --private-key "$PK2" "$ARENA" "joinRoom(uint256)" "$ROOM_ID" --value "$FEE" > /dev/null 2>&1
-echo "  Player 2 joined: $PLAYER2"
-
-cast send --rpc-url "$RPC_URL" --private-key "$PK3" "$ARENA" "joinRoom(uint256)" "$ROOM_ID" --value "$FEE" > /dev/null 2>&1
-echo "  Player 3 joined: $PLAYER3"
-
-cast send --rpc-url "$RPC_URL" --private-key "$PK4" "$ARENA" "joinRoom(uint256)" "$ROOM_ID" --value "$FEE" > /dev/null 2>&1
-echo "  Player 4 joined: $PLAYER4"
+# ========== Step 2: Join Players (approve + join) ==========
+echo "[Step 2] Players joining room (approve + join)..."
+approve_and_join "$PK1" "$PLAYER1"
+approve_and_join "$PK2" "$PLAYER2"
+approve_and_join "$PK3" "$PLAYER3"
+approve_and_join "$PK4" "$PLAYER4"
 echo ""
 
 # ========== Step 3: Start Game ==========
@@ -278,11 +283,11 @@ echo ""
 echo "Rewards:"
 for i in 0 1 2 3; do
     REWARD=$(cast call --rpc-url "$RPC_URL" "$ARENA" "getRewardInfo(uint256,address)(uint256,bool)" "$ROOM_ID" "${PLAYERS[$i]}" 2>/dev/null | head -1)
-    echo "  Player $((i+1)) (${PLAYERS[$i]}): $REWARD"
+    echo "  Player $((i+1)) (${PLAYERS[$i]}): $REWARD USDC units"
 done
 
 echo ""
-echo "Contract balance: $(cast balance --rpc-url "$RPC_URL" "$ARENA")"
+echo "Arena USDC balance: $(cast call --rpc-url "$RPC_URL" "$USDC" "balanceOf(address)(uint256)" "$ARENA" 2>/dev/null)"
 echo ""
 echo "=== SIMULATION COMPLETE ==="
 echo "Open http://localhost:3000/lobby to see the room."

@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { formatEther, parseEther } from "viem";
-import { useAccount } from "wagmi";
-import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { waitForTransactionReceipt } from "@wagmi/core";
+import { erc20Abi, formatUnits } from "viem";
+import { useAccount, useConfig, useWriteContract } from "wagmi";
+import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
 const TIER_CONFIG = [
   {
@@ -12,7 +13,7 @@ const TIER_CONFIG = [
     color: "#CD7F32",
     borderClass: "tier-quick-border",
     textClass: "tier-quick",
-    fee: parseEther("0.01"),
+    fee: 10_000_000n, // 10 USDC
   },
   {
     name: "STANDARD",
@@ -20,7 +21,7 @@ const TIER_CONFIG = [
     color: "#C0C0C0",
     borderClass: "tier-standard-border",
     textClass: "tier-standard",
-    fee: parseEther("0.05"),
+    fee: 50_000_000n, // 50 USDC
   },
   {
     name: "EPIC",
@@ -28,7 +29,7 @@ const TIER_CONFIG = [
     color: "#FFD700",
     borderClass: "tier-epic-border",
     textClass: "tier-epic",
-    fee: parseEther("0.1"),
+    fee: 100_000_000n, // 100 USDC
   },
 ] as const;
 
@@ -55,9 +56,23 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
     args: [roomId],
   });
 
-  const { writeContractAsync, isMining } = useScaffoldWriteContract({
+  // Read paymentToken address from TuringArena
+  const { data: paymentTokenAddr } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "paymentToken",
+  });
+
+  // Get arena contract address for approve target
+  const { data: arenaContractInfo } = useDeployedContractInfo({ contractName: "TuringArena" });
+
+  const { writeContractAsync: writeArena, isMining } = useScaffoldWriteContract({
     contractName: "TuringArena",
   });
+
+  const config = useConfig();
+
+  // For ERC20 approve call
+  const { writeContractAsync: writeErc20, isPending: isApproving } = useWriteContract();
 
   if (isLoading || !roomInfo) {
     return (
@@ -76,7 +91,7 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
     prizePool: bigint;
     maxPlayers: number;
     playerCount: number;
-    host: string;
+    creator: string;
   };
 
   const tierIndex = Number(room.tier);
@@ -97,11 +112,21 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
       : false;
 
   const handleJoin = async () => {
+    if (!paymentTokenAddr || !arenaContractInfo?.address) return;
     try {
-      await writeContractAsync({
+      // Step 1: Approve USDC spend
+      const approveHash = await writeErc20({
+        address: paymentTokenAddr as `0x${string}`,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [arenaContractInfo.address, entryFee],
+      });
+      // Wait for approve tx to be mined before joining
+      await waitForTransactionReceipt(config, { hash: approveHash });
+      // Step 2: Join room (no value needed for ERC20)
+      await writeArena({
         functionName: "joinRoom",
         args: [roomId],
-        value: entryFee,
       });
       router.push(`/arena?roomId=${roomId.toString()}`);
     } catch (e) {
@@ -112,6 +137,8 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
   const handleEnter = () => {
     router.push(`/arena?roomId=${roomId.toString()}`);
   };
+
+  const isBusy = isMining || isApproving;
 
   return (
     <div
@@ -151,11 +178,11 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
         </div>
         <div className="flex flex-col">
           <span className="text-xs text-base-content/40">ENTRY FEE</span>
-          <span className="font-mono text-sm text-secondary">{formatEther(entryFee)} ETH</span>
+          <span className="font-mono text-sm text-secondary">{formatUnits(entryFee, 6)} USDC</span>
         </div>
         <div className="col-span-2 flex flex-col">
           <span className="text-xs text-base-content/40">PRIZE POOL</span>
-          <span className={`font-mono text-lg font-bold ${tier.textClass}`}>{formatEther(prizePool)} ETH</span>
+          <span className={`font-mono text-lg font-bold ${tier.textClass}`}>{formatUnits(prizePool, 6)} USDC</span>
         </div>
       </div>
 
@@ -186,9 +213,9 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
               backgroundColor: `${tier.color}10`,
             }}
             onClick={handleJoin}
-            disabled={isMining}
+            disabled={isBusy}
           >
-            {isMining ? <span className="loading loading-spinner loading-xs" /> : "JOIN"}
+            {isBusy ? <span className="loading loading-spinner loading-xs" /> : "JOIN"}
           </button>
         )}
         {isActive && (

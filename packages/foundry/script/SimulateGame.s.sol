@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import { Script, console } from "forge-std/Script.sol";
 import "../contracts/TuringArena.sol";
+import "../contracts/mocks/MockUSDC.sol";
 
 /**
  * @title SimulateGame
@@ -10,7 +11,7 @@ import "../contracts/TuringArena.sol";
  *
  * Usage:
  *   1. yarn chain          (start Anvil)
- *   2. yarn deploy          (deploy TuringArena)
+ *   2. yarn deploy          (deploy TuringArena + MockUSDC)
  *   3. yarn start           (start frontend)
  *   4. cd packages/foundry && forge script script/SimulateGame.s.sol \
  *        --rpc-url http://127.0.0.1:8545 --broadcast -vvv
@@ -35,6 +36,7 @@ contract SimulateGame is Script {
     address constant PLAYER4 = 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65;
 
     TuringArena arena;
+    MockUSDC usdc;
     uint256 roomId;
 
     function run() external {
@@ -47,9 +49,15 @@ contract SimulateGame is Script {
         require(arenaAddr != address(0), "TuringArena not found in broadcast");
 
         arena = TuringArena(payable(arenaAddr));
+
+        // Read payment token address from the arena contract
+        address usdcAddr = address(arena.paymentToken());
+        usdc = MockUSDC(usdcAddr);
+
         console.log("=== RTTA Game Simulation ===");
         console.log("TuringArena:", arenaAddr);
-        console.log("Balance:", arenaAddr.balance);
+        console.log("MockUSDC:", usdcAddr);
+        console.log("Arena USDC balance:", usdc.balanceOf(arenaAddr));
         console.log("");
 
         _step1_createRoom();
@@ -66,44 +74,48 @@ contract SimulateGame is Script {
         console.log("[Step 1] Creating Quick-tier room...");
 
         vm.startBroadcast(PK1);
-        roomId = arena.createRoom(TuringArena.RoomTier.Quick);
+        roomId = arena.createRoom(TuringArena.RoomTier.Quick, 10, 10e6);
         vm.stopBroadcast();
 
         console.log("  Room ID:", roomId);
-        console.log("  Entry fee: 0.01 ETH");
+        console.log("  Entry fee: 10 USDC");
         console.log("");
     }
 
     // ========== Step 2: Join Players ==========
 
     function _step2_joinPlayers() internal {
-        console.log("[Step 2] Players joining room...");
+        console.log("[Step 2] Players joining room (approve + join)...");
 
-        uint256 fee = 0.01 ether;
+        uint256 fee = 10e6; // 10 USDC
 
         vm.startBroadcast(PK1);
-        arena.joinRoom{ value: fee }(roomId);
+        usdc.approve(address(arena), fee);
+        arena.joinRoom(roomId);
         vm.stopBroadcast();
         console.log("  Player 1 joined:", PLAYER1);
 
         vm.startBroadcast(PK2);
-        arena.joinRoom{ value: fee }(roomId);
+        usdc.approve(address(arena), fee);
+        arena.joinRoom(roomId);
         vm.stopBroadcast();
         console.log("  Player 2 joined:", PLAYER2);
 
         vm.startBroadcast(PK3);
-        arena.joinRoom{ value: fee }(roomId);
+        usdc.approve(address(arena), fee);
+        arena.joinRoom(roomId);
         vm.stopBroadcast();
         console.log("  Player 3 joined:", PLAYER3);
 
         vm.startBroadcast(PK4);
-        arena.joinRoom{ value: fee }(roomId);
+        usdc.approve(address(arena), fee);
+        arena.joinRoom(roomId);
         vm.stopBroadcast();
         console.log("  Player 4 joined:", PLAYER4);
 
         TuringArena.Room memory room = arena.getRoomInfo(roomId);
         console.log("  Player count:", room.playerCount);
-        console.log("  Prize pool:", room.prizePool);
+        console.log("  Prize pool:", room.prizePool, "USDC units");
         console.log("");
     }
 
@@ -129,33 +141,13 @@ contract SimulateGame is Script {
         console.log("[Step 4] Playing rounds...");
         console.log("");
 
-        // Strategy:
-        // - Round 1-7: All vote for Player 4 (target). Player 4 votes for Player 3.
-        //   Player 4 gets 15 damage/round (3 votes * 5). At round 7: 100 - 105 = eliminated!
-        //   Actually: 3 others vote P4 = 15 dmg/round. P4 gets 0 no-vote penalty (they vote).
-        //   P3 gets 5 dmg from P4 each round.
-        //   After ~7 rounds P4 is at 100 - 7*15 = -5, eliminated.
-        //
-        // - After P4 eliminated (3 alive out of 4 = 75% > 67%), still Phase 1
-        // - Round 8+: P1 & P2 vote P3, P3 votes P1.
-        //   P3 gets 10/round, P1 gets 5/round from P3.
-        //   After ~5 more rounds: P3 at (100 - 7*5(from P4 earlier)) = 65 - 10*5 = 15... need more rounds
-        //   Actually P3 HP after 7 rounds: 100 - 7*5 = 65 (P4 voted P3 each round)
-        //   Then round 8+: P3 gets 2*5=10/round from P1&P2. 65/10 = ~7 more rounds.
-        //
-        // Let's simplify: target one player at a time until game ends.
-
         // Phase 1: Target Player 4 until eliminated
         _playRoundsTargeting(PLAYER4, "Phase1-TargetP4");
 
-        // After P4 eliminated: 3 alive / 4 total = 75% > 67% threshold, still Phase 1
-        // (Phase 2 transition at <=67% alive = <=2.68 players, so 2 alive)
         // Target Player 3 now
         _playRoundsTargeting(PLAYER3, "Phase1-TargetP3");
 
-        // After P3 eliminated: 2 alive / 4 total = 50% <= 67%, transitions to Phase 2
-        // Phase 2: decay -1/round, interval halved to 75 blocks
-        // Target Player 2
+        // Phase 2: Target Player 2
         _playRoundsTargeting(PLAYER2, "Phase2-TargetP2");
 
         // Game should end when only Player 1 remains
@@ -269,7 +261,7 @@ contract SimulateGame is Script {
         console.log("Phase:", uint256(room.phase));
         console.log("Is Ended:", room.isEnded);
         console.log("Champion:", stats.champion);
-        console.log("Prize Pool:", room.prizePool);
+        console.log("Prize Pool:", room.prizePool, "USDC units");
         console.log("");
 
         console.log("Top 5:");
@@ -292,13 +284,13 @@ contract SimulateGame is Script {
         for (uint256 i = 0; i < 4; i++) {
             (uint256 amount, bool claimed) = arena.getRewardInfo(roomId, addrs[i]);
             if (amount > 0) {
-                console.log("  Player %s: %s wei (claimed: %s)", i + 1, amount, claimed);
+                console.log("  Player %s: %s USDC units (claimed: %s)", i + 1, amount, claimed);
             }
         }
 
-        // Claim rewards for champion
+        // USDC balance
         console.log("");
-        console.log("Contract balance:", address(arena).balance);
+        console.log("Arena USDC balance:", usdc.balanceOf(address(arena)));
     }
 
     // ========== Helpers ==========

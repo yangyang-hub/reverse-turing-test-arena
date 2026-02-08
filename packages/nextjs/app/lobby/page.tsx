@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { NextPage } from "next";
+import { formatUnits } from "viem";
 import { useAccount } from "wagmi";
 import CreateRoomModal from "~~/app/_components/CreateRoomModal";
 import RoomCard from "~~/app/_components/RoomCard";
-import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
 type FilterTab = "all" | "waiting" | "active" | "ended" | "mine";
 
@@ -32,7 +33,7 @@ const LobbyPage: NextPage = () => {
 
   const roomIds = useMemo(() => {
     const ids: bigint[] = [];
-    for (let i = 0; i < totalRooms; i++) {
+    for (let i = 1; i <= totalRooms; i++) {
       ids.push(BigInt(i));
     }
     return ids;
@@ -74,15 +75,18 @@ const LobbyPage: NextPage = () => {
             ))}
           </div>
 
-          {/* Room count display */}
-          <div className="hidden text-xs tracking-widest text-base-content/40 md:block">
-            {isLoadingCount ? (
-              <span className="loading loading-dots loading-xs" />
-            ) : (
-              <span>
-                {totalRooms} ROOM{totalRooms !== 1 ? "S" : ""} FOUND
-              </span>
-            )}
+          {/* Room count + USDC faucet */}
+          <div className="flex items-center gap-4">
+            <UsdcFaucet />
+            <div className="hidden text-xs tracking-widest text-base-content/40 md:block">
+              {isLoadingCount ? (
+                <span className="loading loading-dots loading-xs" />
+              ) : (
+                <span>
+                  {totalRooms} ROOM{totalRooms !== 1 ? "S" : ""} FOUND
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -224,5 +228,50 @@ const EmptyState = ({ onCreateClick }: { onCreateClick: () => void }) => (
     </button>
   </div>
 );
+
+const UsdcFaucet = () => {
+  const { address } = useAccount();
+
+  const { data: balance } = useScaffoldReadContract({
+    contractName: "MockUSDC",
+    functionName: "balanceOf",
+    args: [address ?? "0x0000000000000000000000000000000000000000"],
+  });
+
+  const { writeContractAsync, isMining } = useScaffoldWriteContract({
+    contractName: "MockUSDC",
+  });
+
+  const handleMint = async () => {
+    if (!address) return;
+    try {
+      await writeContractAsync({
+        functionName: "mint",
+        args: [address, BigInt(10_000e6)],
+      });
+    } catch (e) {
+      console.error("Mint failed:", e);
+    }
+  };
+
+  if (!address) return null;
+
+  const displayBalance = balance !== undefined ? formatUnits(balance, 6) : "0";
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="font-mono text-xs text-base-content/50">
+        {displayBalance} <span className="text-secondary/60">USDC</span>
+      </span>
+      <button
+        className="btn btn-outline btn-xs border-secondary/40 font-mono text-xs tracking-wider text-secondary hover:bg-secondary/10"
+        onClick={handleMint}
+        disabled={isMining}
+      >
+        {isMining ? <span className="loading loading-spinner loading-xs" /> : "MINT 10K"}
+      </button>
+    </div>
+  );
+};
 
 export default LobbyPage;

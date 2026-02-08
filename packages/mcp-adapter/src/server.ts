@@ -21,7 +21,7 @@ const SESSION_CONTRACT = process.env.SESSION_CONTRACT_ADDRESS || "";
 
 // TuringArena ABI (subset for MCP tools)
 const ARENA_ABI = [
-  "function getRoomInfo(uint256 roomId) view returns (uint256 id, address creator, uint8 tier, uint8 phase, uint256 entryFee, uint256 prizePool, uint256 startBlock, uint256 halfwayBlock, uint256 baseInterval, uint256 currentInterval, uint256 playerCount, uint256 aliveCount, uint256 eliminatedCount, int256 currentDecay, uint256 lastSettleBlock, bool isActive, bool isEnded)",
+  "function getRoomInfo(uint256 roomId) view returns (uint256 id, address creator, uint8 tier, uint8 phase, uint256 entryFee, uint256 prizePool, uint256 startBlock, uint256 halfwayBlock, uint256 baseInterval, uint256 currentInterval, uint256 maxPlayers, uint256 playerCount, uint256 aliveCount, uint256 eliminatedCount, int256 currentDecay, uint256 lastSettleBlock, bool isActive, bool isEnded)",
   "function getPlayerInfo(uint256 roomId, address player) view returns (address addr, int256 humanityScore, bool isAlive, bool isVerifiedHuman, uint256 joinBlock, uint256 eliminationBlock, uint256 eliminationRank, uint256 lastActionBlock, uint256 actionCount, uint256 successfulVotes)",
   "function getAllPlayers(uint256 roomId) view returns (address[])",
   "function sendMessage(uint256 roomId, string content)",
@@ -88,10 +88,11 @@ server.tool(
                   id: roomInfo[0].toString(),
                   phase: Number(roomInfo[3]),
                   prizePool: ethers.formatEther(roomInfo[5]),
-                  playerCount: Number(roomInfo[10]),
-                  aliveCount: Number(roomInfo[11]),
-                  isActive: roomInfo[15],
-                  isEnded: roomInfo[16],
+                  maxPlayers: Number(roomInfo[10]),
+                  playerCount: Number(roomInfo[11]),
+                  aliveCount: Number(roomInfo[12]),
+                  isActive: roomInfo[16],
+                  isEnded: roomInfo[17],
                 },
                 players: formattedPlayers,
                 recentChat: chatHistory.slice(-20),

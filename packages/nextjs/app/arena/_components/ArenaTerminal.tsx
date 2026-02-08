@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAccount } from "wagmi";
-import { useScaffoldEventHistory, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useScaffoldEventHistory, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
 type TerminalMessage = {
   id: string;
@@ -58,10 +58,33 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const { address: connectedAddress } = useAccount();
 
+  const { data: roomInfo } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getRoomInfo",
+    args: [roomId],
+  });
+
+  const zeroAddr = "0x0000000000000000000000000000000000000000" as const;
+  const { data: myPlayerInfo } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getPlayerInfo",
+    args: [roomId, connectedAddress ?? zeroAddr],
+  });
+
+  const isGameActive =
+    roomInfo && typeof roomInfo === "object" && "isActive" in roomInfo ? Boolean((roomInfo as any).isActive) : false;
+  const isMyPlayerAlive =
+    myPlayerInfo && typeof myPlayerInfo === "object" && "isAlive" in myPlayerInfo
+      ? Boolean((myPlayerInfo as any).isAlive)
+      : false;
+  const canSend = isGameActive && isMyPlayerAlive;
+  const startBlock =
+    roomInfo && typeof roomInfo === "object" && "startBlock" in roomInfo ? BigInt((roomInfo as any).startBlock) : 0n;
+
   const { data: messageEvents, isLoading: eventsLoading } = useScaffoldEventHistory({
     contractName: "TuringArena",
     eventName: "NewMessage",
-    fromBlock: 0n,
+    fromBlock: startBlock || 0n,
     watch: true,
   });
 
@@ -101,7 +124,7 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
   }, [filteredMessages.length, shouldAutoScroll]);
 
   const handleSend = async () => {
-    if (!inputMessage.trim() || isSending || isMining) return;
+    if (!inputMessage.trim() || isSending || isMining || !canSend) return;
 
     const message = inputMessage.trim();
     setInputMessage("");
@@ -208,14 +231,16 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
             value={inputMessage}
             onChange={e => setInputMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isSending || isMining ? "Transmitting to chain..." : "Type your message..."}
-            disabled={isSending || isMining}
+            placeholder={
+              !canSend ? "Spectator mode" : isSending || isMining ? "Transmitting to chain..." : "Type your message..."
+            }
+            disabled={isSending || isMining || !canSend}
             className="flex-1 bg-transparent border-none outline-none text-green-400 font-mono text-sm placeholder-gray-700 caret-green-400 disabled:opacity-50"
             maxLength={280}
           />
           <button
             onClick={handleSend}
-            disabled={!inputMessage.trim() || isSending || isMining}
+            disabled={!inputMessage.trim() || isSending || isMining || !canSend}
             className="px-3 py-1 border border-green-700/50 text-green-400 font-mono text-xs hover:bg-green-900/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {isSending || isMining ? <span className="animate-pulse">TX...</span> : "SEND"}

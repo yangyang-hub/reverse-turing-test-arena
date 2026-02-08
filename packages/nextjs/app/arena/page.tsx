@@ -53,6 +53,12 @@ function ArenaContent() {
     args: [roomId] as const,
   });
 
+  const { data: currentRoundData } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "currentRound",
+    args: [roomId] as const,
+  });
+
   if (!rawRoomId || roomId === undefined) {
     return (
       <div className="flex items-center justify-center flex-1 bg-black">
@@ -117,14 +123,16 @@ function ArenaContent() {
     typeof roomInfo === "object" && "aliveCount" in roomInfo ? Number((roomInfo as any).aliveCount) : 0;
   const playerCount =
     typeof roomInfo === "object" && "playerCount" in roomInfo ? Number((roomInfo as any).playerCount) : 0;
-  const currentRound =
-    typeof roomInfo === "object" && "currentRound" in roomInfo ? Number((roomInfo as any).currentRound) : 0;
+  const currentRound = currentRoundData !== undefined ? Number(currentRoundData) : 0;
   const prizePool = typeof roomInfo === "object" && "prizePool" in roomInfo ? BigInt((roomInfo as any).prizePool) : 0n;
 
   const phaseLabel = PHASE_LABELS[phase] ?? "UNKNOWN";
   const phaseColor = PHASE_COLORS[phase] ?? "text-gray-400";
 
-  const isPlayerInGame = connectedAddress && allPlayers ? (allPlayers as string[]).includes(connectedAddress) : false;
+  const isPlayerInGame =
+    connectedAddress && allPlayers
+      ? (allPlayers as string[]).some(p => p.toLowerCase() === connectedAddress.toLowerCase())
+      : false;
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-black text-gray-100">
@@ -158,7 +166,7 @@ function ArenaContent() {
           <div className="flex items-center gap-2">
             <span className="text-gray-500 font-mono text-xs">PRIZE</span>
             <span className="text-yellow-400 font-mono text-sm font-bold">
-              {(Number(prizePool) / 1e18).toFixed(4)} MON
+              {(Number(prizePool) / 1e6).toFixed(2)} USDC
             </span>
           </div>
           {isPlayerInGame && (

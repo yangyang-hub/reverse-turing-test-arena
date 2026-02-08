@@ -19,7 +19,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 - 主合约: `TuringArena.sol` — 包含房间管理、投票、淘汰、分层奖励
 - 合约名在前端 hooks 中统一使用 `"TuringArena"` (不是 `"YourContract"`)
 - 事件名: `PlayerEliminated`, `VoteCast`, `NewMessage`, `GameEnded`, `RoomCreated`
-- Entry fee 使用 native token (MON), 通过 `msg.value` 支付
+- Entry fee 使用 USDC (ERC-20, 6 decimals), 通过 `approve + transferFrom` 支付
+- `createRoom(RoomTier, uint256 _maxPlayers, uint256 _entryFee)` — custom player count (2-50) and fee (1-10000 USDC)
+- MockUSDC.sol: 测试用 USDC mock 合约 (`packages/foundry/contracts/mocks/MockUSDC.sol`)
 - 合约架构参考 `docs/IMPLEMENTATION_PLAN.md` Section 5.1
 
 ### Frontend Conventions
@@ -45,16 +47,17 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-07 — All 8 phases implemented, page restructure (landing/lobby split)
+> **Last updated**: 2026-02-08 — Frontend bug fixes (currentRound, vote state, approve race, emoji, send guard)
 
-### Current Status: Phase 8 (Complete)
+### Current Status: Phase 8 (Complete) + USDC Migration + Custom Room Params
 
 | Module | Status | Notes |
 |--------|--------|-------|
 | Design Doc (IMPLEMENTATION_PLAN.md) | DONE | 12 sections, ~6800 lines |
-| TuringArena.sol | DONE | All game logic, 23 tests passing |
-| Deploy Script | DONE | DeployTuringArena.s.sol |
-| Contract Tests | DONE | 23 test cases, 100% pass |
+| TuringArena.sol | DONE | USDC ERC-20, custom maxPlayers & entryFee, 29 tests passing |
+| MockUSDC.sol | DONE | Test USDC mock with 6 decimals, public mint |
+| Deploy Script | DONE | DeployTuringArena.s.sol — deploys MockUSDC + TuringArena |
+| Contract Tests | DONE | 29 test cases, 100% pass (incl. custom room param validation) |
 | SessionKeyValidator.sol | DONE | Session key delegation for AI agents |
 | Zustand gameStore | DONE | gameStore.ts with types and actions |
 | Cyberpunk CSS | DONE | globals.css with glitch text, cyber-grid-bg, tier/phase classes |
@@ -92,6 +95,8 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 9. **P2 — 投票透明**: 无 commit-reveal 机制 (future enhancement)
 10. **P2 — 无 Sybil 防护**: 无准入机制 (future enhancement)
 11. **P2 — 无房间取消/退款**: createRoom 后无法退出 (future enhancement)
+12. **P2 — withdrawUnclaimed 无时间限制**: Treasury 可随时提取任意金额，包括未领取的玩家奖励 (future enhancement)
+13. **P2 — TierConfig 遗留字段**: minPlayers/maxPlayers/entryFee 不再使用，仅浪费部署 gas (cleanup)
 
 ---
 

@@ -12,7 +12,6 @@ function truncateAddress(addr: string): string {
 
 export function VotePanel({ roomId }: { roomId: bigint }) {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
-  const [hasVotedThisRound, setHasVotedThisRound] = useState(false);
   const { address: connectedAddress } = useAccount();
 
   const { data: allPlayers } = useScaffoldReadContract({
@@ -32,6 +31,21 @@ export function VotePanel({ roomId }: { roomId: bigint }) {
     functionName: "getPlayerInfo",
     args: [roomId, connectedAddress] as const,
   });
+
+  const { data: roundNum } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "currentRound",
+    args: [roomId],
+  });
+
+  const zeroAddr = "0x0000000000000000000000000000000000000000" as const;
+  const { data: hasVotedOnChain } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "hasVotedInRound",
+    args: [roomId, roundNum ?? 0n, connectedAddress ?? zeroAddr],
+  });
+
+  const hasVotedThisRound = Boolean(hasVotedOnChain);
 
   const { writeContractAsync, isMining } = useScaffoldWriteContract({
     contractName: "TuringArena",
@@ -59,7 +73,6 @@ export function VotePanel({ roomId }: { roomId: bigint }) {
         functionName: "castVote",
         args: [roomId, selectedTarget],
       });
-      setHasVotedThisRound(true);
       setSelectedTarget(null);
     } catch (err) {
       console.error("Vote failed:", err);

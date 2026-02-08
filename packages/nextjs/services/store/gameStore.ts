@@ -10,6 +10,7 @@ export type Room = {
   tier: RoomTier;
   phase: GamePhase;
   entryFee: bigint;
+  maxPlayers: number;
   prizePool: bigint;
   playerCount: number;
   aliveCount: number;
