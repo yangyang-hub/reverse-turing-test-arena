@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef } from "react";
 import { Address } from "@scaffold-ui/components";
 import { motion } from "framer-motion";
 import { formatUnits } from "viem";
-import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { useGameStore } from "~~/services/store/gameStore";
+import { getPlayerAlias } from "~~/utils/playerAlias";
 
 export const VictoryScreen = ({
   roomId,
@@ -23,6 +24,15 @@ export const VictoryScreen = ({
   const isChampion = myPlayer?.addr.toLowerCase() === champion.toLowerCase();
 
   const { writeContractAsync, isPending } = useScaffoldWriteContract("TuringArena");
+
+  const { data: allPlayers } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getAllPlayers",
+    args: [roomId],
+  });
+
+  const playerAddresses = (allPlayers as string[]) || [];
+  const championAlias = getPlayerAlias(playerAddresses, champion);
 
   // Gold particle celebration
   const initParticles = useCallback(() => {
@@ -116,8 +126,19 @@ export const VictoryScreen = ({
 
         <div className="text-4xl md:text-6xl font-mono font-black text-white mb-4 neon-text-gold">CHAMPION</div>
 
-        {/* Champion address */}
-        <div className="mb-6">
+        {/* Champion identity reveal */}
+        <div className="mb-6 flex flex-col items-center gap-2">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center font-mono text-lg font-bold text-black"
+              style={{ backgroundColor: championAlias.color }}
+            >
+              {championAlias.initial}
+            </div>
+            <span className="font-mono text-xl font-bold" style={{ color: championAlias.color }}>
+              {championAlias.name}
+            </span>
+          </div>
           <Address address={champion as `0x${string}`} />
         </div>
 

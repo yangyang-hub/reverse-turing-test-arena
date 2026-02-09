@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useScaffoldEventHistory } from "~~/hooks/scaffold-eth";
+import { useScaffoldEventHistory, useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+import { getAliasName } from "~~/utils/playerAlias";
 
 type StreamEntry = {
   id: string;
@@ -22,6 +23,14 @@ const ACTION_COLORS: Record<StreamEntry["action"], string> = {
 export const DataStream = ({ roomId }: { roomId: bigint }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [entries, setEntries] = useState<StreamEntry[]>([]);
+
+  const { data: allPlayers } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getAllPlayers",
+    args: [roomId],
+  });
+
+  const playerAddresses = (allPlayers as string[]) || [];
 
   const { data: chatEvents } = useScaffoldEventHistory({
     contractName: "TuringArena",
@@ -87,9 +96,7 @@ export const DataStream = ({ roomId }: { roomId: bigint }) => {
           <div key={`${entry.id}-${i}`} className="text-[10px] leading-5 terminal-text">
             <span className="text-gray-600">[{entry.blockNumber}]</span>{" "}
             <span className={ACTION_COLORS[entry.action]}>{entry.action.padEnd(10)}</span>{" "}
-            <span className="text-gray-500">
-              {entry.actor.slice(0, 6)}..{entry.actor.slice(-4)}
-            </span>{" "}
+            <span className="text-gray-500">{getAliasName(playerAddresses, entry.actor)}</span>{" "}
             <span className="text-green-800">tx:{entry.txHash.slice(0, 10)}..</span>
           </div>
         ))}

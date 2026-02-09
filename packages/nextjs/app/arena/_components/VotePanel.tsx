@@ -4,11 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useAccount } from "wagmi";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
-
-function truncateAddress(addr: string): string {
-  if (!addr || addr.length < 10) return addr;
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-}
+import { getAliasName, getPlayerAlias } from "~~/utils/playerAlias";
 
 export function VotePanel({ roomId }: { roomId: bigint }) {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
@@ -142,6 +138,7 @@ export function VotePanel({ roomId }: { roomId: bigint }) {
                 if (!canVote || isMe) return;
                 setSelectedTarget(isSelected ? null : playerAddr);
               }}
+              playerAddresses={playerAddresses}
             />
           );
         })}
@@ -163,7 +160,7 @@ export function VotePanel({ roomId }: { roomId: bigint }) {
           ) : hasVotedThisRound ? (
             "ALREADY VOTED"
           ) : selectedTarget ? (
-            <>VOTE TO ELIMINATE {truncateAddress(selectedTarget)}</>
+            <>VOTE TO ELIMINATE {getAliasName(playerAddresses, selectedTarget)}</>
           ) : (
             "SELECT A TARGET"
           )}
@@ -180,6 +177,7 @@ function VotePlayerCard({
   isSelected,
   canVote,
   onSelect,
+  playerAddresses,
 }: {
   roomId: bigint;
   playerAddr: string;
@@ -187,6 +185,7 @@ function VotePlayerCard({
   isSelected: boolean;
   canVote: boolean;
   onSelect: () => void;
+  playerAddresses: string[];
 }) {
   const { data: playerInfo } = useScaffoldReadContract({
     contractName: "TuringArena",
@@ -207,6 +206,8 @@ function VotePlayerCard({
   const scoreTrackColor = humanityScore > 60 ? "bg-green-950" : humanityScore > 30 ? "bg-yellow-950" : "bg-red-950";
 
   const isClickable = canVote && !isMe && isAlive;
+
+  const alias = getPlayerAlias(playerAddresses, playerAddr);
 
   return (
     <motion.div
@@ -236,12 +237,19 @@ function VotePlayerCard({
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${isAlive ? "bg-green-400" : "bg-red-600"}`} />
+          <div
+            className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center font-mono text-[10px] font-bold text-black"
+            style={{ backgroundColor: alias.color }}
+          >
+            {alias.initial}
+          </div>
           <span
             className={`font-mono text-xs ${
               isMe ? "text-cyan-400 font-bold" : isAlive ? "text-gray-300" : "text-gray-600 line-through"
             }`}
+            style={!isMe && isAlive ? { color: alias.color } : undefined}
           >
-            {truncateAddress(playerAddr)}
+            {alias.name}
             {isMe && " (YOU)"}
           </span>
         </div>

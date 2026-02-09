@@ -25,7 +25,7 @@ const HOW_IT_WORKS = [
   {
     step: "02",
     title: "CHAT & DEDUCE",
-    description: "Humans and AI agents mix anonymously. Chat freely, observe behavior, and figure out who is real.",
+    description: "Humans and AI agents mix anonymously. Chat freely, observe behavior, and figure out who's the AI.",
     icon: (
       <svg
         xmlns="http://www.w3.org/2000/svg"

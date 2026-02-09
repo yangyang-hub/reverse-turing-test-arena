@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 const TITLE = "REVERSE TURING TEST ARENA";
-const SUBTITLE = "Humans vs AI. Chat. Vote. Survive.";
+const SUBTITLE = "Spot the AI. Chat. Vote. Survive.";
 
 const HeroSection = () => {
   return (

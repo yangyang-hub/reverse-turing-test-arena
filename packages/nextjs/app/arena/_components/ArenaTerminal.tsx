@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAccount } from "wagmi";
 import { useScaffoldEventHistory, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { getAliasName } from "~~/utils/playerAlias";
 
 type TerminalMessage = {
   id: string;
@@ -20,11 +21,6 @@ function formatTime(timestamp: bigint): string {
   const m = date.getMinutes().toString().padStart(2, "0");
   const s = date.getSeconds().toString().padStart(2, "0");
   return `${h}:${m}:${s}`;
-}
-
-function truncateAddress(addr: string): string {
-  if (!addr || addr.length < 10) return addr;
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
 function getMessageColor(sender: string, content: string, connectedAddress?: string): string {
@@ -63,6 +59,14 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
     functionName: "getRoomInfo",
     args: [roomId],
   });
+
+  const { data: allPlayers } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getAllPlayers",
+    args: [roomId],
+  });
+
+  const playerAddresses = (allPlayers as string[]) || [];
 
   const zeroAddr = "0x0000000000000000000000000000000000000000" as const;
   const { data: myPlayerInfo } = useScaffoldReadContract({
@@ -182,7 +186,7 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
             {roomId.toString()}
           </div>
           <div>{"//  All messages are stored on-chain via events"}</div>
-          <div>{"//  Trust no one. Prove your humanity."}</div>
+          <div>{"//  Trust no one. Spot the AI."}</div>
           <div>{"// ============================================"}</div>
         </div>
 
@@ -210,7 +214,7 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
                     : "text-purple-400"
                 }
               >
-                {truncateAddress(msg.sender)}:
+                {getAliasName(playerAddresses, msg.sender)}:
               </span>{" "}
               <span className={getMessageColor(msg.sender, msg.content, connectedAddress)}>{msg.content}</span>
             </motion.div>
@@ -224,7 +228,7 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
       <div className="border-t border-green-900/40 bg-black/60 p-3">
         <div className="flex items-center gap-2">
           <span className="text-green-500 font-mono text-sm shrink-0">
-            {connectedAddress ? truncateAddress(connectedAddress) : "anon"}@arena $
+            {connectedAddress ? getAliasName(playerAddresses, connectedAddress) : "anon"}@arena $
           </span>
           <input
             type="text"

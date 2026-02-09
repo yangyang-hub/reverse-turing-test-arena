@@ -2,23 +2,27 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useScaffoldEventHistory } from "~~/hooks/scaffold-eth";
+import { useScaffoldEventHistory, useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+import { getAliasName } from "~~/utils/playerAlias";
 
 type KillEntry = {
   id: string;
-  player: string;
-  eliminatedBy: string;
+  playerAddr: string;
+  eliminatedByAddr: string;
   reason: string;
   timestamp: number;
 };
 
-function truncateAddr(addr: string): string {
-  if (!addr) return "???";
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-}
-
 export const KillFeed = ({ roomId }: { roomId: bigint }) => {
   const [entries, setEntries] = useState<KillEntry[]>([]);
+
+  const { data: allPlayers } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getAllPlayers",
+    args: [roomId],
+  });
+
+  const playerAddresses = (allPlayers as string[]) || [];
 
   const { data: events } = useScaffoldEventHistory({
     contractName: "TuringArena",
@@ -35,8 +39,8 @@ export const KillFeed = ({ roomId }: { roomId: bigint }) => {
       .map(e => ({
         id:
           (e as any).transactionHash || (e as any).log?.transactionHash || `${e.args.player}-${(e as any).blockNumber}`,
-        player: truncateAddr(e.args.player as string),
-        eliminatedBy: truncateAddr(e.args.eliminatedBy as string),
+        playerAddr: (e.args.player as string) || "",
+        eliminatedByAddr: (e.args.eliminatedBy as string) || "",
         reason: (e.args.reason as string) || "VOTED OUT",
         timestamp: Date.now(),
       }));
@@ -65,9 +69,10 @@ export const KillFeed = ({ roomId }: { roomId: bigint }) => {
             exit={{ x: 300, opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
           >
-            <span className="text-gray-500">&#x1F480;</span> <span className="text-white">{entry.player}</span>{" "}
+            <span className="text-gray-500">&#x1F480;</span>{" "}
+            <span className="text-white">{getAliasName(playerAddresses, entry.playerAddr)}</span>{" "}
             <span className="text-red-500">ELIMINATED</span> <span className="text-gray-500">by</span>{" "}
-            <span className="text-yellow-400">{entry.eliminatedBy}</span>
+            <span className="text-yellow-400">{getAliasName(playerAddresses, entry.eliminatedByAddr)}</span>
             <div className="text-gray-600 text-[10px] mt-0.5">&mdash; {entry.reason}</div>
           </motion.div>
         ))}

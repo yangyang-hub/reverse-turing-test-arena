@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { useGameStore } from "~~/services/store/gameStore";
+import { getAliasName } from "~~/utils/playerAlias";
 
 type NodeStatus = "alive" | "eliminated" | "suspected";
 
@@ -39,6 +40,7 @@ export const VotingGraph = () => {
     }
 
     // Calculate node positions (ring layout)
+    const allAddresses = players.map(p => p.addr);
     const nodes = players.map((p, i) => {
       const angle = (2 * Math.PI * i) / players.length - Math.PI / 2;
       const status: NodeStatus = !p.isAlive ? "eliminated" : p.humanityScore < 40 ? "suspected" : "alive";
@@ -47,7 +49,7 @@ export const VotingGraph = () => {
         y: cy + radius * Math.sin(angle),
         address: p.addr,
         status,
-        label: `${p.addr.slice(0, 4)}..${p.addr.slice(-2)}`,
+        label: getAliasName(allAddresses, p.addr),
       };
     });
 

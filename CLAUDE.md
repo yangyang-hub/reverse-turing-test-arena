@@ -47,9 +47,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-08 — Creator auto-join on createRoom, auto-close when empty, CreateRoomModal approve flow
+> **Last updated**: 2026-02-09 — Narrative flip ("find AI" not "find humans") + in-game anonymity (aliases replace wallet addresses during gameplay)
 
-### Current Status: Phase 8 (Complete) + USDC Migration + Custom Room Params + Leave/Cancel Room + Auto-Join
+### Current Status: Phase 8 (Complete) + USDC Migration + Custom Room Params + Leave/Cancel Room + Auto-Join + Narrative Flip + Anonymity
 
 | Module | Status | Notes |
 |--------|--------|-------|
@@ -79,6 +79,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | DataStream | DONE | Real-time blockchain tx stream (NewMessage, VoteCast) |
 | PlayerIdentityCard | DONE | Modal with SVG humanity gauge, stats, vote button |
 | MCP Adapter | DONE | packages/mcp-adapter/ with 4 tools (get_arena_status, action_onchain, check_session_status, init_session) |
+| Player Alias Utility | DONE | utils/playerAlias.ts — deterministic codenames + colored avatars per room |
+| Narrative Flip | DONE | "Spot the AI" instead of "find humans" — landing page + HeroSection |
+| In-Game Anonymity | DONE | All 9 arena components use aliases during gameplay, real addresses revealed on game end |
 
 ### Known Design Bugs (from review)
 

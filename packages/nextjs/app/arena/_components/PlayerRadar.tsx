@@ -4,6 +4,7 @@ import { Address } from "@scaffold-ui/components";
 import { useAccount } from "wagmi";
 import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth";
+import { getPlayerAlias } from "~~/utils/playerAlias";
 
 export function PlayerRadar({ roomId }: { roomId: bigint }) {
   const { address: connectedAddress } = useAccount();
@@ -25,6 +26,8 @@ export function PlayerRadar({ roomId }: { roomId: bigint }) {
     roomInfo && typeof roomInfo === "object" && "aliveCount" in roomInfo ? Number((roomInfo as any).aliveCount) : 0;
   const playerCount =
     roomInfo && typeof roomInfo === "object" && "playerCount" in roomInfo ? Number((roomInfo as any).playerCount) : 0;
+  const phase = roomInfo && typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
+  const isEnded = phase === 4;
 
   const playerAddresses = (allPlayers as string[]) || [];
 
@@ -62,6 +65,8 @@ export function PlayerRadar({ roomId }: { roomId: bigint }) {
             playerAddr={playerAddr}
             isMe={!!connectedAddress && playerAddr.toLowerCase() === connectedAddress.toLowerCase()}
             targetNetwork={targetNetwork}
+            playerAddresses={playerAddresses}
+            isEnded={isEnded}
           />
         ))}
       </div>
@@ -92,11 +97,15 @@ function PlayerRadarCard({
   playerAddr,
   isMe,
   targetNetwork,
+  playerAddresses,
+  isEnded,
 }: {
   roomId: bigint;
   playerAddr: string;
   isMe: boolean;
   targetNetwork: any;
+  playerAddresses: string[];
+  isEnded: boolean;
 }) {
   const { data: playerInfo } = useScaffoldReadContract({
     contractName: "TuringArena",
@@ -112,16 +121,14 @@ function PlayerRadarCard({
     playerInfo && typeof playerInfo === "object" && "humanityScore" in playerInfo
       ? Number((playerInfo as any).humanityScore)
       : 100;
-  const isVerifiedHuman =
-    playerInfo && typeof playerInfo === "object" && "isVerifiedHuman" in playerInfo
-      ? Boolean((playerInfo as any).isVerifiedHuman)
-      : false;
 
   const scoreColor = humanityScore > 60 ? "bg-green-500" : humanityScore > 30 ? "bg-yellow-500" : "bg-red-500";
   const scoreBorderColor =
     humanityScore > 60 ? "border-green-800/40" : humanityScore > 30 ? "border-yellow-800/40" : "border-red-800/40";
   const scoreTextColor =
     humanityScore > 60 ? "text-green-400" : humanityScore > 30 ? "text-yellow-400" : "text-red-400";
+
+  const alias = getPlayerAlias(playerAddresses, playerAddr);
 
   return (
     <div
@@ -140,16 +147,24 @@ function PlayerRadarCard({
 
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
-          {/* Status dot */}
+          {/* Colored avatar circle */}
           <div
-            className={`w-2 h-2 rounded-full shrink-0 ${isAlive ? "bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.4)]" : "bg-red-600"}`}
-          />
+            className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center font-mono text-xs font-bold text-black"
+            style={{ backgroundColor: alias.color }}
+          >
+            {alias.initial}
+          </div>
 
-          {/* Address */}
+          {/* Alias name + optional real address reveal */}
           <div className={`min-w-0 ${!isAlive ? "line-through" : ""}`}>
-            <div className="text-xs">
-              <Address address={playerAddr as `0x${string}`} chain={targetNetwork} size="xs" />
+            <div className="font-mono text-xs font-bold" style={{ color: alias.color }}>
+              {alias.name}
             </div>
+            {isEnded && (
+              <div className="text-xs opacity-70">
+                <Address address={playerAddr as `0x${string}`} chain={targetNetwork} size="xs" />
+              </div>
+            )}
           </div>
         </div>
 
@@ -158,11 +173,6 @@ function PlayerRadarCard({
           {isMe && (
             <span className="px-1.5 py-0.5 bg-cyan-900/30 border border-cyan-700/40 rounded text-cyan-400 font-mono text-xs">
               YOU
-            </span>
-          )}
-          {isVerifiedHuman && (
-            <span className="px-1.5 py-0.5 bg-green-900/20 border border-green-700/30 rounded text-green-400 font-mono text-xs">
-              H
             </span>
           )}
           {!isAlive && (

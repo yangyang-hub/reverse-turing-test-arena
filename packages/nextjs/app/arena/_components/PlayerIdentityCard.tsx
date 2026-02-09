@@ -3,6 +3,7 @@
 import { Address } from "@scaffold-ui/components";
 import { motion } from "framer-motion";
 import { useGameStore } from "~~/services/store/gameStore";
+import { getPlayerAlias } from "~~/utils/playerAlias";
 
 export const PlayerIdentityCard = ({
   playerAddress,
@@ -15,6 +16,7 @@ export const PlayerIdentityCard = ({
 }) => {
   const players = useGameStore(s => s.players);
   const chatMessages = useGameStore(s => s.chatMessages);
+  const gamePhase = useGameStore(s => s.gamePhase);
 
   const player = players.find(p => p.addr.toLowerCase() === playerAddress.toLowerCase());
 
@@ -27,6 +29,10 @@ export const PlayerIdentityCard = ({
   // Humanity score gauge
   const scorePercent = Math.max(0, Math.min(100, player.humanityScore));
   const scoreColor = scorePercent > 60 ? "#22c55e" : scorePercent > 30 ? "#eab308" : "#ef4444";
+
+  const allAddresses = players.map(p => p.addr);
+  const alias = getPlayerAlias(allAddresses, playerAddress);
+  const isEnded = gamePhase === "Ended";
 
   return (
     <motion.div
@@ -47,7 +53,22 @@ export const PlayerIdentityCard = ({
         <div className="flex justify-between items-start mb-4">
           <div>
             <div className="text-cyan-400 font-mono text-xs tracking-wider mb-1">IDENTITY SCAN</div>
-            <Address address={playerAddress as `0x${string}`} />
+            <div className="flex items-center gap-2">
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center font-mono text-sm font-bold text-black"
+                style={{ backgroundColor: alias.color }}
+              >
+                {alias.initial}
+              </div>
+              <span className="font-mono text-sm font-bold" style={{ color: alias.color }}>
+                {alias.name}
+              </span>
+            </div>
+            {isEnded && (
+              <div className="mt-1 opacity-70">
+                <Address address={playerAddress as `0x${string}`} />
+              </div>
+            )}
           </div>
           <span
             className={`px-2 py-0.5 text-xs font-mono rounded ${

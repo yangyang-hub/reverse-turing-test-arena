@@ -2,12 +2,14 @@
 
 import { motion } from "framer-motion";
 import type { MessageType } from "~~/services/store/gameStore";
+import { getAliasName } from "~~/utils/playerAlias";
 
 type ChatMessageProps = {
   sender: string;
   content: string;
   type: MessageType;
   timestamp: number;
+  allPlayers?: string[];
 };
 
 const TYPE_STYLES: Record<MessageType, { color: string; prefix: string; animate: boolean }> = {
@@ -38,7 +40,7 @@ const TYPE_STYLES: Record<MessageType, { color: string; prefix: string; animate:
   },
 };
 
-export const ChatMessage = ({ sender, content, type, timestamp }: ChatMessageProps) => {
+export const ChatMessage = ({ sender, content, type, timestamp, allPlayers = [] }: ChatMessageProps) => {
   const style = TYPE_STYLES[type];
   const time = new Date(timestamp).toLocaleTimeString("en-US", {
     hour12: false,
@@ -46,6 +48,9 @@ export const ChatMessage = ({ sender, content, type, timestamp }: ChatMessagePro
     minute: "2-digit",
     second: "2-digit",
   });
+
+  const senderLabel =
+    allPlayers.length > 0 ? getAliasName(allPlayers, sender) : `${sender.slice(0, 6)}...${sender.slice(-4)}`;
 
   if (style.animate) {
     return (
@@ -67,11 +72,7 @@ export const ChatMessage = ({ sender, content, type, timestamp }: ChatMessagePro
   return (
     <div className={`font-mono text-xs leading-relaxed ${style.color}`}>
       <span className="text-gray-600 mr-2">[{time}]</span>
-      {type === "chat" && (
-        <span className="text-cyan-400 mr-1">
-          {sender.slice(0, 6)}...{sender.slice(-4)}&gt;
-        </span>
-      )}
+      {type === "chat" && <span className="text-cyan-400 mr-1">{senderLabel}&gt;</span>}
       <span>
         {style.prefix}
         {content}
