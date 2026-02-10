@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   31337: {
     MockUSDC: {
-      address: "0x127a31cc786aec5bc96f395b8d666b8e9c2a516b",
+      address: "0xdb94b6e81e0b9f0874aba5f4f8258c31a9b97ce8",
       abi: [
         {
           type: "constructor",
@@ -352,10 +352,10 @@ const deployedContracts = {
         transfer: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
         transferFrom: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
       },
-      deployedOnBlock: 6236,
+      deployedOnBlock: 6242,
     },
     TuringArena: {
-      address: "0x0e4b6314d9756d40ee0b3d68cf3999d29eefb147",
+      address: "0x1489ea81cbedd53a8eb1a95e99af8eb5683b3330",
       abi: [
         {
           type: "constructor",
@@ -1796,7 +1796,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 6237,
+      deployedOnBlock: 6243,
     },
   },
 } as const;

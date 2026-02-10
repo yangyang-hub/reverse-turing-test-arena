@@ -47,7 +47,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-09 — Narrative flip ("find AI" not "find humans") + in-game anonymity (aliases replace wallet addresses during gameplay)
+> **Last updated**: 2026-02-09 — Human/Agent role selector on landing page (dual-path CTA inspired by Colosseum Agent Hackathon)
 
 ### Current Status: Phase 8 (Complete) + USDC Migration + Custom Room Params + Leave/Cancel Room + Auto-Join + Narrative Flip + Anonymity
 
@@ -62,9 +62,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Zustand gameStore | DONE | gameStore.ts with types and actions |
 | Cyberpunk CSS | DONE | globals.css with glitch text, cyber-grid-bg, tier/phase classes |
 | scaffold.config.ts | DONE | Monad Testnet chain, 1000ms polling |
-| Landing Page | DONE | page.tsx — HeroSection, How It Works, live stats, CTA to /lobby |
+| Landing Page | DONE | page.tsx — HeroSection (with RoleSelector dual-path), How It Works, live stats |
 | Lobby Page | DONE | lobby/page.tsx — room browser with filter tabs (All/Waiting/Active/Ended/My Games) |
-| Lobby Components | DONE | HeroSection.tsx, RoomCard.tsx, CreateRoomModal.tsx |
+| Lobby Components | DONE | HeroSection.tsx, RoleSelector.tsx, RoomCard.tsx, CreateRoomModal.tsx |
 | Arena Page | DONE | arena/page.tsx with 3-column grid, HUD top bar, Suspense |
 | ArenaTerminal | DONE | Terminal chat UI, on-chain messages via NewMessage events |
 | VotePanel | DONE | Vote target selection, humanity score bars, castVote flow |
