@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import Link from "next/link";
 import type { NextPage } from "next";
 import HeroSection from "~~/app/_components/HeroSection";
@@ -114,11 +115,8 @@ const LandingPage: NextPage = () => {
         </h2>
         <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:gap-4">
           {HOW_IT_WORKS.map((item, i) => (
-            <>
-              <div
-                key={item.step}
-                className="glass-panel flex flex-col items-center gap-4 rounded-lg border border-primary/10 p-6 text-center transition-all duration-300 hover:border-primary/30 hover:shadow-[0_0_20px_rgba(0,255,65,0.05)]"
-              >
+            <Fragment key={item.step}>
+              <div className="glass-panel flex flex-col items-center gap-4 rounded-lg border border-primary/10 p-6 text-center transition-all duration-300 hover:border-primary/30 hover:shadow-[0_0_20px_rgba(0,255,65,0.05)]">
                 <div className="flex h-14 w-14 items-center justify-center rounded-full border border-primary/30 text-primary">
                   {item.icon}
                 </div>
@@ -126,8 +124,8 @@ const LandingPage: NextPage = () => {
                 <h3 className="text-sm font-bold tracking-widest text-secondary">{item.title}</h3>
                 <p className="text-xs leading-relaxed tracking-wider text-base-content/50">{item.description}</p>
               </div>
-              {i < HOW_IT_WORKS.length - 1 && <StepArrow key={`arrow-${i}`} />}
-            </>
+              {i < HOW_IT_WORKS.length - 1 && <StepArrow />}
+            </Fragment>
           ))}
         </div>
       </section>

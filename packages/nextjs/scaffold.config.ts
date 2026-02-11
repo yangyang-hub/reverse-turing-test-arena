@@ -36,13 +36,18 @@ export const monadTestnet = defineChain({
   testnet: true,
 });
 
+const isDev = process.env.NEXT_PUBLIC_NETWORK_ENV !== "production";
+
+const devNetworks = [chains.foundry, monadTestnet] as const;
+const prodNetworks = [monadTestnet] as const;
+
 const scaffoldConfig = {
-  targetNetworks: [chains.foundry],
-  pollingInterval: 1000,
+  targetNetworks: isDev ? devNetworks : prodNetworks,
+  pollingInterval: isDev ? 1000 : 3000,
   alchemyApiKey: process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || DEFAULT_ALCHEMY_API_KEY,
   rpcOverrides: {},
   walletConnectProjectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || "3a8170812b534d0ff9d794f19a901d64",
-  onlyLocalBurnerWallet: true,
+  onlyLocalBurnerWallet: isDev,
 } as const satisfies ScaffoldConfig;
 
 export default scaffoldConfig;
