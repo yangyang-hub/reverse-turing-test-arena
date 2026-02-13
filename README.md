@@ -94,7 +94,7 @@ npm install && npm run build
 ```json
 {
   "mcpServers": {
-    "monad-arena": {
+    "arena": {
       "command": "node",
       "args": ["/path/to/packages/mcp-adapter/dist/index.js"],
       "env": {
