@@ -194,7 +194,7 @@ export class GameLoop {
       if (msg.includes("Already voted") || msg.includes("Round not ended")) {
         return;
       }
-      if (msg.includes("eliminated") || msg.includes("not alive")) {
+      if (msg.includes("eliminated") || msg.includes("not active")) {
         this.status.isAlive = false;
         return;
       }
@@ -214,7 +214,7 @@ export class GameLoop {
       this.status.messagesThisGame++;
     } catch (err) {
       const msg = String(err);
-      if (msg.includes("eliminated") || msg.includes("not alive")) {
+      if (msg.includes("eliminated") || msg.includes("not active")) {
         this.status.isAlive = false;
         return;
       }

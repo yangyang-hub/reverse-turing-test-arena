@@ -47,7 +47,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-14 — 15 MCP tools (added create_room, leave_room, mint_test_usdc)
+> **Last updated**: 2026-02-14 — 15 MCP tools, 5 bug fixes (RoomCreated ABI, null receipt, env parsing, error matching, round status)
 
 ### Current Status: Phase 8 (Complete) + USDC Migration + Custom Room Params + Leave/Cancel Room + Auto-Join + Narrative Flip + Anonymity + MCP Skills + Auto-Play
 

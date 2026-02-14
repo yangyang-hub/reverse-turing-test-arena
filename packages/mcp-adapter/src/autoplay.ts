@@ -32,10 +32,10 @@ const config: AutoPlayConfig = {
   roomId: ROOM_ID,
   voteStrategy: (process.env.VOTE_STRATEGY as VoteStrategy) || DEFAULT_CONFIG.voteStrategy,
   chatStrategy: (process.env.CHAT_STRATEGY as ChatStrategy) || DEFAULT_CONFIG.chatStrategy,
-  chatFrequency: Number(process.env.CHAT_FREQUENCY) || DEFAULT_CONFIG.chatFrequency,
+  chatFrequency: process.env.CHAT_FREQUENCY !== undefined ? Number(process.env.CHAT_FREQUENCY) : DEFAULT_CONFIG.chatFrequency,
   settleEnabled: process.env.SETTLE_ENABLED !== "false",
-  pollIntervalMs: Number(process.env.POLL_INTERVAL_MS) || DEFAULT_CONFIG.pollIntervalMs,
-  maxRounds: Number(process.env.MAX_ROUNDS) || DEFAULT_CONFIG.maxRounds,
+  pollIntervalMs: process.env.POLL_INTERVAL_MS !== undefined ? Number(process.env.POLL_INTERVAL_MS) : DEFAULT_CONFIG.pollIntervalMs,
+  maxRounds: process.env.MAX_ROUNDS !== undefined ? Number(process.env.MAX_ROUNDS) : DEFAULT_CONFIG.maxRounds,
 };
 
 // ===== Main =====

@@ -502,13 +502,19 @@ server.tool(
         currentRound: Number(round),
         phase: Number(roomInfo.phase),
         phaseName: PHASE_NAMES[Number(roomInfo.phase)] || "Unknown",
-        currentInterval: Number(roomInfo.currentInterval),
-        lastSettleBlock: Number(roomInfo.lastSettleBlock),
-        currentBlock,
-        blocksSinceSettle: currentBlock - Number(roomInfo.lastSettleBlock),
-        blocksUntilSettleable: Math.max(0, Number(roomInfo.currentInterval) - (currentBlock - Number(roomInfo.lastSettleBlock))),
         aliveCount: Number(roomInfo.aliveCount),
       };
+
+      // Only show settle timing if game is active (not Waiting or Ended)
+      const phase = Number(roomInfo.phase);
+      if (phase >= 1 && phase <= 3) {
+        const lastSettle = Number(roomInfo.lastSettleBlock);
+        result.currentInterval = Number(roomInfo.currentInterval);
+        result.lastSettleBlock = lastSettle;
+        result.currentBlock = currentBlock;
+        result.blocksSinceSettle = currentBlock - lastSettle;
+        result.blocksUntilSettleable = Math.max(0, Number(roomInfo.currentInterval) - (currentBlock - lastSettle));
+      }
 
       // Check if session wallet has voted
       if (sessionWallet) {
@@ -683,16 +689,18 @@ server.tool(
       const receipt = await tx.wait();
 
       // Extract roomId from RoomCreated event
-      const iface = new ethers.Interface(ARENA_ABI);
       let roomId = "unknown";
-      for (const log of receipt.logs) {
-        try {
-          const parsed = iface.parseLog({ topics: log.topics as string[], data: log.data });
-          if (parsed?.name === "RoomCreated") {
-            roomId = parsed.args[0].toString();
-            break;
-          }
-        } catch { /* skip non-matching logs */ }
+      if (receipt) {
+        const iface = new ethers.Interface(ARENA_ABI);
+        for (const log of receipt.logs) {
+          try {
+            const parsed = iface.parseLog({ topics: log.topics as string[], data: log.data });
+            if (parsed?.name === "RoomCreated") {
+              roomId = parsed.args[0].toString();
+              break;
+            }
+          } catch { /* skip non-matching logs */ }
+        }
       }
 
       return {

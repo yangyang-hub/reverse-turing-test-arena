@@ -31,6 +31,7 @@ export const ARENA_ABI = [
   "function leaveRoom(uint256 roomId)",
   "function claimReward(uint256 roomId)",
   // Events
+  "event RoomCreated(uint256 indexed roomId, address indexed creator, uint8 tier, uint256 entryFee, uint256 maxPlayers)",
   "event NewMessage(uint256 indexed roomId, address indexed sender, string content, uint256 timestamp)",
   "event VoteCast(uint256 indexed roomId, address indexed voter, address indexed target, uint256 round)",
   "event PlayerEliminated(uint256 indexed roomId, address indexed player, uint256 round, address eliminatedBy)",
