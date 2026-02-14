@@ -47,9 +47,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-09 — Human/Agent role selector on landing page (dual-path CTA inspired by Colosseum Agent Hackathon)
+> **Last updated**: 2026-02-14 — 15 MCP tools (added create_room, leave_room, mint_test_usdc)
 
-### Current Status: Phase 8 (Complete) + USDC Migration + Custom Room Params + Leave/Cancel Room + Auto-Join + Narrative Flip + Anonymity
+### Current Status: Phase 8 (Complete) + USDC Migration + Custom Room Params + Leave/Cancel Room + Auto-Join + Narrative Flip + Anonymity + MCP Skills + Auto-Play
 
 | Module | Status | Notes |
 |--------|--------|-------|
@@ -58,10 +58,10 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | MockUSDC.sol | DONE | Test USDC mock with 6 decimals, public mint |
 | Deploy Script | DONE | DeployTuringArena.s.sol — deploys MockUSDC + TuringArena |
 | Contract Tests | DONE | 36 test cases, 100% pass (incl. custom room params + leave/cancel room + auto-join + auto-close) |
-| SessionKeyValidator.sol | DONE | Session key delegation for AI agents |
+| SessionKeyValidator.sol | DONE | Session key delegation for AI agents, now deployed via DeployTuringArena.s.sol |
 | Zustand gameStore | DONE | gameStore.ts with types and actions |
 | Cyberpunk CSS | DONE | globals.css with glitch text, cyber-grid-bg, tier/phase classes |
-| scaffold.config.ts | DONE | Monad Testnet chain, 1000ms polling |
+| scaffold.config.ts | DONE | Foundry + Monad Testnet, env-based dev/prod config |
 | Landing Page | DONE | page.tsx — HeroSection (with RoleSelector dual-path), How It Works, live stats |
 | Lobby Page | DONE | lobby/page.tsx — room browser with filter tabs (All/Waiting/Active/Ended/My Games) |
 | Lobby Components | DONE | HeroSection.tsx, RoleSelector.tsx, RoomCard.tsx, CreateRoomModal.tsx |
@@ -78,7 +78,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | VotingGraph | DONE | Canvas ring-layout network visualization |
 | DataStream | DONE | Real-time blockchain tx stream (NewMessage, VoteCast) |
 | PlayerIdentityCard | DONE | Modal with SVG humanity gauge, stats, vote button |
-| MCP Adapter | DONE | packages/mcp-adapter/ with 4 tools (get_arena_status, action_onchain, check_session_status, init_session) |
+| MCP Adapter | DONE | packages/mcp-adapter/ with 15 tools, auto-play game loop, dual-mode session (direct key + session key) |
+| MCP Auto-Play | DONE | GameLoop class (lib/gameLoop.ts), vote strategies, chat pool, standalone bot (autoplay.ts) |
+| Skills Page | DONE | packages/nextjs/public/skills.md — 15 tools documented, standalone bot usage, linked from RoleSelector |
 | Player Alias Utility | DONE | utils/playerAlias.ts — deterministic codenames + colored avatars per room |
 | Narrative Flip | DONE | "Spot the AI" instead of "find humans" — landing page + HeroSection |
 | In-Game Anonymity | DONE | All 9 arena components use aliases during gameplay, real addresses revealed on game end |

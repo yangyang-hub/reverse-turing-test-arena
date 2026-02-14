@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 
-const SKILLS_URL = "https://github.com/monad-arena/mcp-adapter";
+const SKILLS_URL = "/skills.md";
 
 type Role = "human" | "agent";
 
@@ -60,12 +60,18 @@ export const RoleSelector = () => {
   const [copied, setCopied] = useState(false);
   const config = ROLE_CONFIG[role];
 
+  const getFullSkillsUrl = () => {
+    if (typeof window === "undefined") return SKILLS_URL;
+    return `${window.location.origin}${SKILLS_URL}`;
+  };
+
   const handleCopy = async () => {
+    const url = getFullSkillsUrl();
     try {
-      await navigator.clipboard.writeText(SKILLS_URL);
+      await navigator.clipboard.writeText(url);
     } catch {
       const ta = document.createElement("textarea");
-      ta.value = SKILLS_URL;
+      ta.value = url;
       document.body.appendChild(ta);
       ta.select();
       document.execCommand("copy");
@@ -181,37 +187,58 @@ export const RoleSelector = () => {
             ) : (
               <div className="space-y-3">
                 {/* Skills URL */}
-                <div
-                  className="flex items-center gap-2 bg-black/50 rounded-lg px-4 py-3 cursor-pointer transition-all duration-200"
+                <a
+                  href={SKILLS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-black/50 rounded-lg px-4 py-3 transition-all duration-200 no-underline"
                   style={{ border: `1px solid ${config.color}30` }}
-                  onClick={handleCopy}
+                  onClick={e => {
+                    e.preventDefault();
+                    handleCopy();
+                  }}
                   onMouseEnter={e => {
-                    (e.currentTarget as HTMLDivElement).style.borderColor = config.color + "60";
+                    (e.currentTarget as HTMLAnchorElement).style.borderColor = config.color + "60";
                   }}
                   onMouseLeave={e => {
-                    (e.currentTarget as HTMLDivElement).style.borderColor = config.color + "30";
+                    (e.currentTarget as HTMLAnchorElement).style.borderColor = config.color + "30";
                   }}
                 >
-                  <span className="font-mono text-[10px] text-gray-500 tracking-widest shrink-0">SKILLS URL</span>
+                  <span className="font-mono text-[10px] text-gray-500 tracking-widest shrink-0">SKILLS</span>
                   <code className="font-mono text-xs truncate flex-1" style={{ color: config.color }}>
                     {SKILLS_URL}
                   </code>
                   <span className="font-mono text-[10px] text-gray-500 shrink-0">
                     {copied ? "\u2713 COPIED" : "COPY"}
                   </span>
-                </div>
+                </a>
 
-                <button
-                  onClick={handleCopy}
-                  className="btn btn-lg w-full font-mono font-bold tracking-widest border-none text-base"
-                  style={{
-                    backgroundColor: config.color,
-                    color: "#0a0a0a",
-                    boxShadow: `0 0 20px ${config.glow}`,
-                  }}
-                >
-                  {copied ? "COPIED TO CLIPBOARD" : "COPY SKILLS URL"}
-                </button>
+                <div className="flex gap-2">
+                  <a
+                    href={SKILLS_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-lg flex-1 font-mono font-bold tracking-widest border-none text-base no-underline"
+                    style={{
+                      backgroundColor: "transparent",
+                      color: config.color,
+                      border: `1px solid ${config.color}60`,
+                    }}
+                  >
+                    VIEW DOCS
+                  </a>
+                  <button
+                    onClick={handleCopy}
+                    className="btn btn-lg flex-1 font-mono font-bold tracking-widest border-none text-base"
+                    style={{
+                      backgroundColor: config.color,
+                      color: "#0a0a0a",
+                      boxShadow: `0 0 20px ${config.glow}`,
+                    }}
+                  >
+                    {copied ? "COPIED!" : "COPY URL"}
+                  </button>
+                </div>
               </div>
             )}
           </motion.div>
