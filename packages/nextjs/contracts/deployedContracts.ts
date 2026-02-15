@@ -341,17 +341,7 @@ const deployedContracts = {
           ],
         },
       ],
-      inheritedFunctions: {
-        allowance: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
-        approve: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
-        balanceOf: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
-        decimals: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
-        name: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
-        symbol: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
-        totalSupply: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
-        transfer: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
-        transferFrom: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
-      },
+      inheritedFunctions: {},
       deployedOnBlock: 1,
     },
     TuringArena: {
@@ -1796,7 +1786,203 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 3,
+      deployedOnBlock: 2,
+    },
+    SessionKeyValidator: {
+      address: "0xb19b36b1456e65e3a6d514d3f715f204bd59f431",
+      abi: [
+        {
+          type: "function",
+          name: "createSession",
+          inputs: [
+            {
+              name: "_sessionKey",
+              type: "address",
+              internalType: "address",
+            },
+            {
+              name: "_duration",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "_maxUsage",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "getSessionOwner",
+          inputs: [
+            {
+              name: "_sessionKey",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "getSessionRemainingTime",
+          inputs: [
+            {
+              name: "_sessionKey",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "isSessionValid",
+          inputs: [
+            {
+              name: "_sessionKey",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "revokeSession",
+          inputs: [
+            {
+              name: "_sessionKey",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "sessions",
+          inputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "owner",
+              type: "address",
+              internalType: "address",
+            },
+            {
+              name: "expiresAt",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "maxUsage",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "usageCount",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "isRevoked",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "event",
+          name: "SessionCreated",
+          inputs: [
+            {
+              name: "sessionKey",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "owner",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "expiresAt",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "SessionRevoked",
+          inputs: [
+            {
+              name: "sessionKey",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "SessionUsed",
+          inputs: [
+            {
+              name: "sessionKey",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "usageCount",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+      ],
+      inheritedFunctions: {},
+      deployedOnBlock: 2,
     },
   },
 } as const;
