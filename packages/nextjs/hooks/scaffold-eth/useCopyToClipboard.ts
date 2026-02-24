@@ -5,7 +5,19 @@ export const useCopyToClipboard = () => {
 
   const copyToClipboard = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for non-secure contexts (HTTP)
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
       setIsCopiedToClipboard(true);
       setTimeout(() => {
         setIsCopiedToClipboard(false);

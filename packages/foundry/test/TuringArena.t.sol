@@ -230,10 +230,10 @@ contract TuringArenaTest is Test {
         arena.settleRound(roomId);
 
         TuringArena.Player memory pBob = arena.getPlayerInfo(roomId, bob);
-        assertEq(pBob.humanityScore, 95); // 100 - 5
+        assertEq(pBob.humanityScore, 90); // 100 - 10
 
         TuringArena.Player memory pCharlie = arena.getPlayerInfo(roomId, charlie);
-        assertEq(pCharlie.humanityScore, 95); // 100 - 5
+        assertEq(pCharlie.humanityScore, 90); // 100 - 10
     }
 
     function test_SettleRound_NoVotePenalty() public {
@@ -246,47 +246,30 @@ contract TuringArenaTest is Test {
         _advanceRound(roomId);
         arena.settleRound(roomId);
 
-        // Dave didn't vote, loses 10
+        // Dave didn't vote, loses 20
         TuringArena.Player memory pDave = arena.getPlayerInfo(roomId, dave);
-        assertEq(pDave.humanityScore, 90); // 100 - 10
+        assertEq(pDave.humanityScore, 80); // 100 - 20
 
-        // Bob was voted on AND didn't vote: -5 (voted) -10 (no vote) = 85
+        // Bob was voted on AND didn't vote: -10 (voted) -20 (no vote) = 70
         TuringArena.Player memory pBob = arena.getPlayerInfo(roomId, bob);
-        assertEq(pBob.humanityScore, 85);
+        assertEq(pBob.humanityScore, 70);
     }
 
     function test_SettleRound_Elimination() public {
         uint256 roomId = _createAndStartGame();
 
         // Drain dave's score over multiple rounds
-        // Each round: dave gets -15 (3 votes * 5) -10 (no vote) = -25 per round
-        // Round 0: 100 - 25 = 75
+        // Each round: dave gets -30 (3 votes * 10) -20 (no vote) = -50 per round
+        // Round 0: 100 - 50 = 50
         _voteAllAgainst(roomId, dave);
         _advanceRound(roomId);
         arena.settleRound(roomId);
 
         TuringArena.Player memory pDave = arena.getPlayerInfo(roomId, dave);
-        assertEq(pDave.humanityScore, 75);
-        assertTrue(pDave.isAlive);
-
-        // Round 1: 75 - 25 = 50
-        _voteAllAgainst(roomId, dave);
-        _advanceRound(roomId);
-        arena.settleRound(roomId);
-
-        pDave = arena.getPlayerInfo(roomId, dave);
         assertEq(pDave.humanityScore, 50);
         assertTrue(pDave.isAlive);
 
-        // Round 2: 50 - 25 = 25
-        _voteAllAgainst(roomId, dave);
-        _advanceRound(roomId);
-        arena.settleRound(roomId);
-
-        pDave = arena.getPlayerInfo(roomId, dave);
-        assertEq(pDave.humanityScore, 25);
-
-        // Round 3: 25 - 25 = 0 -> eliminated
+        // Round 1: 50 - 50 = 0 -> eliminated
         _voteAllAgainst(roomId, dave);
         _advanceRound(roomId);
         arena.settleRound(roomId);

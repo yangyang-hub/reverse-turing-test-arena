@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAccount, useBlockNumber } from "wagmi";
@@ -84,10 +84,14 @@ function ArenaContent() {
   const [isSettling, setIsSettling] = useState(false);
   const [showVictory, setShowVictory] = useState(false);
 
-  // Auto-show VictoryScreen when game ends
+  // Auto-show VictoryScreen only when phase transitions to Ended live (not on page load)
   const phase = typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
+  const prevPhaseRef = useRef(phase);
   useEffect(() => {
-    if (phase === 4) setShowVictory(true);
+    if (phase === 4 && prevPhaseRef.current !== 4 && prevPhaseRef.current !== 0) {
+      setShowVictory(true);
+    }
+    prevPhaseRef.current = phase;
   }, [phase]);
 
   if (!rawRoomId || roomId === undefined) {
@@ -359,7 +363,6 @@ function ArenaContent() {
           myRewardClaimed={rewardInfo ? Boolean((rewardInfo as any)[1]) : false}
           onDismiss={() => {
             setShowVictory(false);
-            router.push("/lobby");
           }}
         />
       )}

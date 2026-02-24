@@ -20,8 +20,8 @@ contract TuringArena is ReentrancyGuard {
 
     uint256[5] public RANKING_WEIGHTS = [4000, 2500, 1800, 1000, 700];
 
-    uint256 public constant VOTE_DAMAGE = 5;
-    uint256 public constant NO_VOTE_PENALTY = 10;
+    uint256 public constant VOTE_DAMAGE = 10;
+    uint256 public constant NO_VOTE_PENALTY = 20;
 
     uint256 public constant MIN_PLAYERS = 3;
     uint256 public constant MAX_PLAYERS = 50;
@@ -158,13 +158,13 @@ contract TuringArena is ReentrancyGuard {
         tierConfigs[RoomTier.Quick] = TierConfig({
             minPlayers: 3,
             maxPlayers: 10,
-            baseInterval: 150,
+            baseInterval: 100,
             entryFee: 10e6,
             phase1Threshold: 67,
             phase2Threshold: 33,
             phase3ElimsPerRound: 1,
-            phase2Decay: -1,
-            phase3Decay: -2,
+            phase2Decay: -3,
+            phase3Decay: -5,
             rankingSlots: 3
         });
 
@@ -177,8 +177,8 @@ contract TuringArena is ReentrancyGuard {
             phase1Threshold: 67,
             phase2Threshold: 33,
             phase3ElimsPerRound: 1,
-            phase2Decay: -1,
-            phase3Decay: -2,
+            phase2Decay: -3,
+            phase3Decay: -5,
             rankingSlots: 5
         });
 
@@ -191,8 +191,8 @@ contract TuringArena is ReentrancyGuard {
             phase1Threshold: 67,
             phase2Threshold: 33,
             phase3ElimsPerRound: 2,
-            phase2Decay: -1,
-            phase3Decay: -3,
+            phase2Decay: -3,
+            phase3Decay: -8,
             rankingSlots: 5
         });
     }

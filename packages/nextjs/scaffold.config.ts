@@ -38,7 +38,12 @@ export const monadTestnet = defineChain({
 
 const isDev = process.env.NEXT_PUBLIC_NETWORK_ENV !== "production";
 
-const devNetworks = [chains.foundry] as const;
+const localMonad = defineChain({
+  ...chains.foundry,
+  nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
+});
+
+const devNetworks = [localMonad] as const;
 const prodNetworks = [monadTestnet] as const;
 
 // Allow LAN devices to reach Anvil via NEXT_PUBLIC_ANVIL_RPC_URL (e.g. http://192.168.31.5:8545)

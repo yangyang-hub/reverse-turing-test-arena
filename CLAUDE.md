@@ -37,19 +37,20 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 ### Key Rules
 
 - 人性分 (humanityScore) 只减不加，初始 100
-- 每周期强制投票，未投票扣 10 分，投票扣目标 5 分
+- 每周期强制投票，未投票扣 20 分，投票扣目标 10 分
 - Phase 1/2/3 用颜色编码: green/yellow/red
 - 房间三档: Quick(Bronze) / Standard(Silver) / Epic(Gold)
 - 所有聊天内容仅通过事件存储，不写入 storage
-- 毒素环: Phase 2 衰减 -1/round, Phase 3 衰减 -2~-3/round
+- 毒素环: Phase 2 衰减 -3/round, Phase 3 衰减 -5~-8/round
+- Quick 局 baseInterval=100 (Monad ≈ 40s/轮), Standard/Epic=150 (≈ 60s/轮)
 
 ---
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-24 — 2-player endgame, VictoryScreen settlement modal, lobby claim rewards, auto-settle on last vote
+> **Last updated**: 2026-02-24 — Game balance tuning (VOTE_DAMAGE 5→10, NO_VOTE_PENALTY 10→20, decay ×3, Quick baseInterval 150→100)
 
-### Current Status: Phase 8 (Complete) + USDC Migration + Custom Room Params + Leave/Cancel Room + Auto-Join + Narrative Flip + Anonymity + MCP Skills + Auto-Play + Game End UX
+### Current Status: Phase 8 (Complete) + USDC Migration + Custom Room Params + Leave/Cancel Room + Auto-Join + Narrative Flip + Anonymity + MCP Skills + Auto-Play + Game End UX + Balance Tuning
 
 | Module | Status | Notes |
 |--------|--------|-------|
