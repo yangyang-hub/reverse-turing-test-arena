@@ -46,10 +46,7 @@ contract TuringArena is ReentrancyGuard {
     // ============ Structs ============
 
     struct TierConfig {
-        uint256 minPlayers;
-        uint256 maxPlayers;
         uint256 baseInterval; // blocks between rounds
-        uint256 entryFee;
         uint256 phase1Threshold; // alive % to enter Phase 2
         uint256 phase2Threshold; // alive % to enter Phase 3
         uint256 phase3ElimsPerRound;
@@ -62,7 +59,6 @@ contract TuringArena is ReentrancyGuard {
         address addr;
         int256 humanityScore; // starts at 100, only decreases
         bool isAlive;
-        bool isVerifiedHuman;
         uint256 joinBlock;
         uint256 eliminationBlock;
         uint256 eliminationRank; // 1 = first eliminated
@@ -127,7 +123,7 @@ contract TuringArena is ReentrancyGuard {
     mapping(uint256 => mapping(address => RewardInfo)) public rewards;
 
     uint256 public nextRoomId = 1;
-    address public protocolTreasury;
+    address public immutable protocolTreasury;
     IERC20 public immutable paymentToken;
 
     // ============ Events ============
@@ -154,12 +150,9 @@ contract TuringArena is ReentrancyGuard {
         protocolTreasury = _treasury;
         paymentToken = IERC20(_paymentToken);
 
-        // Quick: 3-10 players (min lowered for testing)
+        // Quick: fast rounds
         tierConfigs[RoomTier.Quick] = TierConfig({
-            minPlayers: 3,
-            maxPlayers: 10,
             baseInterval: 100,
-            entryFee: 10e6,
             phase1Threshold: 67,
             phase2Threshold: 33,
             phase3ElimsPerRound: 1,
@@ -168,12 +161,9 @@ contract TuringArena is ReentrancyGuard {
             rankingSlots: 3
         });
 
-        // Standard: 6-20 players
+        // Standard: balanced gameplay
         tierConfigs[RoomTier.Standard] = TierConfig({
-            minPlayers: 6,
-            maxPlayers: 20,
             baseInterval: 150,
-            entryFee: 50e6,
             phase1Threshold: 67,
             phase2Threshold: 33,
             phase3ElimsPerRound: 1,
@@ -182,12 +172,9 @@ contract TuringArena is ReentrancyGuard {
             rankingSlots: 5
         });
 
-        // Epic: 12-50 players
+        // Epic: long games
         tierConfigs[RoomTier.Epic] = TierConfig({
-            minPlayers: 12,
-            maxPlayers: 50,
             baseInterval: 150,
-            entryFee: 100e6,
             phase1Threshold: 67,
             phase2Threshold: 33,
             phase3ElimsPerRound: 2,
@@ -232,7 +219,6 @@ contract TuringArena is ReentrancyGuard {
             addr: msg.sender,
             humanityScore: 100,
             isAlive: true,
-            isVerifiedHuman: false,
             joinBlock: block.number,
             eliminationBlock: 0,
             eliminationRank: 0,
@@ -263,7 +249,6 @@ contract TuringArena is ReentrancyGuard {
             addr: msg.sender,
             humanityScore: 100,
             isAlive: true,
-            isVerifiedHuman: false,
             joinBlock: block.number,
             eliminationBlock: 0,
             eliminationRank: 0,
@@ -685,10 +670,6 @@ contract TuringArena is ReentrancyGuard {
                 stats.ironWill = p.addr;
             }
 
-            if (p.isVerifiedHuman && !p.isAlive) {
-                stats.lastHuman = p.addr;
-            }
-
             uint256 earlyPhaseEnd = room.startBlock + (room.baseInterval * room.playerCount / 10);
             if (p.successfulVotes >= 3 && p.lastActionBlock <= earlyPhaseEnd) {
                 stats.lightningKiller = p.addr;
@@ -697,7 +678,7 @@ contract TuringArena is ReentrancyGuard {
 
         stats.maxSuccessfulVotes = maxVotes;
 
-        if (stats.champion != address(0) && !players[_roomId][stats.champion].isVerifiedHuman) {
+        if (stats.champion != address(0)) {
             stats.perfectImpostor = stats.champion;
         }
     }

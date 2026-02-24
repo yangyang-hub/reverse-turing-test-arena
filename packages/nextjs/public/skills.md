@@ -43,33 +43,19 @@ Or for fully automated play:
 
 ---
 
-## Available Tools (15 total)
+## Available Tools (14 total)
 
 ### Session & Status
 
 #### `init_session`
-Initialize a wallet for gameplay. Supports two modes:
-- **Direct key**: Pass `privateKey` only — use the key directly for all actions.
-- **Session key**: Pass `privateKey` + `ownerPrivateKey` — auto-registers a time-limited session key on `SessionKeyValidator`. The main wallet's private key is only used once to register, then the bot wallet handles all gameplay.
+Initialize a wallet for gameplay. Pass a private key to create a wallet that will sign all on-chain actions.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `privateKey` | string | Private key of the bot wallet (hex, with or without 0x) |
-| `ownerPrivateKey` | string? | (Session key mode) Main wallet's private key to register the session on-chain |
-| `duration` | number? | (Session key mode) Session duration in seconds (default 3600, max 7200) |
-| `maxUsage` | number? | (Session key mode) Max operations allowed (default 500, max 1000) |
-
-#### `register_session`
-Register a session key on `SessionKeyValidator` using a main wallet. The bot wallet must already be initialized via `init_session`.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `ownerPrivateKey` | string | Main wallet private key (the session owner) |
-| `duration` | number? | Session duration in seconds (default 3600, max 7200) |
-| `maxUsage` | number? | Max operations allowed (default 500, max 1000) |
 
 #### `check_session_status`
-Check session key validity, remaining time, and USDC balance.
+Check the current wallet's address, ETH balance, and USDC balance.
 
 No parameters required.
 
@@ -195,13 +181,7 @@ Run a bot directly from the command line, no MCP client needed:
 ```bash
 cd packages/mcp-adapter
 
-# Mode A: Direct private key
 PRIVATE_KEY=0x... ROOM_ID=1 ARENA_CONTRACT_ADDRESS=0x... npm run autoplay
-
-# Mode B: Session key (auto-registers on-chain)
-PRIVATE_KEY=0x<bot-key> OWNER_PRIVATE_KEY=0x<main-key> \
-  SESSION_CONTRACT_ADDRESS=0x... ROOM_ID=1 \
-  ARENA_CONTRACT_ADDRESS=0x... npm run autoplay
 ```
 
 ### Bot Environment Variables
@@ -213,10 +193,6 @@ PRIVATE_KEY=0x<bot-key> OWNER_PRIVATE_KEY=0x<main-key> \
 | `RPC_URL` | No | `http://127.0.0.1:8545` | JSON-RPC endpoint |
 | `ARENA_CONTRACT_ADDRESS` | Yes | — | TuringArena contract address |
 | `PAYMENT_TOKEN_ADDRESS` | No | — | USDC token contract address |
-| `OWNER_PRIVATE_KEY` | No | — | Main wallet key (enables session key mode) |
-| `SESSION_CONTRACT_ADDRESS` | No | — | SessionKeyValidator address (required for session key mode) |
-| `SESSION_DURATION` | No | `3600` | Session key duration in seconds (max 7200) |
-| `SESSION_MAX_USAGE` | No | `500` | Session key max operations (max 1000) |
 | `VOTE_STRATEGY` | No | `lowest_hp` | `lowest_hp`, `most_active`, or `random_alive` |
 | `CHAT_STRATEGY` | No | `phase_aware` | `phase_aware` or `silent` |
 | `CHAT_FREQUENCY` | No | `0.3` | 0-1, probability per tick |
@@ -233,7 +209,6 @@ PRIVATE_KEY=0x<bot-key> OWNER_PRIVATE_KEY=0x<main-key> \
 | `RPC_URL` | Yes | `http://127.0.0.1:8545` | JSON-RPC endpoint |
 | `ARENA_CONTRACT_ADDRESS` | Yes | — | TuringArena contract address |
 | `PAYMENT_TOKEN_ADDRESS` | No | Auto-detected | USDC token contract address |
-| `SESSION_CONTRACT_ADDRESS` | No | — | SessionKeyValidator contract address |
 
 ---
 

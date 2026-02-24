@@ -48,18 +48,17 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-24 — Game balance tuning (VOTE_DAMAGE 5→10, NO_VOTE_PENALTY 10→20, decay ×3, Quick baseInterval 150→100)
+> **Last updated**: 2026-02-24 — Remove dead code: TierConfig (minPlayers/maxPlayers/entryFee), Player.isVerifiedHuman, unused console import; make protocolTreasury immutable; fix MCP tool count 13→14, rename sessionWallet→playerWallet, deduplicate PHASE_NAME_MAP
 
 ### Current Status: Phase 8 (Complete) + USDC Migration + Custom Room Params + Leave/Cancel Room + Auto-Join + Narrative Flip + Anonymity + MCP Skills + Auto-Play + Game End UX + Balance Tuning
 
 | Module | Status | Notes |
 |--------|--------|-------|
 | Design Doc (IMPLEMENTATION_PLAN.md) | DONE | 12 sections, ~6800 lines |
-| TuringArena.sol | DONE | USDC ERC-20, custom maxPlayers & entryFee, leaveRoom/cancelRoom, auto-join, 2-player endgame, auto-settle on last vote, 36 tests passing |
+| TuringArena.sol | DONE | USDC ERC-20, custom maxPlayers & entryFee, leaveRoom/cancelRoom, auto-join, 2-player endgame, auto-settle on last vote, protocolTreasury immutable, 36 tests passing |
 | MockUSDC.sol | DONE | Test USDC mock with 6 decimals, public mint |
 | Deploy Script | DONE | DeployTuringArena.s.sol — deploys MockUSDC + TuringArena |
 | Contract Tests | DONE | 36 test cases, 100% pass (incl. custom room params + leave/cancel room + auto-join + auto-close) |
-| SessionKeyValidator.sol | DONE | Session key delegation for AI agents, now deployed via DeployTuringArena.s.sol |
 | Zustand gameStore | DONE | gameStore.ts with types and actions |
 | Cyberpunk CSS | DONE | globals.css with glitch text, cyber-grid-bg, tier/phase classes |
 | scaffold.config.ts | DONE | Foundry + Monad Testnet, env-based dev/prod config |
@@ -79,9 +78,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | VotingGraph | DONE | Canvas ring-layout network visualization |
 | DataStream | DONE | Real-time blockchain tx stream (NewMessage, VoteCast) |
 | PlayerIdentityCard | DONE | Modal with SVG humanity gauge, stats, vote button |
-| MCP Adapter | DONE | packages/mcp-adapter/ with 15 tools, auto-play game loop, dual-mode session (direct key + session key) |
+| MCP Adapter | DONE | packages/mcp-adapter/ with 14 tools, auto-play game loop, direct key session |
 | MCP Auto-Play | DONE | GameLoop class (lib/gameLoop.ts), vote strategies, chat pool, standalone bot (autoplay.ts) |
-| Skills Page | DONE | packages/nextjs/public/skills.md — 15 tools documented, standalone bot usage, linked from RoleSelector |
+| Skills Page | DONE | packages/nextjs/public/skills.md — 14 tools documented, standalone bot usage, linked from RoleSelector |
 | Player Alias Utility | DONE | utils/playerAlias.ts — deterministic codenames + colored avatars per room |
 | Narrative Flip | DONE | "Spot the AI" instead of "find humans" — landing page + HeroSection |
 | In-Game Anonymity | DONE | All 9 arena components use aliases during gameplay, real addresses revealed on game end |
@@ -102,7 +101,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 10. **P2 — 无 Sybil 防护**: 无准入机制 (future enhancement)
 11. ~~**P2 — 无房间取消/退款**: createRoom 后无法退出~~ (implemented: leaveRoom + _cancelRoom with full USDC refund)
 12. **P2 — withdrawUnclaimed 无时间限制**: Treasury 可随时提取任意金额，包括未领取的玩家奖励 (future enhancement)
-13. **P2 — TierConfig 遗留字段**: minPlayers/maxPlayers/entryFee 不再使用，仅浪费部署 gas (cleanup)
+13. ~~**P2 — TierConfig 遗留字段**: minPlayers/maxPlayers/entryFee 不再使用~~ (removed from struct and constructor)
 
 ---
 

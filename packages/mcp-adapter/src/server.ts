@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { ethers } from "ethers";
-import { ARENA_ABI, ERC20_ABI, SESSION_ABI } from "./lib/contracts.js";
+import { ARENA_ABI, ERC20_ABI } from "./lib/contracts.js";
 import { GameLoop } from "./lib/gameLoop.js";
 import { DEFAULT_CONFIG, PHASE_NAMES } from "./lib/types.js";
 import type { AutoPlayConfig, VoteStrategy, ChatStrategy } from "./lib/types.js";
@@ -16,15 +16,14 @@ const server = new McpServer({
 // RPC connection
 const provider = new ethers.JsonRpcProvider(process.env.RPC_URL || "http://127.0.0.1:8545");
 
-// Session Key wallet (initialized via init_session tool)
-let sessionWallet: ethers.Wallet | null = null;
+// Player wallet (initialized via init_session tool)
+let playerWallet: ethers.Wallet | null = null;
 
 // Active game loop (one at a time)
 let activeGameLoop: GameLoop | null = null;
 
 // Contract addresses
 const ARENA_CONTRACT = process.env.ARENA_CONTRACT_ADDRESS || "";
-const SESSION_CONTRACT = process.env.SESSION_CONTRACT_ADDRESS || "";
 const PAYMENT_TOKEN = process.env.PAYMENT_TOKEN_ADDRESS || "";
 
 // ============ Tool 1: Get Arena Status ============
@@ -116,7 +115,7 @@ server.tool(
     target: z.string().optional().describe("Vote target address (required for VOTE)"),
   },
   async ({ type, roomId, content, target }) => {
-    if (!sessionWallet) {
+    if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session Key not initialized. Use init_session first." }],
         isError: true,
@@ -124,7 +123,7 @@ server.tool(
     }
 
     try {
-      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, sessionWallet);
+      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
 
       let tx: ethers.TransactionResponse;
 
@@ -147,10 +146,10 @@ server.tool(
 
           // Resolve payment token address
           const tokenAddr = PAYMENT_TOKEN || (await contract.paymentToken());
-          const token = new ethers.Contract(tokenAddr, ERC20_ABI, sessionWallet);
+          const token = new ethers.Contract(tokenAddr, ERC20_ABI, playerWallet);
 
           // Check allowance and approve if needed
-          const allowance = await token.allowance(sessionWallet.address, ARENA_CONTRACT);
+          const allowance = await token.allowance(playerWallet.address, ARENA_CONTRACT);
           if (allowance < entryFee) {
             const approveTx = await token.approve(ARENA_CONTRACT, entryFee);
             await approveTx.wait();
@@ -180,52 +179,41 @@ server.tool(
   },
 );
 
-// ============ Tool 3: Check Session Key Status ============
+// ============ Tool 3: Check Session Status ============
 server.tool(
   "check_session_status",
-  "Check the current Session Key's remaining time, usage count, and validity. Use this to verify your session is still active before taking actions.",
+  "Check the current wallet's address and USDC balance. Use this to verify your session is active before taking actions.",
   {},
   async () => {
-    if (!sessionWallet) {
+    if (!playerWallet) {
       return {
-        content: [{ type: "text" as const, text: "Session Key not initialized. Use init_session first." }],
+        content: [{ type: "text" as const, text: "Session wallet not initialized. Use init_session first." }],
         isError: true,
       };
     }
 
     try {
-      const sessionResult: Record<string, unknown> = {
-        sessionKey: sessionWallet.address,
+      const result: Record<string, unknown> = {
+        address: playerWallet.address,
       };
 
-      // Check session key contract if configured
-      if (SESSION_CONTRACT) {
-        const contract = new ethers.Contract(SESSION_CONTRACT, SESSION_ABI, provider);
-        const [remaining, session] = await Promise.all([
-          contract.getSessionRemainingTime(sessionWallet.address),
-          contract.sessions(sessionWallet.address),
-        ]);
-
-        sessionResult.remainingSeconds = Number(remaining);
-        sessionResult.remainingMinutes = Math.floor(Number(remaining) / 60);
-        sessionResult.usageCount = Number(session.usageCount);
-        sessionResult.maxUsage = Number(session.maxUsage);
-        sessionResult.isValid = Number(remaining) > 0 && !session.isRevoked;
-      }
+      // Check ETH balance
+      const ethBalance = await provider.getBalance(playerWallet.address);
+      result.ethBalance = ethers.formatEther(ethBalance);
 
       // Check USDC balance
       const tokenAddr = PAYMENT_TOKEN || (ARENA_CONTRACT ? await new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, provider).paymentToken() : null);
       if (tokenAddr) {
         const token = new ethers.Contract(tokenAddr, ERC20_ABI, provider);
-        const balance = await token.balanceOf(sessionWallet.address);
-        sessionResult.usdcBalance = ethers.formatUnits(balance, 6);
+        const balance = await token.balanceOf(playerWallet.address);
+        result.usdcBalance = ethers.formatUnits(balance, 6);
       }
 
       return {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(sessionResult, null, 2),
+            text: JSON.stringify(result, null, 2),
           },
         ],
       };
@@ -241,106 +229,20 @@ server.tool(
 // ============ Tool 4: Initialize Session ============
 server.tool(
   "init_session",
-  "Initialize a wallet for gameplay. Two modes: (A) Direct private key — pass privateKey only. (B) Session key — pass privateKey of the bot wallet + ownerPrivateKey of the main wallet to auto-register a time-limited session key on SessionKeyValidator. Mode B keeps the main wallet's private key safe.",
+  "Initialize a wallet for gameplay. Pass a private key to create a wallet that will sign all on-chain actions (chat, vote, join, etc.).",
   {
     privateKey: z.string().describe("Private key of the wallet to use for gameplay (hex, with or without 0x)"),
-    ownerPrivateKey: z.string().optional().describe("(Session key mode) Private key of the main wallet that will register the session key on-chain. If provided, creates a time-limited session via SessionKeyValidator."),
-    duration: z.number().optional().describe("(Session key mode) Session duration in seconds (default 3600, max 7200)"),
-    maxUsage: z.number().optional().describe("(Session key mode) Maximum operations allowed (default 500, max 1000)"),
   },
-  async ({ privateKey, ownerPrivateKey, duration, maxUsage }) => {
+  async ({ privateKey }) => {
     try {
-      sessionWallet = new ethers.Wallet(privateKey, provider);
-      const balance = await provider.getBalance(sessionWallet.address);
-      const lines: string[] = [
-        `Wallet initialized!`,
-        `Address: ${sessionWallet.address}`,
-        `ETH Balance: ${ethers.formatEther(balance)}`,
-      ];
-
-      // Mode B: register session key on-chain
-      if (ownerPrivateKey && SESSION_CONTRACT) {
-        const ownerWallet = new ethers.Wallet(ownerPrivateKey, provider);
-        const sessionContract = new ethers.Contract(SESSION_CONTRACT, SESSION_ABI, ownerWallet);
-
-        const dur = Math.min(duration ?? 3600, 7200);
-        const usage = Math.min(maxUsage ?? 500, 1000);
-
-        const tx = await sessionContract.createSession(sessionWallet.address, dur, usage);
-        await tx.wait();
-
-        lines.push(
-          ``,
-          `Session key registered on-chain!`,
-          `Owner: ${ownerWallet.address}`,
-          `Duration: ${dur}s, Max usage: ${usage}`,
-          `SessionKeyValidator: ${SESSION_CONTRACT}`,
-          `Tx: ${tx.hash}`,
-        );
-      } else if (ownerPrivateKey && !SESSION_CONTRACT) {
-        lines.push(
-          ``,
-          `Warning: ownerPrivateKey provided but SESSION_CONTRACT_ADDRESS not configured.`,
-          `Session key NOT registered. Using direct private key mode.`,
-        );
-      } else {
-        lines.push(``, `Mode: direct private key (no session key delegation)`);
-      }
-
-      return {
-        content: [{ type: "text" as const, text: lines.join("\n") }],
-      };
-    } catch (error) {
-      return {
-        content: [{ type: "text" as const, text: `Error: ${error}` }],
-        isError: true,
-      };
-    }
-  },
-);
-
-// ============ Tool 5: Register Session Key ============
-server.tool(
-  "register_session",
-  "Register a session key on SessionKeyValidator using the main wallet. The session key (bot wallet) must already be initialized via init_session. This allows the main wallet owner to delegate limited gameplay authority.",
-  {
-    ownerPrivateKey: z.string().describe("Private key of the main wallet (the session owner)"),
-    duration: z.number().optional().describe("Session duration in seconds (default 3600, max 7200)"),
-    maxUsage: z.number().optional().describe("Maximum operations allowed (default 500, max 1000)"),
-  },
-  async ({ ownerPrivateKey, duration, maxUsage }) => {
-    if (!sessionWallet) {
-      return {
-        content: [{ type: "text" as const, text: "Error: Session wallet not initialized. Use init_session first." }],
-        isError: true,
-      };
-    }
-    if (!SESSION_CONTRACT) {
-      return {
-        content: [{ type: "text" as const, text: "Error: SESSION_CONTRACT_ADDRESS not configured." }],
-        isError: true,
-      };
-    }
-
-    try {
-      const ownerWallet = new ethers.Wallet(ownerPrivateKey, provider);
-      const sessionContract = new ethers.Contract(SESSION_CONTRACT, SESSION_ABI, ownerWallet);
-
-      const dur = Math.min(duration ?? 3600, 7200);
-      const usage = Math.min(maxUsage ?? 500, 1000);
-
-      const tx = await sessionContract.createSession(sessionWallet.address, dur, usage);
-      await tx.wait();
+      playerWallet = new ethers.Wallet(privateKey, provider);
+      const balance = await provider.getBalance(playerWallet.address);
 
       return {
         content: [
           {
             type: "text" as const,
-            text: `Session key registered!\n` +
-              `Session key: ${sessionWallet.address}\n` +
-              `Owner: ${ownerWallet.address}\n` +
-              `Duration: ${dur}s, Max usage: ${usage}\n` +
-              `Tx: ${tx.hash}`,
+            text: `Wallet initialized!\nAddress: ${playerWallet.address}\nETH Balance: ${ethers.formatEther(balance)}`,
           },
         ],
       };
@@ -353,7 +255,7 @@ server.tool(
   },
 );
 
-// ============ Tool 6: Settle Round ============
+// ============ Tool 5: Settle Round ============
 server.tool(
   "settle_round",
   "Advance the game by settling the current round. Anyone can call this once enough blocks have passed. Triggers elimination of the player with the most votes.",
@@ -361,7 +263,7 @@ server.tool(
     roomId: z.string().describe("Room ID number"),
   },
   async ({ roomId }) => {
-    if (!sessionWallet) {
+    if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
         isError: true,
@@ -369,7 +271,7 @@ server.tool(
     }
 
     try {
-      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, sessionWallet);
+      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
       const tx = await contract.settleRound(roomId);
       await tx.wait();
 
@@ -391,7 +293,7 @@ server.tool(
   },
 );
 
-// ============ Tool 7: Start Game ============
+// ============ Tool 6: Start Game ============
 server.tool(
   "start_game",
   "Start a game that's in the Waiting phase. Only the room creator can call this, and at least 3 players must have joined.",
@@ -399,7 +301,7 @@ server.tool(
     roomId: z.string().describe("Room ID number"),
   },
   async ({ roomId }) => {
-    if (!sessionWallet) {
+    if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
         isError: true,
@@ -407,7 +309,7 @@ server.tool(
     }
 
     try {
-      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, sessionWallet);
+      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
       const tx = await contract.startGame(roomId);
       await tx.wait();
 
@@ -428,7 +330,7 @@ server.tool(
   },
 );
 
-// ============ Tool 8: Claim Reward ============
+// ============ Tool 7: Claim Reward ============
 server.tool(
   "claim_reward",
   "Claim your USDC reward after a game ends. Returns the reward amount and transaction hash.",
@@ -436,7 +338,7 @@ server.tool(
     roomId: z.string().describe("Room ID number"),
   },
   async ({ roomId }) => {
-    if (!sessionWallet) {
+    if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
         isError: true,
@@ -444,10 +346,10 @@ server.tool(
     }
 
     try {
-      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, sessionWallet);
+      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
 
       // Check reward first
-      const [amount, claimed] = await contract.getRewardInfo(roomId, sessionWallet.address);
+      const [amount, claimed] = await contract.getRewardInfo(roomId, playerWallet.address);
 
       if (claimed) {
         return {
@@ -481,7 +383,7 @@ server.tool(
   },
 );
 
-// ============ Tool 9: Get Round Status ============
+// ============ Tool 8: Get Round Status ============
 server.tool(
   "get_round_status",
   "Get detailed round information: current round number, whether you've voted, and how many blocks until the round can be settled.",
@@ -517,13 +419,13 @@ server.tool(
       }
 
       // Check if session wallet has voted
-      if (sessionWallet) {
-        const hasVoted = await contract.hasVotedInRound(roomId, round, sessionWallet.address);
+      if (playerWallet) {
+        const hasVoted = await contract.hasVotedInRound(roomId, round, playerWallet.address);
         result.hasVoted = hasVoted;
 
         // Check reward info if game ended
         if (Number(roomInfo.phase) === 4) {
-          const [amount, claimed] = await contract.getRewardInfo(roomId, sessionWallet.address);
+          const [amount, claimed] = await contract.getRewardInfo(roomId, playerWallet.address);
           result.rewardAmount = ethers.formatUnits(amount, 6) + " USDC";
           result.rewardClaimed = claimed;
         }
@@ -546,7 +448,7 @@ server.tool(
   },
 );
 
-// ============ Tool 10: Auto-Play (Start Background Loop) ============
+// ============ Tool 9: Auto-Play (Start Background Loop) ============
 server.tool(
   "auto_play",
   "Start an autonomous background game loop that votes, chats, settles rounds, and claims rewards automatically. Returns immediately — use get_auto_play_status to monitor progress.",
@@ -564,7 +466,7 @@ server.tool(
       .describe("Tick interval in ms (default 5000)"),
   },
   async ({ roomId, voteStrategy, chatStrategy, chatFrequency, settleEnabled, pollIntervalMs }) => {
-    if (!sessionWallet) {
+    if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
         isError: true,
@@ -586,7 +488,7 @@ server.tool(
       maxRounds: DEFAULT_CONFIG.maxRounds,
     };
 
-    activeGameLoop = new GameLoop(config, sessionWallet, ARENA_CONTRACT);
+    activeGameLoop = new GameLoop(config, playerWallet, ARENA_CONTRACT);
     activeGameLoop.start();
 
     return {
@@ -604,7 +506,7 @@ server.tool(
   },
 );
 
-// ============ Tool 11: Stop Auto-Play ============
+// ============ Tool 10: Stop Auto-Play ============
 server.tool(
   "stop_auto_play",
   "Stop the running auto-play game loop and return final stats.",
@@ -630,7 +532,7 @@ server.tool(
   },
 );
 
-// ============ Tool 12: Get Auto-Play Status ============
+// ============ Tool 11: Get Auto-Play Status ============
 server.tool(
   "get_auto_play_status",
   "Check the current auto-play loop progress: round, HP, votes cast, messages sent, errors.",
@@ -655,7 +557,7 @@ server.tool(
   },
 );
 
-// ============ Tool 13: Create Room ============
+// ============ Tool 12: Create Room ============
 server.tool(
   "create_room",
   "Create a new game room. You become the room creator and are auto-joined (entry fee is charged). Tier controls game pacing: Quick (0) = fast rounds, Standard (1) = balanced, Epic (2) = long games. Returns the new room ID.",
@@ -665,7 +567,7 @@ server.tool(
     entryFee: z.number().min(1).max(100).describe("Entry fee in USDC (1-100)"),
   },
   async ({ tier, maxPlayers, entryFee }) => {
-    if (!sessionWallet) {
+    if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
         isError: true,
@@ -673,13 +575,13 @@ server.tool(
     }
 
     try {
-      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, sessionWallet);
+      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
       const feeWei = BigInt(entryFee) * 1_000_000n; // USDC has 6 decimals
 
       // Approve USDC for entry fee (creator is auto-joined)
       const tokenAddr = PAYMENT_TOKEN || (await contract.paymentToken());
-      const token = new ethers.Contract(tokenAddr, ERC20_ABI, sessionWallet);
-      const allowance = await token.allowance(sessionWallet.address, ARENA_CONTRACT);
+      const token = new ethers.Contract(tokenAddr, ERC20_ABI, playerWallet);
+      const allowance = await token.allowance(playerWallet.address, ARENA_CONTRACT);
       if (allowance < feeWei) {
         const approveTx = await token.approve(ARENA_CONTRACT, feeWei);
         await approveTx.wait();
@@ -722,7 +624,7 @@ server.tool(
   },
 );
 
-// ============ Tool 14: Leave Room ============
+// ============ Tool 13: Leave Room ============
 server.tool(
   "leave_room",
   "Leave a room that hasn't started yet (Waiting phase only). If you're the creator, all players are refunded and the room is cancelled. Entry fee is refunded in USDC.",
@@ -730,7 +632,7 @@ server.tool(
     roomId: z.string().describe("Room ID number"),
   },
   async ({ roomId }) => {
-    if (!sessionWallet) {
+    if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
         isError: true,
@@ -738,9 +640,9 @@ server.tool(
     }
 
     try {
-      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, sessionWallet);
+      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
       const roomInfo = await contract.getRoomInfo(roomId);
-      const isCreator = roomInfo.creator.toLowerCase() === sessionWallet.address.toLowerCase();
+      const isCreator = roomInfo.creator.toLowerCase() === playerWallet.address.toLowerCase();
 
       const tx = await contract.leaveRoom(roomId);
       await tx.wait();
@@ -761,7 +663,7 @@ server.tool(
   },
 );
 
-// ============ Tool 15: Mint Test USDC ============
+// ============ Tool 14: Mint Test USDC ============
 server.tool(
   "mint_test_usdc",
   "Mint test USDC to your wallet (only works on local Anvil or testnets with MockUSDC). For funding your bot before joining games.",
@@ -769,7 +671,7 @@ server.tool(
     amount: z.number().min(1).max(100000).describe("Amount of USDC to mint (e.g. 1000)"),
   },
   async ({ amount }) => {
-    if (!sessionWallet) {
+    if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
         isError: true,
@@ -778,19 +680,19 @@ server.tool(
 
     try {
       const tokenAddr = PAYMENT_TOKEN || (await new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, provider).paymentToken());
-      const token = new ethers.Contract(tokenAddr, ERC20_ABI, sessionWallet);
+      const token = new ethers.Contract(tokenAddr, ERC20_ABI, playerWallet);
 
       const amountWei = BigInt(amount) * 1_000_000n; // 6 decimals
-      const tx = await token.mint(sessionWallet.address, amountWei);
+      const tx = await token.mint(playerWallet.address, amountWei);
       await tx.wait();
 
-      const balance = await token.balanceOf(sessionWallet.address);
+      const balance = await token.balanceOf(playerWallet.address);
 
       return {
         content: [
           {
             type: "text" as const,
-            text: `Minted ${amount} USDC to ${sessionWallet.address}\n` +
+            text: `Minted ${amount} USDC to ${playerWallet.address}\n` +
               `New balance: ${ethers.formatUnits(balance, 6)} USDC\nTx: ${tx.hash}`,
           },
         ],
@@ -815,7 +717,7 @@ server.tool(
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("RTTA Arena MCP Server running (15 tools available)...");
+  console.error("RTTA Arena MCP Server running (14 tools available)...");
 }
 
 main().catch(console.error);

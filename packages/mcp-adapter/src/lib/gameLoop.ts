@@ -1,9 +1,8 @@
 import { ethers } from "ethers";
 import { getArenaContract } from "./contracts.js";
 import { pickVoteTarget, pickChatMessage, randomDelay, sleep } from "./strategies.js";
+import { PHASE_NAMES } from "./types.js";
 import type { AutoPlayConfig, AutoPlayStatus, PlayerState, RoomState } from "./types.js";
-
-const PHASE_NAME_MAP = ["Waiting", "Phase1", "Phase2", "Phase3", "Ended"] as const;
 
 export class GameLoop {
   private config: AutoPlayConfig;
@@ -143,7 +142,7 @@ export class GameLoop {
         myAddr,
       );
       if (!hasVoted) {
-        await this.tryVote(contract, players, myAddr, room.phase);
+        await this.tryVote(contract, players, myAddr);
       }
 
       // 8. Maybe send a chat message
@@ -175,7 +174,6 @@ export class GameLoop {
     contract: ethers.Contract,
     players: PlayerState[],
     myAddr: string,
-    _phase: number,
   ): Promise<void> {
     const target = pickVoteTarget(players, myAddr, this.config.voteStrategy);
     if (!target) return;
@@ -268,7 +266,7 @@ export class GameLoop {
     return {
       id: info.id.toString(),
       phase: Number(info.phase),
-      phaseName: PHASE_NAME_MAP[Number(info.phase)] ?? "Unknown",
+      phaseName: PHASE_NAMES[Number(info.phase)] ?? "Unknown",
       entryFee: info.entryFee,
       prizePool: info.prizePool,
       maxPlayers: Number(info.maxPlayers),

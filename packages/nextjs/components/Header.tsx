@@ -94,7 +94,7 @@ export const Header = () => {
           <HeaderMenuLinks />
         </ul>
       </div>
-      <div className="navbar-end grow mr-4">
+      <div className="navbar-end grow mr-4 gap-2">
         <RainbowKitCustomConnectButton />
         {isLocalNetwork && isConnected && <FaucetButton />}
       </div>

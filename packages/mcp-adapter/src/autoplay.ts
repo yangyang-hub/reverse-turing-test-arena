@@ -1,19 +1,15 @@
 import { ethers } from "ethers";
 import { GameLoop } from "./lib/gameLoop.js";
-import { getArenaContract, getTokenContract, getSessionContract } from "./lib/contracts.js";
+import { getArenaContract, getTokenContract } from "./lib/contracts.js";
 import { DEFAULT_CONFIG } from "./lib/types.js";
 import type { AutoPlayConfig, VoteStrategy, ChatStrategy } from "./lib/types.js";
 
 // ===== Configuration from env vars =====
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
-const OWNER_PRIVATE_KEY = process.env.OWNER_PRIVATE_KEY; // optional: session key mode
 const ROOM_ID = process.env.ROOM_ID;
 const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8545";
 const ARENA_CONTRACT_ADDRESS = process.env.ARENA_CONTRACT_ADDRESS || "";
 const PAYMENT_TOKEN_ADDRESS = process.env.PAYMENT_TOKEN_ADDRESS || "";
-const SESSION_CONTRACT_ADDRESS = process.env.SESSION_CONTRACT_ADDRESS || "";
-const SESSION_DURATION = Number(process.env.SESSION_DURATION) || 3600;
-const SESSION_MAX_USAGE = Number(process.env.SESSION_MAX_USAGE) || 500;
 
 if (!PRIVATE_KEY) {
   console.error("Error: PRIVATE_KEY env var is required (bot wallet)");
@@ -49,33 +45,7 @@ async function main() {
   console.error(`RPC:      ${RPC_URL}`);
   console.error(`Strategy: vote=${config.voteStrategy}, chat=${config.chatStrategy}`);
   console.error(`Interval: ${config.pollIntervalMs}ms, settle: ${config.settleEnabled}`);
-
-  // Session key mode: register on-chain
-  if (OWNER_PRIVATE_KEY && SESSION_CONTRACT_ADDRESS) {
-    console.error("");
-    console.error("--- Session Key Mode ---");
-    const ownerWallet = new ethers.Wallet(OWNER_PRIVATE_KEY, provider);
-    const sessionContract = getSessionContract(SESSION_CONTRACT_ADDRESS, ownerWallet);
-
-    // Check if already registered
-    const existing = await sessionContract.sessions(wallet.address);
-    if (existing.owner === ethers.ZeroAddress) {
-      const dur = Math.min(SESSION_DURATION, 7200);
-      const usage = Math.min(SESSION_MAX_USAGE, 1000);
-      console.error(`Registering session key: duration=${dur}s, maxUsage=${usage}`);
-      const tx = await sessionContract.createSession(wallet.address, dur, usage);
-      await tx.wait();
-      console.error(`Session registered! Owner: ${ownerWallet.address}, Tx: ${tx.hash}`);
-    } else {
-      const remaining = await sessionContract.getSessionRemainingTime(wallet.address);
-      console.error(`Session already exists. Owner: ${existing.owner}, remaining: ${remaining}s, usage: ${existing.usageCount}/${existing.maxUsage}`);
-    }
-  } else if (OWNER_PRIVATE_KEY && !SESSION_CONTRACT_ADDRESS) {
-    console.error("\nWarning: OWNER_PRIVATE_KEY set but SESSION_CONTRACT_ADDRESS missing. Using direct key mode.");
-  } else {
-    console.error("\nMode: direct private key");
-  }
-
+  console.error(`\nMode: direct private key`);
   console.error("");
 
   // Check balances

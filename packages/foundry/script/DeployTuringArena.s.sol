@@ -4,7 +4,6 @@ pragma solidity ^0.8.19;
 import "./DeployHelpers.s.sol";
 import "../contracts/TuringArena.sol";
 import "../contracts/mocks/MockUSDC.sol";
-import "../contracts/security/SessionKeyValidator.sol";
 
 contract DeployTuringArena is ScaffoldETHDeploy {
     function run() external ScaffoldEthDeployerRunner {
@@ -13,9 +12,6 @@ contract DeployTuringArena is ScaffoldETHDeploy {
 
         // Deploy TuringArena with deployer as treasury and USDC as payment token
         TuringArena arena = new TuringArena(deployer, address(usdc));
-
-        // Deploy SessionKeyValidator
-        SessionKeyValidator sessionValidator = new SessionKeyValidator();
 
         // On local Anvil (chainId 31337), mint USDC to test accounts
         if (block.chainid == 31337) {
@@ -34,6 +30,5 @@ contract DeployTuringArena is ScaffoldETHDeploy {
 
         // Suppress unused variable warnings
         arena;
-        sessionValidator;
     }
 }

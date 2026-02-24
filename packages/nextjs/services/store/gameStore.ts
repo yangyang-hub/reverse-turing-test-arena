@@ -23,7 +23,6 @@ export type Player = {
   addr: string;
   humanityScore: number;
   isAlive: boolean;
-  isVerifiedHuman: boolean;
   eliminationRank: number;
   successfulVotes: number;
 };

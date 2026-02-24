@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   31337: {
     MockUSDC: {
-      address: "0x700b6a60ce7eaaea56f065753d8dcb9653dbad35",
+      address: "0x5d1ce2a19aa885765abcef89b7590e213422a8b9",
       abi: [
         {
           type: "constructor",
@@ -342,10 +342,10 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 18,
+      deployedOnBlock: 10132,
     },
     TuringArena: {
-      address: "0xa15bb66138824a1c7167f5e85b957d04dd34e468",
+      address: "0xd3497ab25da369b3ee5a239890348ea542b0f479",
       abi: [
         {
           type: "constructor",
@@ -809,11 +809,6 @@ const deployedContracts = {
                   internalType: "bool",
                 },
                 {
-                  name: "isVerifiedHuman",
-                  type: "bool",
-                  internalType: "bool",
-                },
-                {
                   name: "joinBlock",
                   type: "uint256",
                   internalType: "uint256",
@@ -1114,11 +1109,6 @@ const deployedContracts = {
               internalType: "bool",
             },
             {
-              name: "isVerifiedHuman",
-              type: "bool",
-              internalType: "bool",
-            },
-            {
               name: "joinBlock",
               type: "uint256",
               internalType: "uint256",
@@ -1377,22 +1367,7 @@ const deployedContracts = {
           ],
           outputs: [
             {
-              name: "minPlayers",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "maxPlayers",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
               name: "baseInterval",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "entryFee",
               type: "uint256",
               internalType: "uint256",
             },
@@ -1805,203 +1780,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 18,
-    },
-    SessionKeyValidator: {
-      address: "0xb19b36b1456e65e3a6d514d3f715f204bd59f431",
-      abi: [
-        {
-          type: "function",
-          name: "createSession",
-          inputs: [
-            {
-              name: "_sessionKey",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "_duration",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "_maxUsage",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          outputs: [],
-          stateMutability: "nonpayable",
-        },
-        {
-          type: "function",
-          name: "getSessionOwner",
-          inputs: [
-            {
-              name: "_sessionKey",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "getSessionRemainingTime",
-          inputs: [
-            {
-              name: "_sessionKey",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "isSessionValid",
-          inputs: [
-            {
-              name: "_sessionKey",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "bool",
-              internalType: "bool",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "revokeSession",
-          inputs: [
-            {
-              name: "_sessionKey",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [],
-          stateMutability: "nonpayable",
-        },
-        {
-          type: "function",
-          name: "sessions",
-          inputs: [
-            {
-              name: "",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [
-            {
-              name: "owner",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "expiresAt",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "maxUsage",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "usageCount",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "isRevoked",
-              type: "bool",
-              internalType: "bool",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "event",
-          name: "SessionCreated",
-          inputs: [
-            {
-              name: "sessionKey",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "owner",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "expiresAt",
-              type: "uint256",
-              indexed: false,
-              internalType: "uint256",
-            },
-          ],
-          anonymous: false,
-        },
-        {
-          type: "event",
-          name: "SessionRevoked",
-          inputs: [
-            {
-              name: "sessionKey",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-          ],
-          anonymous: false,
-        },
-        {
-          type: "event",
-          name: "SessionUsed",
-          inputs: [
-            {
-              name: "sessionKey",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "usageCount",
-              type: "uint256",
-              indexed: false,
-              internalType: "uint256",
-            },
-          ],
-          anonymous: false,
-        },
-      ],
-      inheritedFunctions: {},
-      deployedOnBlock: 18,
+      deployedOnBlock: 10132,
     },
   },
 } as const;
