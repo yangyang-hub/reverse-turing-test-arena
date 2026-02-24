@@ -2,6 +2,7 @@ import { connectorsForWallets } from "@rainbow-me/rainbowkit";
 import {
   ledgerWallet,
   metaMaskWallet,
+  okxWallet,
   rainbowWallet,
   safeWallet,
   walletConnectWallet,
@@ -14,6 +15,7 @@ const { onlyLocalBurnerWallet, targetNetworks } = scaffoldConfig;
 
 const wallets = [
   metaMaskWallet,
+  okxWallet,
   walletConnectWallet,
   ledgerWallet,
   rainbowWallet,

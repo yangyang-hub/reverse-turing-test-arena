@@ -38,14 +38,20 @@ export const monadTestnet = defineChain({
 
 const isDev = process.env.NEXT_PUBLIC_NETWORK_ENV !== "production";
 
-const devNetworks = [chains.foundry, monadTestnet] as const;
+const devNetworks = [chains.foundry] as const;
 const prodNetworks = [monadTestnet] as const;
+
+// Allow LAN devices to reach Anvil via NEXT_PUBLIC_ANVIL_RPC_URL (e.g. http://192.168.31.5:8545)
+const rpcOverrides: Record<number, string> = {};
+if (isDev && process.env.NEXT_PUBLIC_ANVIL_RPC_URL) {
+  rpcOverrides[chains.foundry.id] = process.env.NEXT_PUBLIC_ANVIL_RPC_URL;
+}
 
 const scaffoldConfig = {
   targetNetworks: isDev ? devNetworks : prodNetworks,
   pollingInterval: isDev ? 1000 : 3000,
   alchemyApiKey: process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || DEFAULT_ALCHEMY_API_KEY,
-  rpcOverrides: {},
+  rpcOverrides,
   walletConnectProjectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || "3a8170812b534d0ff9d794f19a901d64",
   onlyLocalBurnerWallet: isDev,
 } as const satisfies ScaffoldConfig;

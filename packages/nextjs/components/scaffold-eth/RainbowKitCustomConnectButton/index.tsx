@@ -4,7 +4,6 @@
 import { AddressInfoDropdown } from "./AddressInfoDropdown";
 import { AddressQRCodeModal } from "./AddressQRCodeModal";
 import { RevealBurnerPKModal } from "./RevealBurnerPKModal";
-import { WrongNetworkDropdown } from "./WrongNetworkDropdown";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Balance } from "@scaffold-ui/components";
 import { Address } from "viem";
@@ -38,10 +37,6 @@ export const RainbowKitCustomConnectButton = () => {
                 );
               }
 
-              if (chain.unsupported || chain.id !== targetNetwork.id) {
-                return <WrongNetworkDropdown />;
-              }
-
               return (
                 <>
                   <div className="flex flex-col items-center mr-2">
@@ -54,7 +49,7 @@ export const RainbowKitCustomConnectButton = () => {
                       }}
                     />
                     <span className="text-xs" style={{ color: networkColor }}>
-                      {chain.name}
+                      {targetNetwork.name}
                     </span>
                   </div>
                   <AddressInfoDropdown
