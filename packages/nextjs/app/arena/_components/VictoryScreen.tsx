@@ -1,27 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Address } from "@scaffold-ui/components";
 import { motion } from "framer-motion";
 import { formatUnits } from "viem";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
-import { useGameStore } from "~~/services/store/gameStore";
 import { getPlayerAlias } from "~~/utils/playerAlias";
 
 export const VictoryScreen = ({
   roomId,
   champion,
-  rewardAmount,
+  myRewardAmount,
+  myRewardClaimed,
   onDismiss,
 }: {
   roomId: bigint;
   champion: string;
-  rewardAmount: bigint;
+  myRewardAmount: bigint;
+  myRewardClaimed: boolean;
   onDismiss: () => void;
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const myPlayer = useGameStore(s => s.myPlayer);
-  const isChampion = myPlayer?.addr.toLowerCase() === champion.toLowerCase();
+  const [justClaimed, setJustClaimed] = useState(false);
+  const hasReward = myRewardAmount > 0n && !myRewardClaimed && !justClaimed;
 
   const { writeContractAsync, isPending } = useScaffoldWriteContract("TuringArena");
 
@@ -94,6 +95,7 @@ export const VictoryScreen = ({
         functionName: "claimReward",
         args: [roomId],
       });
+      setJustClaimed(true);
     } catch (err) {
       console.error("Claim failed:", err);
     }
@@ -120,9 +122,7 @@ export const VictoryScreen = ({
           </span>
         </motion.div>
 
-        <div className="text-yellow-400 font-mono text-lg tracking-[0.3em] mb-2">
-          {isChampion ? "YOU ARE THE" : "THE CHAMPION IS"}
-        </div>
+        <div className="text-yellow-400 font-mono text-lg tracking-[0.3em] mb-2">THE CHAMPION IS</div>
 
         <div className="text-4xl md:text-6xl font-mono font-black text-white mb-4 neon-text-gold">CHAMPION</div>
 
@@ -142,20 +142,18 @@ export const VictoryScreen = ({
           <Address address={champion as `0x${string}`} />
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 mb-8 max-w-sm mx-auto">
-          <div className="bg-gray-900/50 border border-gray-800 rounded p-3">
-            <div className="text-gray-500 font-mono text-xs">REWARD</div>
-            <div className="text-green-400 font-mono text-lg">{formatUnits(rewardAmount, 6)} USDC</div>
+        {/* My reward info */}
+        {myRewardAmount > 0n && (
+          <div className="mb-8 max-w-sm mx-auto">
+            <div className="bg-gray-900/50 border border-gray-800 rounded p-3 text-center">
+              <div className="text-gray-500 font-mono text-xs">YOUR REWARD</div>
+              <div className="text-green-400 font-mono text-lg">{formatUnits(myRewardAmount, 6)} USDC</div>
+            </div>
           </div>
-          <div className="bg-gray-900/50 border border-gray-800 rounded p-3">
-            <div className="text-gray-500 font-mono text-xs">HUMANITY</div>
-            <div className="text-cyan-400 font-mono text-lg">{myPlayer?.humanityScore ?? "--"}</div>
-          </div>
-        </div>
+        )}
 
-        {/* Claim button (champion only) */}
-        {isChampion && (
+        {/* Claim button (any player with unclaimed rewards) */}
+        {hasReward && (
           <motion.button
             onClick={handleClaim}
             disabled={isPending}
@@ -165,6 +163,9 @@ export const VictoryScreen = ({
           >
             {isPending ? "CLAIMING..." : "CLAIM REWARD"}
           </motion.button>
+        )}
+        {(myRewardClaimed || justClaimed) && myRewardAmount > 0n && (
+          <div className="text-green-400 font-mono text-sm">REWARD CLAIMED</div>
         )}
 
         {/* Dismiss */}

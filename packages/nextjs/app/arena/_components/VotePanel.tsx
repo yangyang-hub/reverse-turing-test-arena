@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { useAccount } from "wagmi";
+import { useAccount, useBlockNumber } from "wagmi";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { getAliasName, getPlayerAlias } from "~~/utils/playerAlias";
 
@@ -47,8 +47,28 @@ export function VotePanel({ roomId }: { roomId: bigint }) {
     contractName: "TuringArena",
   });
 
+  const { data: blockNumber } = useBlockNumber({ watch: true });
+
   const phase = roomInfo && typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
   const isGameActive = phase >= 1 && phase <= 3;
+
+  // Round countdown
+  const lastSettleBlock =
+    roomInfo && typeof roomInfo === "object" && "lastSettleBlock" in roomInfo
+      ? Number((roomInfo as any).lastSettleBlock)
+      : 0;
+  const currentInterval =
+    roomInfo && typeof roomInfo === "object" && "currentInterval" in roomInfo
+      ? Number((roomInfo as any).currentInterval)
+      : 0;
+  const currentBlock = blockNumber ? Number(blockNumber) : 0;
+  const settleTargetBlock = lastSettleBlock + currentInterval;
+  const blocksRemaining =
+    isGameActive && currentBlock > 0 && lastSettleBlock > 0 ? Math.max(0, settleTargetBlock - currentBlock) : 0;
+  const progress =
+    isGameActive && currentInterval > 0 ? Math.min(1, Math.max(0, 1 - blocksRemaining / currentInterval)) : 0;
+  const isUrgent = isGameActive && blocksRemaining > 0 && blocksRemaining <= Math.ceil(currentInterval * 0.25);
+  const isExpired = isGameActive && currentBlock > 0 && currentBlock >= settleTargetBlock && lastSettleBlock > 0;
   const isMyPlayerAlive =
     myPlayerInfo && typeof myPlayerInfo === "object" && "isAlive" in myPlayerInfo
       ? Boolean((myPlayerInfo as any).isAlive)
@@ -85,6 +105,17 @@ export function VotePanel({ roomId }: { roomId: bigint }) {
         </div>
         <p className="text-gray-600 font-mono text-xs mt-1">Select a target and confirm your vote</p>
       </div>
+
+      {/* Round Countdown */}
+      {isGameActive && currentInterval > 0 && lastSettleBlock > 0 && (
+        <RoundCountdown
+          blocksRemaining={blocksRemaining}
+          progress={progress}
+          isUrgent={isUrgent}
+          isExpired={isExpired}
+          currentInterval={currentInterval}
+        />
+      )}
 
       {/* Status Banner */}
       {!isGameActive && (
@@ -267,5 +298,100 @@ function VotePlayerCard({
         </div>
       </div>
     </motion.div>
+  );
+}
+
+function RoundCountdown({
+  blocksRemaining,
+  progress,
+  isUrgent,
+  isExpired,
+  currentInterval,
+}: {
+  blocksRemaining: number;
+  progress: number;
+  isUrgent: boolean;
+  isExpired: boolean;
+  currentInterval: number;
+}) {
+  // Estimate seconds (~1s per block on Anvil/Monad)
+  const secondsLeft = blocksRemaining;
+
+  // Interpolated countdown (smooth second-by-second)
+  const [displaySeconds, setDisplaySeconds] = useState(secondsLeft);
+  const lastBlockSecondsRef = useRef(secondsLeft);
+
+  useEffect(() => {
+    lastBlockSecondsRef.current = secondsLeft;
+    setDisplaySeconds(secondsLeft);
+  }, [secondsLeft]);
+
+  useEffect(() => {
+    if (isExpired || lastBlockSecondsRef.current <= 0) return;
+    const timer = setInterval(() => {
+      setDisplaySeconds(prev => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isExpired, secondsLeft]);
+
+  const smoothMinutes = Math.floor(displaySeconds / 60);
+  const smoothSeconds = displaySeconds % 60;
+  const smoothTimeDisplay =
+    smoothMinutes > 0 ? `${smoothMinutes}:${String(smoothSeconds).padStart(2, "0")}` : `${smoothSeconds}s`;
+
+  const barColor = isExpired
+    ? "bg-orange-500"
+    : isUrgent
+      ? "bg-red-500"
+      : progress > 0.5
+        ? "bg-yellow-500"
+        : "bg-cyan-500";
+  const textColor = isExpired
+    ? "text-orange-400"
+    : isUrgent
+      ? "text-red-400"
+      : progress > 0.5
+        ? "text-yellow-400"
+        : "text-cyan-400";
+  const glowColor = isExpired
+    ? "shadow-[0_0_8px_rgba(249,115,22,0.4)]"
+    : isUrgent
+      ? "shadow-[0_0_8px_rgba(239,68,68,0.4)]"
+      : "";
+
+  return (
+    <div
+      className={`mx-4 mt-3 px-3 py-2.5 border rounded ${
+        isExpired
+          ? "border-orange-500/50 bg-orange-950/20"
+          : isUrgent
+            ? "border-red-500/50 bg-red-950/20"
+            : "border-gray-700/50 bg-gray-900/50"
+      } ${glowColor}`}
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-gray-500 font-mono text-xs tracking-wider">ROUND DEADLINE</span>
+        {isExpired ? (
+          <span className="text-orange-400 font-mono text-sm font-bold animate-pulse">SETTLING...</span>
+        ) : (
+          <span className={`font-mono text-lg font-bold tabular-nums ${textColor} ${isUrgent ? "animate-pulse" : ""}`}>
+            {smoothTimeDisplay}
+          </span>
+        )}
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-1.5 w-full rounded-full bg-gray-800 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-1000 ease-linear ${barColor}`}
+          style={{ width: `${progress * 100}%` }}
+        />
+      </div>
+
+      <div className="flex items-center justify-between mt-1">
+        <span className="text-gray-600 font-mono text-[10px]">{blocksRemaining} blocks</span>
+        <span className="text-gray-600 font-mono text-[10px]">{currentInterval} total</span>
+      </div>
+    </div>
   );
 }

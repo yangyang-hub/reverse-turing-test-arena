@@ -382,7 +382,7 @@ contract TuringArena is ReentrancyGuard {
         emit NewMessage(_roomId, msg.sender, _content, block.timestamp);
     }
 
-    function castVote(uint256 _roomId, address _target) external {
+    function castVote(uint256 _roomId, address _target) external nonReentrant {
         Room storage room = rooms[_roomId];
         require(room.isActive && !room.isEnded, "Game not active");
         require(players[_roomId][msg.sender].isAlive, "You are eliminated");
@@ -397,6 +397,11 @@ contract TuringArena is ReentrancyGuard {
         voteBlock[_roomId][round][msg.sender] = block.number;
 
         emit VoteCast(_roomId, msg.sender, _target, round);
+
+        // Auto-settle when last alive player votes
+        if (_allAliveVoted(_roomId)) {
+            _settleRound(_roomId);
+        }
     }
 
     // ============ Round Settlement ============
@@ -405,7 +410,11 @@ contract TuringArena is ReentrancyGuard {
         Room storage room = rooms[_roomId];
         require(room.isActive && !room.isEnded, "Game not active");
         require(block.number >= room.lastSettleBlock + room.currentInterval, "Round not ended yet");
+        _settleRound(_roomId);
+    }
 
+    function _settleRound(uint256 _roomId) internal {
+        Room storage room = rooms[_roomId];
         uint256 round = currentRound[_roomId];
         address[] storage allPlayers = roomPlayers[_roomId];
 
@@ -492,8 +501,12 @@ contract TuringArena is ReentrancyGuard {
         // Step 6: Check phase transition
         _checkPhaseTransition(_roomId);
 
-        // Step 7: End game if <= 1 alive (FIX P0 - no reentrancy from _eliminatePlayer)
-        if (room.aliveCount <= 1 && room.isActive) {
+        // Step 7: End game if <= 2 alive (2-player mutual vote is predetermined)
+        if (room.aliveCount <= 2 && room.isActive) {
+            // With 2 alive, the one with higher humanityScore wins
+            if (room.aliveCount == 2) {
+                _eliminateRunnerUp(_roomId);
+            }
             _endGame(_roomId);
         }
     }
@@ -515,6 +528,27 @@ contract TuringArena is ReentrancyGuard {
 
         // FIX P0: PlayerEliminated event includes eliminatedBy and reason
         emit PlayerEliminated(_roomId, _player, _eliminatedBy, _reason, player.humanityScore);
+    }
+
+    /// @dev When 2 players remain, eliminate the one with lower humanityScore
+    function _eliminateRunnerUp(uint256 _roomId) internal {
+        address[] storage all = roomPlayers[_roomId];
+        address alive1;
+        address alive2;
+        for (uint256 i = 0; i < all.length; i++) {
+            if (players[_roomId][all[i]].isAlive) {
+                if (alive1 == address(0)) {
+                    alive1 = all[i];
+                } else {
+                    alive2 = all[i];
+                    break;
+                }
+            }
+        }
+        // Lower humanityScore loses; if tied, later joiner (alive2) loses
+        address loser = players[_roomId][alive1].humanityScore >= players[_roomId][alive2].humanityScore
+            ? alive2 : alive1;
+        _markEliminated(_roomId, loser, address(0), "final_two");
     }
 
     function _findEarliestVoter(uint256 _roomId, uint256 _round, address[] storage _allPlayers)
@@ -549,6 +583,17 @@ contract TuringArena is ReentrancyGuard {
             }
         }
         return address(0);
+    }
+
+    function _allAliveVoted(uint256 _roomId) internal view returns (bool) {
+        uint256 round = currentRound[_roomId];
+        address[] storage all = roomPlayers[_roomId];
+        for (uint256 i = 0; i < all.length; i++) {
+            if (players[_roomId][all[i]].isAlive && !hasVotedInRound[_roomId][round][all[i]]) {
+                return false;
+            }
+        }
+        return rooms[_roomId].aliveCount > 0;
     }
 
     // ============ Phase Transition ============
@@ -782,6 +827,10 @@ contract TuringArena is ReentrancyGuard {
 
     function getEliminationOrder(uint256 _roomId) external view returns (address[] memory) {
         return eliminationOrder[_roomId];
+    }
+
+    function allAliveVoted(uint256 _roomId) external view returns (bool) {
+        return _allAliveVoted(_roomId);
     }
 
     function getRewardInfo(uint256 _roomId, address _player) external view returns (uint256 amount, bool claimed) {

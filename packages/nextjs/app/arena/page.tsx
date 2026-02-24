@@ -1,11 +1,12 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAccount } from "wagmi";
+import { useAccount, useBlockNumber } from "wagmi";
 import { ArenaTerminal } from "~~/app/arena/_components/ArenaTerminal";
 import { PlayerRadar } from "~~/app/arena/_components/PlayerRadar";
+import { VictoryScreen } from "~~/app/arena/_components/VictoryScreen";
 import { VotePanel } from "~~/app/arena/_components/VotePanel";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
@@ -63,6 +64,31 @@ function ArenaContent() {
     functionName: "currentRound",
     args: [roomId] as const,
   });
+
+  const { data: blockNumber } = useBlockNumber({ watch: true });
+
+  // Game end data
+  const { data: gameStats } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getGameStats",
+    args: [roomId] as const,
+  });
+
+  const { data: rewardInfo } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getRewardInfo",
+    args: [roomId, connectedAddress ?? "0x0000000000000000000000000000000000000000"] as const,
+  });
+
+  // Settle state
+  const [isSettling, setIsSettling] = useState(false);
+  const [showVictory, setShowVictory] = useState(false);
+
+  // Auto-show VictoryScreen when game ends
+  const phase = typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
+  useEffect(() => {
+    if (phase === 4) setShowVictory(true);
+  }, [phase]);
 
   if (!rawRoomId || roomId === undefined) {
     return (
@@ -123,13 +149,17 @@ function ArenaContent() {
     );
   }
 
-  const phase = typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
   const aliveCount =
     typeof roomInfo === "object" && "aliveCount" in roomInfo ? Number((roomInfo as any).aliveCount) : 0;
   const playerCount =
     typeof roomInfo === "object" && "playerCount" in roomInfo ? Number((roomInfo as any).playerCount) : 0;
   const currentRound = currentRoundData !== undefined ? Number(currentRoundData) : 0;
   const prizePool = typeof roomInfo === "object" && "prizePool" in roomInfo ? BigInt((roomInfo as any).prizePool) : 0n;
+  const creator = typeof roomInfo === "object" && "creator" in roomInfo ? ((roomInfo as any).creator as string) : "";
+  const lastSettleBlock =
+    typeof roomInfo === "object" && "lastSettleBlock" in roomInfo ? Number((roomInfo as any).lastSettleBlock) : 0;
+  const currentInterval =
+    typeof roomInfo === "object" && "currentInterval" in roomInfo ? Number((roomInfo as any).currentInterval) : 0;
 
   const phaseLabel = PHASE_LABELS[phase] ?? "UNKNOWN";
   const phaseColor = PHASE_COLORS[phase] ?? "text-gray-400";
@@ -139,6 +169,26 @@ function ArenaContent() {
       ? (allPlayers as string[]).some(p => p.toLowerCase() === connectedAddress.toLowerCase())
       : false;
 
+  const isCreator = connectedAddress ? creator.toLowerCase() === connectedAddress.toLowerCase() : false;
+  const canStartGame = phase === 0 && isCreator && playerCount >= 3;
+
+  // Round timing
+  const isGameActive = phase >= 1 && phase <= 3;
+  const currentBlock = blockNumber ? Number(blockNumber) : 0;
+  const settleTargetBlock = lastSettleBlock + currentInterval;
+  const blocksRemaining = isGameActive && currentBlock > 0 ? Math.max(0, settleTargetBlock - currentBlock) : 0;
+  const intervalReached = isGameActive && currentBlock >= settleTargetBlock && currentBlock > 0 && lastSettleBlock > 0;
+  const canSettle = intervalReached;
+
+  const handleStartGame = async () => {
+    if (!roomId) return;
+    try {
+      await writeArena({ functionName: "startGame", args: [roomId] });
+    } catch (e) {
+      console.error("Failed to start game:", e);
+    }
+  };
+
   const handleLeave = async () => {
     if (!roomId) return;
     try {
@@ -146,6 +196,21 @@ function ArenaContent() {
       router.push("/lobby");
     } catch (e) {
       console.error("Failed to leave room:", e);
+    }
+  };
+
+  const handleSettle = async () => {
+    if (!roomId || isSettling) return;
+    setIsSettling(true);
+    try {
+      await writeArena({ functionName: "settleRound", args: [roomId] });
+    } catch (e: any) {
+      const msg = e?.message || "";
+      if (!msg.includes("Round not ended yet")) {
+        console.error("Settle failed:", e);
+      }
+    } finally {
+      setIsSettling(false);
     }
   };
 
@@ -168,6 +233,19 @@ function ArenaContent() {
             <span className="text-gray-500 font-mono text-xs">ROUND</span>
             <span className="text-white font-mono text-sm font-bold">{currentRound}</span>
           </div>
+          {isGameActive && (
+            <>
+              <div className="h-4 w-px bg-gray-700" />
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500 font-mono text-xs">SETTLE IN</span>
+                {canSettle ? (
+                  <span className="text-orange-400 font-mono text-sm font-bold animate-pulse">READY</span>
+                ) : (
+                  <span className="text-cyan-300 font-mono text-sm font-bold">{blocksRemaining} blocks</span>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-6">
@@ -184,13 +262,41 @@ function ArenaContent() {
               {(Number(prizePool) / 1e6).toFixed(2)} USDC
             </span>
           </div>
-          {isPlayerInGame && (
+          {isPlayerInGame && phase !== 4 && (
             <>
               <div className="h-4 w-px bg-gray-700" />
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                 <span className="text-green-400 font-mono text-xs">IN GAME</span>
               </div>
+            </>
+          )}
+          {phase === 4 && (
+            <>
+              <div className="h-4 w-px bg-gray-700" />
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-purple-400" />
+                <span className="text-purple-400 font-mono text-xs">GAME OVER</span>
+              </div>
+              <div className="h-4 w-px bg-gray-700" />
+              <button
+                onClick={() => setShowVictory(true)}
+                className="px-3 py-1 border border-yellow-500/50 text-yellow-400 font-mono text-xs hover:bg-yellow-900/20 hover:border-yellow-500 transition-colors rounded"
+              >
+                VIEW RESULTS
+              </button>
+            </>
+          )}
+          {canSettle && (
+            <>
+              <div className="h-4 w-px bg-gray-700" />
+              <button
+                onClick={handleSettle}
+                disabled={isSettling}
+                className="px-3 py-1 border border-orange-500/50 text-orange-400 font-mono text-xs hover:bg-orange-900/20 hover:border-orange-500 transition-colors rounded animate-pulse"
+              >
+                {isSettling ? <span className="loading loading-spinner loading-xs" /> : "SETTLE ROUND"}
+              </button>
             </>
           )}
           {phase === 0 && isPlayerInGame && (
@@ -202,6 +308,25 @@ function ArenaContent() {
               >
                 LEAVE ROOM
               </button>
+            </>
+          )}
+          {canStartGame && (
+            <>
+              <div className="h-4 w-px bg-gray-700" />
+              <button
+                onClick={handleStartGame}
+                className="px-3 py-1 border border-green-500/50 text-green-400 font-mono text-xs hover:bg-green-900/20 hover:border-green-500 transition-colors rounded animate-pulse"
+              >
+                START GAME
+              </button>
+            </>
+          )}
+          {phase === 0 && isCreator && playerCount < 3 && (
+            <>
+              <div className="h-4 w-px bg-gray-700" />
+              <span className="text-yellow-500/60 font-mono text-xs">
+                NEED {3 - playerCount} MORE PLAYER{3 - playerCount > 1 ? "S" : ""}
+              </span>
             </>
           )}
         </div>
@@ -224,6 +349,20 @@ function ArenaContent() {
           <VotePanel roomId={roomId} />
         </div>
       </div>
+
+      {/* Victory Screen overlay */}
+      {showVictory && phase === 4 && gameStats && roomId !== undefined && (
+        <VictoryScreen
+          roomId={roomId}
+          champion={(gameStats as any).champion ?? ""}
+          myRewardAmount={rewardInfo ? BigInt((rewardInfo as any)[0] ?? 0) : 0n}
+          myRewardClaimed={rewardInfo ? Boolean((rewardInfo as any)[1]) : false}
+          onDismiss={() => {
+            setShowVictory(false);
+            router.push("/lobby");
+          }}
+        />
+      )}
     </div>
   );
 }

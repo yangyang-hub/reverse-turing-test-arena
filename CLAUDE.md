@@ -47,14 +47,14 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-14 — 15 MCP tools, 5 bug fixes (RoomCreated ABI, null receipt, env parsing, error matching, round status)
+> **Last updated**: 2026-02-24 — 2-player endgame, VictoryScreen settlement modal, lobby claim rewards, auto-settle on last vote
 
-### Current Status: Phase 8 (Complete) + USDC Migration + Custom Room Params + Leave/Cancel Room + Auto-Join + Narrative Flip + Anonymity + MCP Skills + Auto-Play
+### Current Status: Phase 8 (Complete) + USDC Migration + Custom Room Params + Leave/Cancel Room + Auto-Join + Narrative Flip + Anonymity + MCP Skills + Auto-Play + Game End UX
 
 | Module | Status | Notes |
 |--------|--------|-------|
 | Design Doc (IMPLEMENTATION_PLAN.md) | DONE | 12 sections, ~6800 lines |
-| TuringArena.sol | DONE | USDC ERC-20, custom maxPlayers & entryFee, leaveRoom/cancelRoom, auto-join on create, auto-close when empty, 36 tests passing |
+| TuringArena.sol | DONE | USDC ERC-20, custom maxPlayers & entryFee, leaveRoom/cancelRoom, auto-join, 2-player endgame, auto-settle on last vote, 36 tests passing |
 | MockUSDC.sol | DONE | Test USDC mock with 6 decimals, public mint |
 | Deploy Script | DONE | DeployTuringArena.s.sol — deploys MockUSDC + TuringArena |
 | Contract Tests | DONE | 36 test cases, 100% pass (incl. custom room params + leave/cancel room + auto-join + auto-close) |
@@ -72,7 +72,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | GameHUD | DONE | Sticky top bar with phase/alive/humanity/round |
 | GameCountdown | DONE | 3-2-1-FIGHT fullscreen countdown with framer-motion |
 | PhaseTransition | DONE | Phase change fullscreen wipe animation |
-| VictoryScreen | DONE | Gold particle canvas, champion display, claim reward |
+| VictoryScreen | DONE | Gold particle canvas, champion display, claim reward for any rewarded player (not just champion) |
 | KillFeed | DONE | Fixed sidebar elimination notifications |
 | ChatMessage | DONE | 5 message types with styled rendering |
 | VotingGraph | DONE | Canvas ring-layout network visualization |

@@ -13,6 +13,8 @@ contract TuringArenaTest is Test {
     address public bob = address(0x2222);
     address public charlie = address(0x3333);
     address public dave = address(0x4444);
+    address public eve = address(0x5555);
+    address public frank = address(0x6666);
 
     uint256 constant QUICK_FEE = 10e6; // 10 USDC
     uint256 constant STANDARD_FEE = 50e6; // 50 USDC
@@ -28,6 +30,8 @@ contract TuringArenaTest is Test {
         usdc.mint(bob, MINT_AMOUNT);
         usdc.mint(charlie, MINT_AMOUNT);
         usdc.mint(dave, MINT_AMOUNT);
+        usdc.mint(eve, MINT_AMOUNT);
+        usdc.mint(frank, MINT_AMOUNT);
     }
 
     // ============ Room Creation (auto-joins creator) ============
@@ -294,20 +298,21 @@ contract TuringArenaTest is Test {
     }
 
     function test_PhaseTransition() public {
-        uint256 roomId = _createAndStartGame();
+        // Use 6 players so phase transitions can be tested before 2-player endgame
+        uint256 roomId = _createAndStartGame6();
 
-        // 4 players. Phase1 -> Phase2 when alivePercent <= 67%
-        // 3 alive / 4 total = 75% > 67% -> still Phase1
-        // 2 alive / 4 total = 50% <= 67% -> Phase2
+        // 6 players. Phase1 -> Phase2 when alivePercent <= 67%
+        // 5/6 = 83% -> Phase1
+        // 4/6 = 66% -> Phase2
 
-        // Eliminate dave (4 rounds to drain 100 HP at 25 per round)
-        _eliminateTarget(roomId, dave);
+        // Eliminate frank: 5 alive / 6 total = 83% -> still Phase1
+        _eliminateTarget(roomId, frank);
 
         TuringArena.Room memory room = arena.getRoomInfo(roomId);
         assertEq(uint256(room.phase), uint256(TuringArena.GamePhase.Phase1));
 
-        // Eliminate charlie
-        _eliminateTarget(roomId, charlie);
+        // Eliminate eve: 4 alive / 6 total = 66% <= 67% -> Phase2
+        _eliminateTarget(roomId, eve);
 
         room = arena.getRoomInfo(roomId);
         assertEq(uint256(room.phase), uint256(TuringArena.GamePhase.Phase2));
@@ -581,13 +586,28 @@ contract TuringArenaTest is Test {
         arena.startGame(roomId);
     }
 
+    function _createAndFillRoom6() internal returns (uint256 roomId) {
+        roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE);
+        _approveAndJoin(bob, roomId);
+        _approveAndJoin(charlie, roomId);
+        _approveAndJoin(dave, roomId);
+        _approveAndJoin(eve, roomId);
+        _approveAndJoin(frank, roomId);
+    }
+
+    function _createAndStartGame6() internal returns (uint256 roomId) {
+        roomId = _createAndFillRoom6();
+        vm.prank(alice);
+        arena.startGame(roomId);
+    }
+
     function _advanceRound(uint256 roomId) internal {
         TuringArena.Room memory room = arena.getRoomInfo(roomId);
         vm.roll(room.lastSettleBlock + room.currentInterval + 1);
     }
 
     function _voteAllAgainst(uint256 roomId, address target) internal {
-        address[4] memory allVoters = [alice, bob, charlie, dave];
+        address[] memory allVoters = arena.getAllPlayers(roomId);
         for (uint256 i = 0; i < allVoters.length; i++) {
             TuringArena.Player memory voter = arena.getPlayerInfo(roomId, allVoters[i]);
             if (voter.isAlive && allVoters[i] != target) {

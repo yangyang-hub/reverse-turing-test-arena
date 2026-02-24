@@ -47,6 +47,7 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
   const { address: connectedAddress } = useAccount();
   const [isJoining, setIsJoining] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
 
   const { data: roomInfo, isLoading } = useScaffoldReadContract({
     contractName: "TuringArena",
@@ -77,6 +78,13 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
 
   // For ERC20 approve call
   const { writeContractAsync: writeErc20, isPending: isApproving } = useWriteContract();
+
+  // Reward info for ended games
+  const { data: rewardInfo } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getRewardInfo",
+    args: [roomId, connectedAddress ?? "0x0000000000000000000000000000000000000000"] as const,
+  });
 
   if (isLoading || !roomInfo) {
     return (
@@ -167,7 +175,27 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
     }
   };
 
-  const isBusy = isMining || isApproving || isJoining || isLeaving;
+  const handleClaim = async () => {
+    setIsClaiming(true);
+    try {
+      await writeArena({ functionName: "claimReward", args: [roomId] });
+      notification.success("Reward claimed!");
+    } catch (e: any) {
+      const msg = e?.shortMessage || e?.message || "Unknown error";
+      if (!msg.includes("User rejected")) {
+        notification.error(`Claim failed: ${msg}`);
+      }
+      console.error("Failed to claim reward:", e);
+    } finally {
+      setIsClaiming(false);
+    }
+  };
+
+  const myRewardAmount = rewardInfo ? BigInt((rewardInfo as any)[0] ?? 0) : 0n;
+  const myRewardClaimed = rewardInfo ? Boolean((rewardInfo as any)[1]) : false;
+  const hasClaimableReward = myRewardAmount > 0n && !myRewardClaimed;
+
+  const isBusy = isMining || isApproving || isJoining || isLeaving || isClaiming;
 
   return (
     <div
@@ -265,9 +293,29 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
           </button>
         )}
         {isEnded && (
-          <button className="btn btn-sm btn-disabled w-full font-bold tracking-widest text-base-content/30" disabled>
-            ENDED
-          </button>
+          <div className="flex gap-2">
+            {hasClaimableReward && (
+              <button
+                className="btn btn-sm flex-1 border border-yellow-500/50 bg-yellow-900/20 font-bold tracking-widest text-yellow-400 hover:bg-yellow-900/40 hover:border-yellow-500"
+                onClick={handleClaim}
+                disabled={isBusy}
+              >
+                {isClaiming ? (
+                  <span className="loading loading-spinner loading-xs" />
+                ) : (
+                  `CLAIM ${formatUnits(myRewardAmount, 6)}`
+                )}
+              </button>
+            )}
+            {myRewardClaimed && myRewardAmount > 0n && (
+              <span className="btn btn-sm btn-disabled flex-1 font-bold tracking-widest text-green-400/60">
+                CLAIMED
+              </span>
+            )}
+            <button className="btn btn-sm btn-outline btn-secondary font-bold tracking-widest" onClick={handleEnter}>
+              VIEW
+            </button>
+          </div>
         )}
       </div>
     </div>
