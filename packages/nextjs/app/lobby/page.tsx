@@ -247,7 +247,7 @@ const UsdcFaucet = () => {
     try {
       await writeContractAsync({
         functionName: "mint",
-        args: [address, BigInt(10_000e6)],
+        args: [address, BigInt(100e6)],
       });
     } catch (e) {
       console.error("Mint failed:", e);
@@ -268,7 +268,7 @@ const UsdcFaucet = () => {
         onClick={handleMint}
         disabled={isMining}
       >
-        {isMining ? <span className="loading loading-spinner loading-xs" /> : "MINT 10K"}
+        {isMining ? <span className="loading loading-spinner loading-xs" /> : "MINT 100"}
       </button>
     </div>
   );
