@@ -73,11 +73,15 @@ export function VotePanel({ roomId }: { roomId: bigint }) {
     myPlayerInfo && typeof myPlayerInfo === "object" && "isAlive" in myPlayerInfo
       ? Boolean((myPlayerInfo as any).isAlive)
       : false;
+  const isMyPlayerAI =
+    myPlayerInfo && typeof myPlayerInfo === "object" && "isAI" in myPlayerInfo
+      ? Boolean((myPlayerInfo as any).isAI)
+      : false;
   const isPlayerInGame =
     connectedAddress && allPlayers
       ? (allPlayers as string[]).some(p => p.toLowerCase() === connectedAddress.toLowerCase())
       : false;
-  const canVote = isGameActive && isMyPlayerAlive && isPlayerInGame && !hasVotedThisRound;
+  const canVote = isGameActive && isMyPlayerAlive && isPlayerInGame && !hasVotedThisRound && !isMyPlayerAI;
 
   const playerAddresses = (allPlayers as string[]) || [];
 
@@ -135,6 +139,12 @@ export function VotePanel({ roomId }: { roomId: bigint }) {
       {isGameActive && isPlayerInGame && !isMyPlayerAlive && (
         <div className="mx-4 mt-3 px-3 py-2 border border-red-700/50 bg-red-950/20 rounded">
           <span className="text-red-400 font-mono text-xs">You have been eliminated. Observe mode active.</span>
+        </div>
+      )}
+
+      {isGameActive && isPlayerInGame && isMyPlayerAlive && isMyPlayerAI && (
+        <div className="mx-4 mt-3 px-3 py-2 border border-purple-700/50 bg-purple-950/20 rounded">
+          <span className="text-purple-400 font-mono text-xs">AI agent — use MCP to vote. Web view is read-only.</span>
         </div>
       )}
 

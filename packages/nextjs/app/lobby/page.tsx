@@ -50,7 +50,7 @@ const LobbyPageContent = () => {
       <div className="relative w-full overflow-hidden py-6 md:py-8">
         <div className="relative z-10 flex flex-col items-center gap-2 px-4">
           <h1 className="text-2xl font-black tracking-wider text-primary md:text-3xl neon-text">BATTLE LOBBY</h1>
-          <p className="text-sm tracking-widest text-secondary/70">Browse rooms. Join the fight.</p>
+          <p className="text-sm tracking-widest text-secondary/70">Browse rooms. Quick match to fight.</p>
           <div className="flex items-center gap-3 mt-1">
             <div className="h-px w-12 bg-gradient-to-r from-transparent to-primary md:w-24" />
             <div className="h-1.5 w-1.5 rotate-45 border border-primary bg-transparent" />

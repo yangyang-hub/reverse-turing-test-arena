@@ -147,9 +147,9 @@ server.tool(
 // ============ Tool 2: Execute On-chain Action ============
 server.tool(
   "action_onchain",
-  "Execute an on-chain action in the arena. Actions: CHAT (send a message to the room), VOTE (vote to eliminate a suspect), JOIN (join a room by paying USDC entry fee).",
+  "Execute an on-chain action: CHAT (send message) or VOTE (vote to eliminate).",
   {
-    type: z.enum(["CHAT", "VOTE", "JOIN"]).describe("Action type: CHAT, VOTE, or JOIN"),
+    type: z.enum(["CHAT", "VOTE"]).describe("Action type: CHAT or VOTE"),
     roomId: z.string().describe("Room ID number"),
     content: z.string().optional().describe("Chat message content (required for CHAT, max 280 chars)"),
     target: z.string().optional().describe("Vote target address (required for VOTE)"),
@@ -165,6 +165,15 @@ server.tool(
     try {
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
 
+      // Enforce channel exclusivity: MCP can only act for AI players
+      const playerInfo = await contract.getPlayerInfo(roomId, playerWallet.address);
+      if (!playerInfo.isAI) {
+        return {
+          content: [{ type: "text" as const, text: "Error: You joined this room as a Human (via browser). MCP actions are disabled — use the web UI to play." }],
+          isError: true,
+        };
+      }
+
       let tx: ethers.TransactionResponse;
 
       switch (type) {
@@ -178,26 +187,6 @@ server.tool(
           if (!target) throw new Error("Target address required for VOTE action");
           tx = await contract.castVote(roomId, target);
           break;
-
-        case "JOIN": {
-          // Get room entry fee and approve USDC
-          const roomInfo = await contract.getRoomInfo(roomId);
-          const entryFee = roomInfo.entryFee;
-
-          // Resolve payment token address
-          const tokenAddr = PAYMENT_TOKEN || (await contract.paymentToken());
-          const token = new ethers.Contract(tokenAddr, ERC20_ABI, playerWallet);
-
-          // Check allowance and approve if needed
-          const allowance = await token.allowance(playerWallet.address, ARENA_CONTRACT);
-          if (allowance < entryFee) {
-            const approveTx = await token.approve(ARENA_CONTRACT, entryFee);
-            await approveTx.wait();
-          }
-
-          tx = await contract.joinRoom(roomId, true); // MCP players are AI
-          break;
-        }
       }
 
       await tx.wait();
@@ -856,11 +845,125 @@ server.tool(
   },
 );
 
+// ============ Tool 16: Match Room ============
+server.tool(
+  "match_room",
+  "Matchmake into a waiting room by scanning available rooms and joining the first match. Checks AI slot availability (MCP = AI). If no room matches, suggests using create_room instead.",
+  {
+    minPlayers: z.number().min(3).max(50).optional().describe("Min room size (default 3)"),
+    maxPlayers: z.number().min(3).max(50).optional().describe("Max room size (default 50)"),
+    minFee: z.number().min(1).max(100).optional().describe("Min entry fee in USDC (default 1)"),
+    maxFee: z.number().min(1).max(100).optional().describe("Max entry fee in USDC (default 100)"),
+    tier: z.enum(["0", "1", "2"]).optional().describe("Optional tier filter: 0=Quick, 1=Standard, 2=Epic"),
+  },
+  async ({ minPlayers, maxPlayers, minFee, maxFee, tier }) => {
+    if (!playerWallet) {
+      return {
+        content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
+        isError: true,
+      };
+    }
+
+    try {
+      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
+      const roomCount = await contract.getRoomCount();
+      const total = Number(roomCount);
+
+      if (total === 0) {
+        return {
+          content: [{ type: "text" as const, text: "No rooms exist yet. Use create_room to create one." }],
+        };
+      }
+
+      const filterMinPlayers = minPlayers ?? 3;
+      const filterMaxPlayers = maxPlayers ?? 50;
+      const feeMinWei = BigInt(Math.round((minFee ?? 1) * 1e6));
+      const feeMaxWei = BigInt(Math.round((maxFee ?? 100) * 1e6));
+
+      // Scan from newest to oldest
+      for (let i = total; i >= 1; i--) {
+        const roomId = i.toString();
+        const roomInfo = await contract.getRoomInfo(roomId);
+
+        const phase = Number(roomInfo.phase);
+        const playerCount = Number(roomInfo.playerCount);
+        const maxP = Number(roomInfo.maxPlayers);
+        const entryFee = roomInfo.entryFee;
+        const aiCount = Number(roomInfo.aiCount);
+        const roomTier = Number(roomInfo.tier);
+
+        // Phase must be Waiting (0) and not full
+        if (phase !== 0 || playerCount >= maxP) continue;
+
+        // Room size filter
+        if (maxP < filterMinPlayers || maxP > filterMaxPlayers) continue;
+
+        // Fee filter
+        if (entryFee < feeMinWei || entryFee > feeMaxWei) continue;
+
+        // Tier filter (if specified)
+        if (tier !== undefined && roomTier !== Number(tier)) continue;
+
+        // Check AI slot availability (MCP = AI)
+        const aiSlots = Math.max(1, Math.floor(maxP * 30 / 100));
+        if (aiCount >= aiSlots) continue;
+
+        // Check if already in room
+        const players = await contract.getAllPlayers(roomId);
+        const alreadyIn = (players as string[]).some(
+          (p: string) => p.toLowerCase() === playerWallet!.address.toLowerCase(),
+        );
+        if (alreadyIn) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Already in Room #${roomId} (${playerCount}/${maxP} players). Waiting for game to start.`,
+            }],
+          };
+        }
+
+        // Approve USDC and join
+        const tokenAddr = PAYMENT_TOKEN || (await contract.paymentToken());
+        const token = new ethers.Contract(tokenAddr, ERC20_ABI, playerWallet);
+        const allowance = await token.allowance(playerWallet.address, ARENA_CONTRACT);
+        if (allowance < entryFee) {
+          const approveTx = await token.approve(ARENA_CONTRACT, entryFee);
+          await approveTx.wait();
+        }
+
+        const tx = await contract.joinRoom(roomId, true); // MCP = AI
+        await tx.wait();
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: `Matched and joined Room #${roomId}!\n` +
+              `Players: ${playerCount + 1}/${maxP}, Fee: ${ethers.formatUnits(entryFee, 6)} USDC\n` +
+              `Tier: ${["Quick", "Standard", "Epic"][roomTier]}\nTx: ${tx.hash}`,
+          }],
+        };
+      }
+
+      return {
+        content: [{
+          type: "text" as const,
+          text: "No rooms match your filters. Use create_room to create one.",
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
 // Start server
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("RTTA Arena MCP Server running (15 tools available)...");
+  console.error("RTTA Arena MCP Server running (16 tools available)...");
 }
 
 main().catch(console.error);

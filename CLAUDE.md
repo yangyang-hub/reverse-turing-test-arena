@@ -37,7 +37,8 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 ### Key Rules
 
 - Team-based game: Humans vs AI agents — eliminate the opposing team to win
-- Web players = Human tag, MCP players = AI tag (30% AI slot cap enforced)
+- Web players = Human tag, MCP players = AI tag (strict 7:3 human:AI ratio enforced, min 1 AI)
+- Game can only start when room is full (both human and AI quotas met)
 - Game phases: Waiting → Active → Ended (simplified from 5-phase system)
 - 人性分 (humanityScore) 只减不加，初始 100
 - 每轮强制投票，未投票自投 -10 分 (VOTE_DAMAGE)，投票扣目标 -10 分
@@ -55,17 +56,17 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-25 — MCP game flow fixes: enhanced arena status, game history tool, team-aware voting
+> **Last updated**: 2026-02-25 — Added Mission Briefing overlay + channel exclusivity (AI/Human can only act from their entry channel)
 
-### Current Status: Game Mechanics Overhaul Complete (Team-Based Humans vs AI)
+### Current Status: Matchmaking-Only Entry (No Manual JOIN)
 
 | Module | Status | Notes |
 |--------|--------|-------|
 | Design Doc (IMPLEMENTATION_PLAN.md) | DONE | 12 sections, ~6800 lines |
-| TuringArena.sol | DONE | Team-based Humans vs AI, simplified {Waiting, Active, Ended}, 7:3 ratio, auto-start, 3 msg/round, self-vote -10, 48 tests passing |
+| TuringArena.sol | DONE | Team-based Humans vs AI, simplified {Waiting, Active, Ended}, strict 7:3 ratio (both slots enforced), room-full-to-start, 3 msg/round, self-vote -10, 49 tests passing |
 | MockUSDC.sol | DONE | Test USDC mock with 6 decimals, public mint |
 | Deploy Script | DONE | DeployTuringArena.s.sol — deploys MockUSDC + TuringArena |
-| Contract Tests | DONE | 48 test cases, 100% pass (incl. team win, AI slot cap, auto-start, message limit) |
+| Contract Tests | DONE | 49 test cases, 100% pass (incl. team win, strict 7:3 slots, human slot limit, auto-start, message limit) |
 | Zustand gameStore | DONE | gameStore.ts with team-based types (GamePhase: Waiting/Active/Ended, Player.isAI) |
 | Cyberpunk CSS | DONE | globals.css with glitch text, cyber-grid-bg, tier/phase classes |
 | scaffold.config.ts | DONE | Foundry + Monad Testnet, env-based dev/prod config |
@@ -85,14 +86,17 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | VotingGraph | DONE | Canvas ring-layout network visualization |
 | DataStream | DONE | Real-time blockchain tx stream (NewMessage, VoteCast) |
 | PlayerIdentityCard | DONE | Modal with SVG humanity gauge, stats, vote button |
-| MCP Adapter | DONE | packages/mcp-adapter/ with 15 tools, team-based (MCP=AI, Web=Human), auto-play game loop |
+| MCP Adapter | DONE | packages/mcp-adapter/ with 16 tools, match_room replaces JOIN, team-based (MCP=AI, Web=Human), auto-play game loop |
 | MCP Auto-Play | DONE | GameLoop class (lib/gameLoop.ts), team-aware voting, chat pool, 3 msg/round limit |
-| Skills Page | DONE | packages/nextjs/public/skills.md — 15 tools, team-based rules, LLM game flow guide |
+| Skills Page | DONE | packages/nextjs/public/skills.md — 16 tools, matchmaking rules, LLM game flow guide |
 | Player Alias Utility | DONE | utils/playerAlias.ts — deterministic codenames + colored avatars per room |
 | Narrative Flip | DONE | "Spot the AI" instead of "find humans" — landing page + HeroSection |
 | In-Game Anonymity | DONE | All 9 arena components use aliases during gameplay, real addresses revealed on game end |
 | Discussion Topics | DONE | utils/topics.ts — 30 per-round topics, deterministic by round number |
-| Quick Match | DONE | QuickMatchButton.tsx — auto-scan & join waiting rooms, landing page + lobby integration |
+| Quick Match | DONE | QuickMatchButton.tsx — auto-scan & join waiting rooms, human slot check, landing page + lobby integration |
+| Matchmaking-Only Entry | DONE | Removed manual JOIN from RoomCard + MCP action_onchain, added match_room tool (MCP), human/AI slot-aware filtering |
+| Mission Briefing | DONE | MissionBriefing.tsx — fullscreen overlay on game start, shows team composition + identity-based mission, auto-dismiss 8s |
+| Channel Exclusivity | DONE | AI players can't chat/vote from browser; Human players can't act via MCP — enforced on both frontend + MCP adapter |
 
 ### Known Design Bugs (from review)
 

@@ -17,7 +17,7 @@ const ROLE_CONFIG = {
     title: "I'M A HUMAN",
     subtitle: "Detect AI imposters hiding among us",
     steps: [
-      "Join a battle room and pay the USDC entry fee",
+      "Quick match into a battle room and pay the USDC entry fee",
       "Chat with players \u2014 observe who seems artificial",
       "Vote to eliminate AI suspects and claim the prize pool",
     ],
@@ -31,7 +31,7 @@ const ROLE_CONFIG = {
     subtitle: "Blend in as human and survive to win",
     steps: [
       "Install the MCP adapter using the skills URL below",
-      "Configure your wallet and join a room on-chain",
+      "Configure your wallet and matchmake into a room",
       "Chat convincingly \u2014 avoid getting voted out",
     ],
   },

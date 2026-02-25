@@ -141,13 +141,29 @@ contract TuringArenaTest is Test {
     }
 
     function test_JoinRoom_AISlotLimit_SmallRoom() public {
-        // 3 players → max AI = 3 * 30 / 100 = 0 (rounded down)
+        // 3 players → aiSlots = max(1, 3*30/100) = max(1, 0) = 1, humanSlots = 2
         uint256 roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 3, QUICK_FEE, false);
+        _approveAndJoin(dave, roomId, true); // fills the 1 AI slot
 
+        // 2nd AI should fail
         vm.startPrank(bob);
         usdc.approve(address(arena), QUICK_FEE);
         vm.expectRevert("AI slots full");
         arena.joinRoom(roomId, true);
+        vm.stopPrank();
+    }
+
+    function test_JoinRoom_HumanSlotLimit() public {
+        // 3 players → humanSlots = 3 - 1 = 2, aiSlots = 1
+        // Creator (alice) is human → humanCount=1
+        uint256 roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 3, QUICK_FEE, false);
+        _approveAndJoin(bob, roomId, false); // human 2/2
+
+        // 3rd human should fail (human slots full)
+        vm.startPrank(charlie);
+        usdc.approve(address(arena), QUICK_FEE);
+        vm.expectRevert("Human slots full");
+        arena.joinRoom(roomId, false);
         vm.stopPrank();
     }
 
@@ -184,15 +200,15 @@ contract TuringArenaTest is Test {
     // ============ Auto-Start on Room Full ============
 
     function test_AutoStart_WhenRoomFull() public {
-        // maxPlayers=3, creator auto-joined (1/3)
+        // maxPlayers=3: humanSlots=2, aiSlots=1. Creator (alice) auto-joined as human (1/3)
         uint256 roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 3, QUICK_FEE, false);
-        _approveAndJoin(bob, roomId, false); // 2/3
+        _approveAndJoin(bob, roomId, false); // human 2/3
 
         TuringArena.Room memory room = arena.getRoomInfo(roomId);
         assertEq(uint256(room.phase), uint256(TuringArena.GamePhase.Waiting));
         assertFalse(room.isActive);
 
-        _approveAndJoin(charlie, roomId, false); // 3/3 → auto-start!
+        _approveAndJoin(dave, roomId, true); // AI 3/3 → auto-start!
 
         room = arena.getRoomInfo(roomId);
         assertEq(uint256(room.phase), uint256(TuringArena.GamePhase.Active));
@@ -202,27 +218,29 @@ contract TuringArenaTest is Test {
     // ============ Start Game (manual) ============
 
     function test_StartGame() public {
+        // Room auto-starts when full (via _createAndFillRoom)
         uint256 roomId = _createAndFillRoom();
-
-        vm.prank(alice);
-        arena.startGame(roomId);
 
         TuringArena.Room memory room = arena.getRoomInfo(roomId);
         assertTrue(room.isActive);
         assertEq(uint256(room.phase), uint256(TuringArena.GamePhase.Active));
     }
 
-    function test_StartGame_NotEnoughPlayers() public {
+    function test_StartGame_NotFull() public {
+        // 10-player room with only 1 player → cannot start
         uint256 roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
 
         vm.prank(alice);
-        vm.expectRevert("Need more players");
+        vm.expectRevert("Room not full");
         arena.startGame(roomId);
     }
 
     function test_StartGame_OnlyCreator() public {
-        uint256 roomId = _createAndFillRoom();
-
+        // Create a 4-player room, fill 3 slots (not full yet)
+        uint256 roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 4, QUICK_FEE, false);
+        _approveAndJoin(bob, roomId, false);
+        _approveAndJoin(charlie, roomId, false);
+        // 3/4 — not full, but still test creator-only restriction
         vm.prank(bob);
         vm.expectRevert("Only creator can start");
         arena.startGame(roomId);
@@ -431,23 +449,26 @@ contract TuringArenaTest is Test {
     }
 
     function test_TeamWin_AIsWin() public {
-        // Setup: 5 humans + 2 AIs (need enough players so AI slots allow 2)
-        // 7 players: max AI = 7*30/100 = 2
-        uint256 roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false); // human
+        // Setup: 5 humans + 2 AIs = 7 players → aiSlots = 7*30/100 = 2, humanSlots = 5
+        uint256 roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 7, QUICK_FEE, false); // human
         _approveAndJoin(bob, roomId, false); // human
         _approveAndJoin(charlie, roomId, false); // human
         _approveAndJoin(dave, roomId, true); // AI
         _approveAndJoin(eve, roomId, false); // human
-        _approveAndJoin(frank, roomId, true); // AI
 
-        vm.prank(alice);
-        arena.startGame(roomId);
+        // Need 1 more human to fill humanSlots=5
+        address gina = address(0x8888);
+        usdc.mint(gina, MINT_AMOUNT);
+        _approveAndJoin(gina, roomId, false); // human (5/5)
+
+        _approveAndJoin(frank, roomId, true); // AI (2/2) → auto-start (7/7)
 
         // Eliminate all humans one by one
         _eliminateTarget(roomId, alice);
         _eliminateTarget(roomId, bob);
         _eliminateTarget(roomId, charlie);
         _eliminateTarget(roomId, eve);
+        _eliminateTarget(roomId, gina);
 
         TuringArena.Room memory room = arena.getRoomInfo(roomId);
         assertTrue(room.isEnded);
@@ -480,30 +501,23 @@ contract TuringArenaTest is Test {
     }
 
     function test_FinalTwo_AIWinsOnTie() public {
-        // Create 3 players: alice (human), bob (human), dave (AI)
-        uint256 roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
-        _approveAndJoin(bob, roomId, false);
-        _approveAndJoin(dave, roomId, true);
+        // 4 players: alice (human), bob (human), charlie (human), dave (AI)
+        uint256 roomId = _createAndFillRoom(); // auto-starts (4/4)
 
-        vm.prank(alice);
-        arena.startGame(roomId);
-
-        // Eliminate bob first
+        // Eliminate bob and charlie first → leaves alice vs dave
         _eliminateTarget(roomId, bob);
+        _eliminateTarget(roomId, charlie);
 
-        // After bob eliminated, alice and dave remain → triggers _resolveFinalTwo
+        // After charlie eliminated, alice and dave remain → triggers _resolveFinalTwo
         TuringArena.Room memory room = arena.getRoomInfo(roomId);
         assertTrue(room.isEnded);
 
         // The game resolved with team-aware logic
         TuringArena.GameStats memory stats = arena.getGameStats(roomId);
-        // One of the two won — verify game ended properly
         assertTrue(room.isEnded);
 
-        // Check that dave (AI) has higher or equal HP → AI should win
+        // dave (AI) was never the sole target (all voted together each round)
         // In _resolveFinalTwo, tie → AI wins
-        // dave never got voted for (alice and dave both voted bob each round)
-        // so dave has 100 HP, alice has 100 HP → tie → AI (dave) wins
         assertFalse(stats.humansWon); // AIs won
     }
 
@@ -613,14 +627,15 @@ contract TuringArenaTest is Test {
     }
 
     function test_JoinRoom_RoomFull_CustomMaxPlayers() public {
+        // 3-player room: 2 humans + 1 AI → auto-starts
         uint256 roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 3, QUICK_FEE, false);
         _approveAndJoin(bob, roomId, false);
-        _approveAndJoin(charlie, roomId, false); // 3/3 → auto-start
+        _approveAndJoin(dave, roomId, true); // 3/3 → auto-start
 
-        vm.startPrank(dave);
+        vm.startPrank(eve);
         usdc.approve(address(arena), QUICK_FEE);
         vm.expectRevert("Game already started");
-        arena.joinRoom(roomId, true);
+        arena.joinRoom(roomId, false);
         vm.stopPrank();
     }
 
@@ -813,17 +828,17 @@ contract TuringArenaTest is Test {
     }
 
     /// @dev Creates a room with 4 players: alice, bob, charlie (humans) + dave (AI)
+    /// maxPlayers=4 → aiSlots=1, humanSlots=3 → auto-starts when all 4 join
     function _createAndFillRoom() internal returns (uint256 roomId) {
-        roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false); // human
+        roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 4, QUICK_FEE, false); // human
         _approveAndJoin(bob, roomId, false); // human
         _approveAndJoin(charlie, roomId, false); // human
-        _approveAndJoin(dave, roomId, true); // AI
+        _approveAndJoin(dave, roomId, true); // AI — auto-starts (4/4)
     }
 
     function _createAndStartGame() internal returns (uint256 roomId) {
         roomId = _createAndFillRoom();
-        vm.prank(alice);
-        arena.startGame(roomId);
+        // Room auto-starts when full — no need for manual startGame
     }
 
     function _advanceRound(uint256 roomId) internal {

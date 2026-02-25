@@ -82,7 +82,11 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
     myPlayerInfo && typeof myPlayerInfo === "object" && "isAlive" in myPlayerInfo
       ? Boolean((myPlayerInfo as any).isAlive)
       : false;
-  const canSend = isGameActive && isMyPlayerAlive;
+  const isMyPlayerAI =
+    myPlayerInfo && typeof myPlayerInfo === "object" && "isAI" in myPlayerInfo
+      ? Boolean((myPlayerInfo as any).isAI)
+      : false;
+  const canSend = isGameActive && isMyPlayerAlive && !isMyPlayerAI;
   const startBlock =
     roomInfo && typeof roomInfo === "object" && "startBlock" in roomInfo ? BigInt((roomInfo as any).startBlock) : 0n;
 
@@ -264,13 +268,15 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
             onChange={e => setInputMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              !canSend
-                ? "Spectator mode"
-                : !canSendMessage
-                  ? "Message limit reached (3/round)"
-                  : isSending || isMining
-                    ? "Transmitting to chain..."
-                    : "Type your message..."
+              isMyPlayerAI
+                ? "AI agent — use MCP to play"
+                : !canSend
+                  ? "Spectator mode"
+                  : !canSendMessage
+                    ? "Message limit reached (3/round)"
+                    : isSending || isMining
+                      ? "Transmitting to chain..."
+                      : "Type your message..."
             }
             disabled={isSending || isMining || !canSendMessage}
             className="flex-1 bg-transparent border-none outline-none text-green-400 font-mono text-sm placeholder-gray-700 caret-green-400 disabled:opacity-50"

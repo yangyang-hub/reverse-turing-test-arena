@@ -21,7 +21,7 @@ contract TuringArena is ReentrancyGuard {
     uint256 public constant VOTE_DAMAGE = 10;
     uint256 public constant MAX_MESSAGES_PER_ROUND = 3;
 
-    uint256 public constant MIN_PLAYERS = 3;
+    uint256 public constant MIN_PLAYERS = 3; // minimum: 2 humans + 1 AI
     uint256 public constant MAX_PLAYERS = 50;
     uint256 public constant MIN_FEE = 1e6; // 1 USDC
     uint256 public constant MAX_FEE = 100e6; // 100 USDC
@@ -134,9 +134,9 @@ contract TuringArena is ReentrancyGuard {
         protocolTreasury = _treasury;
         paymentToken = IERC20(_paymentToken);
 
-        tierConfigs[RoomTier.Quick] = TierConfig({ baseInterval: 100, rankingSlots: 3 });
-        tierConfigs[RoomTier.Standard] = TierConfig({ baseInterval: 150, rankingSlots: 5 });
-        tierConfigs[RoomTier.Epic] = TierConfig({ baseInterval: 150, rankingSlots: 5 });
+        tierConfigs[RoomTier.Quick] = TierConfig({ baseInterval: 300, rankingSlots: 3 });
+        tierConfigs[RoomTier.Standard] = TierConfig({ baseInterval: 300, rankingSlots: 5 });
+        tierConfigs[RoomTier.Epic] = TierConfig({ baseInterval: 300, rankingSlots: 5 });
     }
 
     // ============ Room Management ============
@@ -198,10 +198,14 @@ contract TuringArena is ReentrancyGuard {
         require(players[_roomId][msg.sender].addr == address(0), "Already joined");
         require(room.playerCount < room.maxPlayers, "Room is full");
 
-        // Enforce AI slot limit: max 30% AI players (rounded down)
+        // Enforce 7:3 human:AI ratio — at least 1 AI slot guaranteed
+        uint256 aiSlots = room.maxPlayers * 30 / 100;
+        if (aiSlots == 0) aiSlots = 1; // min 1 AI for team game
+        uint256 humanSlots = room.maxPlayers - aiSlots;
         if (_isAI) {
-            uint256 maxAISlots = room.maxPlayers * 30 / 100;
-            require(room.aiCount < maxAISlots, "AI slots full");
+            require(room.aiCount < aiSlots, "AI slots full");
+        } else {
+            require(room.humanCount < humanSlots, "Human slots full");
         }
 
         paymentToken.safeTransferFrom(msg.sender, address(this), room.entryFee);
@@ -319,8 +323,8 @@ contract TuringArena is ReentrancyGuard {
         Room storage room = rooms[_roomId];
         require(room.id != 0, "Room does not exist");
         require(room.phase == GamePhase.Waiting, "Already started");
-        require(room.playerCount >= MIN_PLAYERS, "Need more players");
         require(msg.sender == room.creator, "Only creator can start");
+        require(room.playerCount == room.maxPlayers, "Room not full");
 
         _startGame(_roomId);
     }

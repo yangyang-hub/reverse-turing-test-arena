@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAccount, useBlockNumber } from "wagmi";
 import { ArenaTerminal } from "~~/app/arena/_components/ArenaTerminal";
+import { MissionBriefing } from "~~/app/arena/_components/MissionBriefing";
 import { PlayerRadar } from "~~/app/arena/_components/PlayerRadar";
 import { VictoryScreen } from "~~/app/arena/_components/VictoryScreen";
 import { VotePanel } from "~~/app/arena/_components/VotePanel";
@@ -76,9 +77,16 @@ function ArenaContent() {
     args: [roomId, connectedAddress ?? "0x0000000000000000000000000000000000000000"] as const,
   });
 
+  const { data: myPlayerInfo } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getPlayerInfo",
+    args: [roomId, connectedAddress ?? "0x0000000000000000000000000000000000000000"] as const,
+  });
+
   // Settle state
   const [isSettling, setIsSettling] = useState(false);
   const [showVictory, setShowVictory] = useState(false);
+  const [showBriefing, setShowBriefing] = useState(true);
 
   // Auto-show VictoryScreen only when phase transitions to Ended live (not on page load)
   const phase = typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
@@ -182,6 +190,14 @@ function ArenaContent() {
     typeof roomInfo === "object" && "lastSettleBlock" in roomInfo ? Number((roomInfo as any).lastSettleBlock) : 0;
   const currentInterval =
     typeof roomInfo === "object" && "currentInterval" in roomInfo ? Number((roomInfo as any).currentInterval) : 0;
+
+  const humanCount =
+    typeof roomInfo === "object" && "humanCount" in roomInfo ? Number((roomInfo as any).humanCount) : 0;
+  const aiCount = typeof roomInfo === "object" && "aiCount" in roomInfo ? Number((roomInfo as any).aiCount) : 0;
+  const myIsAI =
+    myPlayerInfo && typeof myPlayerInfo === "object" && "isAI" in myPlayerInfo
+      ? Boolean((myPlayerInfo as any).isAI)
+      : false;
 
   const phaseLabel = PHASE_LABELS[phase] ?? "UNKNOWN";
   const phaseColor = PHASE_COLORS[phase] ?? "text-gray-400";
@@ -371,6 +387,16 @@ function ArenaContent() {
           <VotePanel roomId={roomId} />
         </div>
       </div>
+
+      {/* Mission Briefing overlay */}
+      {showBriefing && phase === 1 && isPlayerInGame && (
+        <MissionBriefing
+          humanCount={humanCount}
+          aiCount={aiCount}
+          isAI={myIsAI}
+          onDismiss={() => setShowBriefing(false)}
+        />
+      )}
 
       {/* Victory Screen overlay */}
       {showVictory && phase === 2 && gameStats && roomId !== undefined && (

@@ -102,7 +102,7 @@ export class GameLoop {
         p => p.toLowerCase() === myAddr.toLowerCase(),
       );
       if (!isInRoom) {
-        this.log("ERROR: Not in room. Use action_onchain(JOIN) or create_room first.");
+        this.log("ERROR: Not in room. Use match_room or create_room first.");
         this.stop();
         return;
       }

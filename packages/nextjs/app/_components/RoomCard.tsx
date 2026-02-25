@@ -2,10 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { waitForTransactionReceipt } from "@wagmi/core";
-import { erc20Abi, formatUnits } from "viem";
-import { useAccount, useConfig, useWriteContract } from "wagmi";
-import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { formatUnits } from "viem";
+import { useAccount } from "wagmi";
+import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { notification } from "~~/utils/scaffold-eth";
 
 const TIER_CONFIG = [
@@ -45,7 +44,6 @@ type RoomCardProps = {
 const RoomCard = ({ roomId }: RoomCardProps) => {
   const router = useRouter();
   const { address: connectedAddress } = useAccount();
-  const [isJoining, setIsJoining] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
 
@@ -61,24 +59,10 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
     args: [roomId],
   });
 
-  // Read paymentToken address from TuringArena
-  const { data: paymentTokenAddr } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "paymentToken",
-  });
-
-  // Get arena contract address for approve target
-  const { data: arenaContractInfo } = useDeployedContractInfo({ contractName: "TuringArena" });
-
   const { writeContractAsync: writeArena, isMining } = useScaffoldWriteContract({
     contractName: "TuringArena",
     disableSimulate: true,
   });
-
-  const config = useConfig();
-
-  // For ERC20 approve call
-  const { writeContractAsync: writeErc20, isPending: isApproving } = useWriteContract();
 
   // Reward info for ended games
   const { data: rewardInfo } = useScaffoldReadContract({
@@ -126,39 +110,6 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
       ? (players as string[]).some(p => p.toLowerCase() === connectedAddress.toLowerCase())
       : false;
 
-  const handleJoin = async () => {
-    if (!paymentTokenAddr || !arenaContractInfo?.address) {
-      notification.error("Contract data not loaded yet. Please wait and try again.");
-      return;
-    }
-    setIsJoining(true);
-    try {
-      // Step 1: Approve USDC spend
-      const approveHash = await writeErc20({
-        address: paymentTokenAddr as `0x${string}`,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [arenaContractInfo.address, entryFee],
-      });
-      // Wait for approve tx to be mined before joining
-      await waitForTransactionReceipt(config, { hash: approveHash });
-      // Step 2: Join room (no value needed for ERC20)
-      await writeArena({
-        functionName: "joinRoom",
-        args: [roomId, false],
-      });
-      notification.success(`Joined Room #${roomId.toString()}! Waiting for players...`);
-    } catch (e: any) {
-      const msg = e?.shortMessage || e?.message || "Unknown error";
-      if (!msg.includes("User rejected")) {
-        notification.error(`Failed to join: ${msg}`);
-      }
-      console.error("Failed to join room:", e);
-    } finally {
-      setIsJoining(false);
-    }
-  };
-
   const handleEnter = () => {
     router.push(`/arena?roomId=${roomId.toString()}`);
   };
@@ -198,7 +149,7 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
   const myRewardClaimed = rewardInfo ? Boolean((rewardInfo as any)[1]) : false;
   const hasClaimableReward = myRewardAmount > 0n && !myRewardClaimed;
 
-  const isBusy = isMining || isApproving || isJoining || isLeaving || isClaiming;
+  const isBusy = isMining || isLeaving || isClaiming;
 
   return (
     <div
@@ -286,17 +237,12 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
           </div>
         )}
         {isWaiting && !hasJoined && (
-          <button
-            className={`btn btn-sm w-full border font-bold tracking-widest ${tier.textClass}`}
-            style={{
-              borderColor: tier.color,
-              backgroundColor: `${tier.color}10`,
-            }}
-            onClick={handleJoin}
-            disabled={isBusy}
+          <div
+            className="flex items-center justify-center gap-2 rounded border border-dashed px-3 py-2"
+            style={{ borderColor: `${tier.color}40`, backgroundColor: `${tier.color}05` }}
           >
-            {isBusy ? <span className="loading loading-spinner loading-xs" /> : "JOIN"}
-          </button>
+            <span className="text-[10px] font-mono tracking-widest text-base-content/40">USE QUICK MATCH TO JOIN</span>
+          </div>
         )}
         {isActive && (
           <button

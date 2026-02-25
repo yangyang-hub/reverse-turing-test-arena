@@ -87,7 +87,7 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
           abi: arenaContractInfo.abi,
           functionName: "getRoomInfo",
           args: [roomId],
-        })) as { phase: number; maxPlayers: number; playerCount: number; entryFee: bigint };
+        })) as { phase: number; maxPlayers: number; playerCount: number; entryFee: bigint; humanCount: number };
 
         const phase = Number(roomInfo.phase);
         const playerCount = Number(roomInfo.playerCount);
@@ -97,6 +97,11 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
         if (phase !== 0 || playerCount >= maxPlayers) continue;
         if (maxPlayers < matchFilters.minPlayers || maxPlayers > matchFilters.maxPlayers) continue;
         if (entryFee < feeMinWei || entryFee > feeMaxWei) continue;
+
+        // Check human slot availability (web players = human)
+        const aiSlots = Math.max(1, Math.floor((maxPlayers * 30) / 100));
+        const humanSlots = maxPlayers - aiSlots;
+        if (Number(roomInfo.humanCount) >= humanSlots) continue;
 
         // Check if already joined
         const players = (await readContract(config, {
