@@ -21,8 +21,13 @@ export const ARENA_ABI = [
   // View functions — mappings
   "function currentRound(uint256 roomId) view returns (uint256)",
   "function hasVotedInRound(uint256 roomId, uint256 round, address player) view returns (bool)",
+  "function voteTarget(uint256 roomId, uint256 round, address voter) view returns (address)",
   "function getRewardInfo(uint256 roomId, address player) view returns (uint256 amount, bool claimed)",
   "function getMessageCount(uint256 roomId, uint256 round, address player) view returns (uint256)",
+  // View functions — helpers
+  "function getEliminationOrder(uint256 roomId) view returns (address[])",
+  "function allAliveVoted(uint256 roomId) view returns (bool)",
+  "function getContractBalance() view returns (uint256)",
   // Write functions
   "function sendMessage(uint256 roomId, string content)",
   "function castVote(uint256 roomId, address target)",

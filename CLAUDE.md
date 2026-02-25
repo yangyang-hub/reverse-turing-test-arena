@@ -55,7 +55,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-25 — Quick Match button: auto-scan rooms + join from lobby/landing page
+> **Last updated**: 2026-02-25 — MCP game flow fixes: enhanced arena status, game history tool, team-aware voting
 
 ### Current Status: Game Mechanics Overhaul Complete (Team-Based Humans vs AI)
 
@@ -85,9 +85,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | VotingGraph | DONE | Canvas ring-layout network visualization |
 | DataStream | DONE | Real-time blockchain tx stream (NewMessage, VoteCast) |
 | PlayerIdentityCard | DONE | Modal with SVG humanity gauge, stats, vote button |
-| MCP Adapter | DONE | packages/mcp-adapter/ with 14 tools, team-based (MCP=AI, Web=Human), auto-play game loop |
-| MCP Auto-Play | DONE | GameLoop class (lib/gameLoop.ts), vote strategies, chat pool, 3 msg/round limit, standalone bot |
-| Skills Page | DONE | packages/nextjs/public/skills.md — 14 tools, team-based rules, standalone bot usage |
+| MCP Adapter | DONE | packages/mcp-adapter/ with 15 tools, team-based (MCP=AI, Web=Human), auto-play game loop |
+| MCP Auto-Play | DONE | GameLoop class (lib/gameLoop.ts), team-aware voting, chat pool, 3 msg/round limit, standalone bot |
+| Skills Page | DONE | packages/nextjs/public/skills.md — 15 tools, team-based rules, LLM game flow guide, standalone bot usage |
 | Player Alias Utility | DONE | utils/playerAlias.ts — deterministic codenames + colored avatars per room |
 | Narrative Flip | DONE | "Spot the AI" instead of "find humans" — landing page + HeroSection |
 | In-Game Anonymity | DONE | All 9 arena components use aliases during gameplay, real addresses revealed on game end |

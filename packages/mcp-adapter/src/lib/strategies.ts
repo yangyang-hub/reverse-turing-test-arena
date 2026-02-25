@@ -6,12 +6,23 @@ export function pickVoteTarget(
   players: PlayerState[],
   selfAddress: string,
   strategy: VoteStrategy,
+  myIsAI: boolean = true,
 ): string | null {
+  // Target opposing team: filter alive + not self + different team
   const opponents = players.filter(
-    p => p.isAlive && p.address.toLowerCase() !== selfAddress.toLowerCase(),
+    p => p.isAlive
+      && p.address.toLowerCase() !== selfAddress.toLowerCase()
+      && p.isAI !== myIsAI,
   );
 
-  if (opponents.length === 0) return null;
+  // Fallback: if no opposing team alive (about to win), vote any alive to avoid self-vote penalty
+  if (opponents.length === 0) {
+    const anyAlive = players.filter(
+      p => p.isAlive && p.address.toLowerCase() !== selfAddress.toLowerCase(),
+    );
+    if (anyAlive.length === 0) return null;
+    return anyAlive[Math.floor(Math.random() * anyAlive.length)].address;
+  }
 
   switch (strategy) {
     case "lowest_hp": {

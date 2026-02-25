@@ -29,7 +29,7 @@ const PAYMENT_TOKEN = process.env.PAYMENT_TOKEN_ADDRESS || "";
 // ============ Tool 1: Get Arena Status ============
 server.tool(
   "get_arena_status",
-  "Get real-time context for a battle royale room: room state, all players with humanity scores, and recent chat history. Use this to understand the current game situation before taking actions.",
+  "Get real-time context for a battle royale room: room state, all players with humanity scores, recent chat, current round votes, and elimination history. Use this to understand the full game situation before taking actions.",
   {
     roomId: z.string().describe("Room ID number"),
   },
@@ -37,22 +37,49 @@ server.tool(
     try {
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, provider);
 
-      const [roomInfo, playerAddresses] = await Promise.all([
+      const [roomInfo, playerAddresses, round] = await Promise.all([
         contract.getRoomInfo(roomId),
         contract.getAllPlayers(roomId),
+        contract.currentRound(roomId),
       ]);
 
-      // Query recent chat events
+      // Query events from room start block
       const currentBlock = await provider.getBlockNumber();
       const fromBlock = roomInfo.startBlock > 0 ? Number(roomInfo.startBlock) : Math.max(0, currentBlock - 5000);
-      const filter = contract.filters.NewMessage(roomId);
-      const events = await contract.queryFilter(filter, fromBlock, currentBlock);
-      const chatHistory = events
+
+      // Query chat, vote, and elimination events in parallel
+      const [chatEvents, voteEvents, elimEvents] = await Promise.all([
+        contract.queryFilter(contract.filters.NewMessage(roomId), fromBlock, currentBlock),
+        contract.queryFilter(contract.filters.VoteCast(roomId), fromBlock, currentBlock),
+        contract.queryFilter(contract.filters.PlayerEliminated(roomId), fromBlock, currentBlock),
+      ]);
+
+      const chatHistory = chatEvents
         .filter((e): e is ethers.EventLog => "args" in e)
         .map(e => ({
           sender: e.args[1],
           content: e.args[2],
           timestamp: Number(e.args[3]),
+        }));
+
+      // Current round votes from events
+      const currentRound = Number(round);
+      const currentRoundVotes = voteEvents
+        .filter((e): e is ethers.EventLog => "args" in e)
+        .filter(e => Number(e.args[3]) === currentRound)
+        .map(e => ({
+          voter: e.args[1],
+          target: e.args[2],
+        }));
+
+      // Full elimination history
+      const eliminations = elimEvents
+        .filter((e): e is ethers.EventLog => "args" in e)
+        .map(e => ({
+          player: e.args[1],
+          eliminatedBy: e.args[2],
+          reason: e.args[3],
+          finalScore: Number(e.args[4]),
         }));
 
       // Get detailed player info
@@ -68,6 +95,12 @@ server.tool(
         actionCount: Number(p.actionCount),
         successfulVotes: Number(p.successfulVotes),
       }));
+
+      // Check if all alive players have voted
+      let allVoted = false;
+      if (Number(roomInfo.phase) === 1) {
+        allVoted = await contract.allAliveVoted(roomId);
+      }
 
       return {
         content: [
@@ -86,11 +119,15 @@ server.tool(
                   aliveCount: Number(roomInfo.aliveCount),
                   humanCount: Number(roomInfo.humanCount),
                   aiCount: Number(roomInfo.aiCount),
+                  currentRound: currentRound,
                   isActive: roomInfo.isActive,
                   isEnded: roomInfo.isEnded,
                 },
                 players: formattedPlayers,
                 recentChat: chatHistory.slice(-20),
+                currentRoundVotes,
+                eliminations,
+                allAliveVoted: allVoted,
               },
               null,
               2,
@@ -716,11 +753,114 @@ server.tool(
   },
 );
 
+// ============ Tool 15: Get Game History ============
+server.tool(
+  "get_game_history",
+  "Get the complete game history: all votes cast per round, elimination order, and game outcome. Best used after game ends or to review past games.",
+  {
+    roomId: z.string().describe("Room ID number"),
+  },
+  async ({ roomId }) => {
+    try {
+      const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, provider);
+
+      const [roomInfo, round] = await Promise.all([
+        contract.getRoomInfo(roomId),
+        contract.currentRound(roomId),
+      ]);
+
+      const currentBlock = await provider.getBlockNumber();
+      const fromBlock = roomInfo.startBlock > 0 ? Number(roomInfo.startBlock) : Math.max(0, currentBlock - 10000);
+
+      // Query all vote and elimination events
+      const [voteEvents, elimEvents] = await Promise.all([
+        contract.queryFilter(contract.filters.VoteCast(roomId), fromBlock, currentBlock),
+        contract.queryFilter(contract.filters.PlayerEliminated(roomId), fromBlock, currentBlock),
+      ]);
+
+      // Group votes by round
+      const rounds: Record<string, { votes: { voter: string; target: string }[]; eliminated: { player: string; eliminatedBy: string; reason: string; finalScore: number } | null }> = {};
+
+      for (const e of voteEvents) {
+        if (!("args" in e)) continue;
+        const ev = e as ethers.EventLog;
+        const r = ev.args[3].toString();
+        if (!rounds[r]) rounds[r] = { votes: [], eliminated: null };
+        rounds[r].votes.push({
+          voter: ev.args[1],
+          target: ev.args[2],
+        });
+      }
+
+      // Map eliminations to rounds by block proximity
+      for (const e of elimEvents) {
+        if (!("args" in e)) continue;
+        const ev = e as ethers.EventLog;
+        const elimBlock = ev.blockNumber;
+
+        // Find which round this elimination belongs to by checking vote events
+        let elimRound = "0";
+        for (const ve of voteEvents) {
+          if (!("args" in ve)) continue;
+          const vev = ve as ethers.EventLog;
+          if (vev.blockNumber <= elimBlock) {
+            elimRound = vev.args[3].toString();
+          }
+        }
+
+        if (!rounds[elimRound]) rounds[elimRound] = { votes: [], eliminated: null };
+        rounds[elimRound].eliminated = {
+          player: ev.args[1],
+          eliminatedBy: ev.args[2],
+          reason: ev.args[3],
+          finalScore: Number(ev.args[4]),
+        };
+      }
+
+      // Get elimination order and game stats
+      const eliminationOrder = await contract.getEliminationOrder(roomId);
+
+      let gameStats = null;
+      if (roomInfo.isEnded || Number(roomInfo.phase) === 2) {
+        const stats = await contract.getGameStats(roomId);
+        gameStats = {
+          humansWon: stats.humansWon,
+          mvp: stats.mvp,
+          mvpVotes: Number(stats.mvpVotes),
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(
+              {
+                totalRounds: Number(round),
+                rounds,
+                eliminationOrder: (eliminationOrder as string[]),
+                gameStats,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
 // Start server
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("RTTA Arena MCP Server running (14 tools available)...");
+  console.error("RTTA Arena MCP Server running (15 tools available)...");
 }
 
 main().catch(console.error);

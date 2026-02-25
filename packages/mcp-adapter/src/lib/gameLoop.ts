@@ -97,6 +97,16 @@ export class GameLoop {
       this.status.phaseName = room.phaseName;
       this.status.round = Number(round);
 
+      // 1.5. Verify we are in the room
+      const isInRoom = (playerAddresses as string[]).some(
+        p => p.toLowerCase() === myAddr.toLowerCase(),
+      );
+      if (!isInRoom) {
+        this.log("ERROR: Not in room. Use action_onchain(JOIN) or create_room first.");
+        this.stop();
+        return;
+      }
+
       // 2. Game ended → claim reward → stop
       if (room.isEnded || room.phase === 2) {
         this.log(`Game ended at round ${this.status.round}`);
@@ -143,7 +153,7 @@ export class GameLoop {
         myAddr,
       );
       if (!hasVoted) {
-        await this.tryVote(contract, players, myAddr);
+        await this.tryVote(contract, players, myAddr, myInfo.isAI);
       }
 
       // 8. Maybe send a chat message (respect 3 per round limit)
@@ -179,8 +189,9 @@ export class GameLoop {
     contract: ethers.Contract,
     players: PlayerState[],
     myAddr: string,
+    myIsAI: boolean,
   ): Promise<void> {
-    const target = pickVoteTarget(players, myAddr, this.config.voteStrategy);
+    const target = pickVoteTarget(players, myAddr, this.config.voteStrategy, myIsAI);
     if (!target) return;
 
     // Human-like delay before voting
