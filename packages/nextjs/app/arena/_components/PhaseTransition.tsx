@@ -3,32 +3,8 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
-type Phase = "PHASE_1" | "PHASE_2" | "PHASE_3";
-
-const PHASE_CONFIG: Record<Phase, { label: string; subtitle: string; color: string; bg: string }> = {
-  PHASE_1: {
-    label: "PHASE I",
-    subtitle: "OBSERVATION",
-    color: "text-green-400",
-    bg: "from-green-900/30 to-transparent",
-  },
-  PHASE_2: {
-    label: "PHASE II",
-    subtitle: "SUSPICION",
-    color: "text-yellow-400",
-    bg: "from-yellow-900/30 to-transparent",
-  },
-  PHASE_3: {
-    label: "PHASE III",
-    subtitle: "ELIMINATION",
-    color: "text-red-400",
-    bg: "from-red-900/30 to-transparent",
-  },
-};
-
-export const PhaseTransition = ({ phase, onComplete }: { phase: Phase; onComplete: () => void }) => {
+export const PhaseTransition = ({ onComplete }: { onComplete: () => void }) => {
   const [isVisible, setIsVisible] = useState(true);
-  const config = PHASE_CONFIG[phase];
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -50,7 +26,7 @@ export const PhaseTransition = ({ phase, onComplete }: { phase: Phase; onComplet
         transition={{ duration: 0.3 }}
       >
         {/* Background gradient */}
-        <div className={`absolute inset-0 bg-gradient-to-b ${config.bg}`} />
+        <div className="absolute inset-0 bg-gradient-to-b from-green-900/30 to-transparent" />
 
         {/* Horizontal scanline wipe */}
         <motion.div
@@ -63,12 +39,12 @@ export const PhaseTransition = ({ phase, onComplete }: { phase: Phase; onComplet
         {/* Phase name */}
         <div className="relative text-center">
           <motion.div
-            className={`text-6xl md:text-8xl font-mono font-black ${config.color} tracking-widest`}
+            className="text-6xl md:text-8xl font-mono font-black text-green-400 tracking-widest"
             initial={{ x: -100, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.3 }}
           >
-            {config.label}
+            BATTLE
           </motion.div>
 
           <motion.div
@@ -77,7 +53,7 @@ export const PhaseTransition = ({ phase, onComplete }: { phase: Phase; onComplet
             animate={{ x: 0, opacity: 1 }}
             transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.6 }}
           >
-            {config.subtitle}
+            SPOT THE AI
           </motion.div>
         </div>
 

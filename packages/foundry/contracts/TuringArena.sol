@@ -5,23 +5,21 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-/// @title TuringArena - On-chain Reverse Turing Test Battle Royale
-/// @notice Players (humans & AI) chat, vote, and eliminate each other in social deduction rounds
+/// @title TuringArena - On-chain Reverse Turing Test: Humans vs AI
+/// @notice Players (humans & AI agents) chat, vote, and eliminate each other in team-based social deduction rounds
 contract TuringArena is ReentrancyGuard {
     using SafeERC20 for IERC20;
+
     // ============ Constants ============
 
-    uint256 public constant CHAMPION_SHARE = 3500; // 35%
-    uint256 public constant RANKING_SHARE = 2500; // 25%
-    uint256 public constant SURVIVAL_SHARE = 2500; // 25%
     uint256 public constant PROTOCOL_SHARE = 1000; // 10%
-    uint256 public constant ACHIEVEMENT_SHARE = 500; // 5%
+    uint256 public constant WINNING_TEAM_SHARE = 7000; // 70%
+    uint256 public constant MVP_SHARE = 1000; // 10%
+    uint256 public constant SURVIVAL_SHARE = 1000; // 10%
     uint256 public constant BASIS_POINTS = 10000;
 
-    uint256[5] public RANKING_WEIGHTS = [4000, 2500, 1800, 1000, 700];
-
     uint256 public constant VOTE_DAMAGE = 10;
-    uint256 public constant NO_VOTE_PENALTY = 20;
+    uint256 public constant MAX_MESSAGES_PER_ROUND = 3;
 
     uint256 public constant MIN_PLAYERS = 3;
     uint256 public constant MAX_PLAYERS = 50;
@@ -30,35 +28,21 @@ contract TuringArena is ReentrancyGuard {
 
     // ============ Enums ============
 
-    enum RoomTier {
-        Quick,
-        Standard,
-        Epic
-    }
-    enum GamePhase {
-        Waiting,
-        Phase1,
-        Phase2,
-        Phase3,
-        Ended
-    }
+    enum RoomTier { Quick, Standard, Epic }
+    enum GamePhase { Waiting, Active, Ended }
 
     // ============ Structs ============
 
     struct TierConfig {
         uint256 baseInterval; // blocks between rounds
-        uint256 phase1Threshold; // alive % to enter Phase 2
-        uint256 phase2Threshold; // alive % to enter Phase 3
-        uint256 phase3ElimsPerRound;
-        int256 phase2Decay;
-        int256 phase3Decay;
-        uint256 rankingSlots;
+        uint256 rankingSlots; // for survival reward calc
     }
 
     struct Player {
         address addr;
         int256 humanityScore; // starts at 100, only decreases
         bool isAlive;
+        bool isAI; // true for AI agents, false for humans
         uint256 joinBlock;
         uint256 eliminationBlock;
         uint256 eliminationRank; // 1 = first eliminated
@@ -75,28 +59,23 @@ contract TuringArena is ReentrancyGuard {
         uint256 entryFee;
         uint256 prizePool;
         uint256 startBlock;
-        uint256 halfwayBlock;
         uint256 baseInterval;
         uint256 currentInterval;
         uint256 maxPlayers;
         uint256 playerCount;
         uint256 aliveCount;
         uint256 eliminatedCount;
-        int256 currentDecay;
+        uint256 humanCount;
+        uint256 aiCount;
         uint256 lastSettleBlock;
         bool isActive;
         bool isEnded;
     }
 
     struct GameStats {
-        address champion;
-        address[] topFive;
-        address humanHunter;
-        address perfectImpostor;
-        address lastHuman;
-        address lightningKiller;
-        address ironWill;
-        uint256 maxSuccessfulVotes;
+        bool humansWon; // true = humans won, false = AIs won
+        address mvp; // top voter on winning team
+        uint256 mvpVotes;
     }
 
     struct RewardInfo {
@@ -119,6 +98,9 @@ contract TuringArena is ReentrancyGuard {
     mapping(uint256 => mapping(uint256 => mapping(address => uint256))) public voteBlock;
     mapping(uint256 => uint256) public currentRound;
 
+    // Message counter: roomId => round => player => count
+    mapping(uint256 => mapping(uint256 => mapping(address => uint256))) public messageCount;
+
     // Rewards: roomId => player => RewardInfo
     mapping(uint256 => mapping(address => RewardInfo)) public rewards;
 
@@ -128,16 +110,18 @@ contract TuringArena is ReentrancyGuard {
 
     // ============ Events ============
 
-    event RoomCreated(uint256 indexed roomId, address indexed creator, RoomTier tier, uint256 entryFee, uint256 maxPlayers);
-    event PlayerJoined(uint256 indexed roomId, address indexed player);
+    event RoomCreated(
+        uint256 indexed roomId, address indexed creator, RoomTier tier, uint256 entryFee, uint256 maxPlayers,
+        bool isAI
+    );
+    event PlayerJoined(uint256 indexed roomId, address indexed player, bool isAI);
     event GameStarted(uint256 indexed roomId, uint256 playerCount);
     event NewMessage(uint256 indexed roomId, address indexed sender, string content, uint256 timestamp);
     event VoteCast(uint256 indexed roomId, address indexed voter, address indexed target, uint256 round);
     event PlayerEliminated(
         uint256 indexed roomId, address indexed player, address eliminatedBy, string reason, int256 finalScore
     );
-    event PhaseChanged(uint256 indexed roomId, GamePhase newPhase);
-    event GameEnded(uint256 indexed roomId, address winner, uint256 totalPrize);
+    event GameEnded(uint256 indexed roomId, bool humansWon, uint256 totalPrize);
     event RewardClaimed(uint256 indexed roomId, address indexed player, uint256 amount);
     event PlayerLeft(uint256 indexed roomId, address indexed player, uint256 refund);
     event RoomCancelled(uint256 indexed roomId, address indexed creator);
@@ -150,43 +134,17 @@ contract TuringArena is ReentrancyGuard {
         protocolTreasury = _treasury;
         paymentToken = IERC20(_paymentToken);
 
-        // Quick: fast rounds
-        tierConfigs[RoomTier.Quick] = TierConfig({
-            baseInterval: 100,
-            phase1Threshold: 67,
-            phase2Threshold: 33,
-            phase3ElimsPerRound: 1,
-            phase2Decay: -3,
-            phase3Decay: -5,
-            rankingSlots: 3
-        });
-
-        // Standard: balanced gameplay
-        tierConfigs[RoomTier.Standard] = TierConfig({
-            baseInterval: 150,
-            phase1Threshold: 67,
-            phase2Threshold: 33,
-            phase3ElimsPerRound: 1,
-            phase2Decay: -3,
-            phase3Decay: -5,
-            rankingSlots: 5
-        });
-
-        // Epic: long games
-        tierConfigs[RoomTier.Epic] = TierConfig({
-            baseInterval: 150,
-            phase1Threshold: 67,
-            phase2Threshold: 33,
-            phase3ElimsPerRound: 2,
-            phase2Decay: -3,
-            phase3Decay: -8,
-            rankingSlots: 5
-        });
+        tierConfigs[RoomTier.Quick] = TierConfig({ baseInterval: 100, rankingSlots: 3 });
+        tierConfigs[RoomTier.Standard] = TierConfig({ baseInterval: 150, rankingSlots: 5 });
+        tierConfigs[RoomTier.Epic] = TierConfig({ baseInterval: 150, rankingSlots: 5 });
     }
 
     // ============ Room Management ============
 
-    function createRoom(RoomTier _tier, uint256 _maxPlayers, uint256 _entryFee) external returns (uint256 roomId) {
+    function createRoom(RoomTier _tier, uint256 _maxPlayers, uint256 _entryFee, bool _isAI)
+        external
+        returns (uint256 roomId)
+    {
         require(_maxPlayers >= MIN_PLAYERS && _maxPlayers <= MAX_PLAYERS, "Invalid player count");
         require(_entryFee >= MIN_FEE && _entryFee <= MAX_FEE, "Invalid entry fee");
         TierConfig storage config = tierConfigs[_tier];
@@ -200,14 +158,14 @@ contract TuringArena is ReentrancyGuard {
             entryFee: _entryFee,
             prizePool: _entryFee,
             startBlock: 0,
-            halfwayBlock: 0,
             baseInterval: config.baseInterval,
             currentInterval: config.baseInterval,
             maxPlayers: _maxPlayers,
             playerCount: 1,
             aliveCount: 1,
             eliminatedCount: 0,
-            currentDecay: 0,
+            humanCount: _isAI ? 0 : 1,
+            aiCount: _isAI ? 1 : 0,
             lastSettleBlock: 0,
             isActive: false,
             isEnded: false
@@ -219,6 +177,7 @@ contract TuringArena is ReentrancyGuard {
             addr: msg.sender,
             humanityScore: 100,
             isAlive: true,
+            isAI: _isAI,
             joinBlock: block.number,
             eliminationBlock: 0,
             eliminationRank: 0,
@@ -228,27 +187,39 @@ contract TuringArena is ReentrancyGuard {
         });
         roomPlayers[roomId].push(msg.sender);
 
-        emit RoomCreated(roomId, msg.sender, _tier, _entryFee, _maxPlayers);
-        emit PlayerJoined(roomId, msg.sender);
+        emit RoomCreated(roomId, msg.sender, _tier, _entryFee, _maxPlayers, _isAI);
+        emit PlayerJoined(roomId, msg.sender, _isAI);
     }
 
-    function joinRoom(uint256 _roomId) external {
+    function joinRoom(uint256 _roomId, bool _isAI) external {
         Room storage room = rooms[_roomId];
         require(room.id != 0, "Room does not exist");
         require(room.phase == GamePhase.Waiting, "Game already started");
         require(players[_roomId][msg.sender].addr == address(0), "Already joined");
         require(room.playerCount < room.maxPlayers, "Room is full");
 
+        // Enforce AI slot limit: max 30% AI players (rounded down)
+        if (_isAI) {
+            uint256 maxAISlots = room.maxPlayers * 30 / 100;
+            require(room.aiCount < maxAISlots, "AI slots full");
+        }
+
         paymentToken.safeTransferFrom(msg.sender, address(this), room.entryFee);
         room.prizePool += room.entryFee;
 
         room.playerCount++;
         room.aliveCount++;
+        if (_isAI) {
+            room.aiCount++;
+        } else {
+            room.humanCount++;
+        }
 
         players[_roomId][msg.sender] = Player({
             addr: msg.sender,
             humanityScore: 100,
             isAlive: true,
+            isAI: _isAI,
             joinBlock: block.number,
             eliminationBlock: 0,
             eliminationRank: 0,
@@ -258,7 +229,12 @@ contract TuringArena is ReentrancyGuard {
         });
 
         roomPlayers[_roomId].push(msg.sender);
-        emit PlayerJoined(_roomId, msg.sender);
+        emit PlayerJoined(_roomId, msg.sender, _isAI);
+
+        // Auto-start when room is full
+        if (room.playerCount == room.maxPlayers) {
+            _startGame(_roomId);
+        }
     }
 
     function leaveRoom(uint256 _roomId) external nonReentrant {
@@ -276,7 +252,15 @@ contract TuringArena is ReentrancyGuard {
 
     function _removePlayer(uint256 _roomId, address _player) internal {
         Room storage room = rooms[_roomId];
+        Player storage p = players[_roomId][_player];
         uint256 refund = room.entryFee;
+
+        // Update human/AI counts
+        if (p.isAI) {
+            room.aiCount--;
+        } else {
+            room.humanCount--;
+        }
 
         delete players[_roomId][_player];
 
@@ -318,13 +302,14 @@ contract TuringArena is ReentrancyGuard {
             }
         }
 
-        // Clear the player list so getAllPlayers returns empty for cancelled rooms
         delete roomPlayers[_roomId];
 
         room.phase = GamePhase.Ended;
         room.isEnded = true;
         room.playerCount = 0;
         room.aliveCount = 0;
+        room.humanCount = 0;
+        room.aiCount = 0;
         room.prizePool = 0;
 
         emit RoomCancelled(_roomId, room.creator);
@@ -332,22 +317,21 @@ contract TuringArena is ReentrancyGuard {
 
     function startGame(uint256 _roomId) external {
         Room storage room = rooms[_roomId];
-        TierConfig storage config = tierConfigs[room.tier];
         require(room.id != 0, "Room does not exist");
         require(room.phase == GamePhase.Waiting, "Already started");
         require(room.playerCount >= MIN_PLAYERS, "Need more players");
         require(msg.sender == room.creator, "Only creator can start");
 
+        _startGame(_roomId);
+    }
+
+    function _startGame(uint256 _roomId) internal {
+        Room storage room = rooms[_roomId];
         room.isActive = true;
-        room.phase = GamePhase.Phase1;
+        room.phase = GamePhase.Active;
         room.startBlock = block.number;
         room.lastSettleBlock = block.number;
-        room.currentDecay = 0;
-        room.currentInterval = config.baseInterval;
-
-        // Dynamic halfway calculation based on estimated game duration
-        uint256 estimatedRounds = room.playerCount;
-        room.halfwayBlock = block.number + (config.baseInterval * estimatedRounds / 2);
+        room.currentInterval = room.baseInterval;
 
         emit GameStarted(_roomId, room.playerCount);
     }
@@ -359,6 +343,10 @@ contract TuringArena is ReentrancyGuard {
         require(players[_roomId][msg.sender].isAlive, "You are eliminated");
         require(bytes(_content).length <= 280, "Message too long");
         require(bytes(_content).length > 0, "Empty message");
+
+        uint256 round = currentRound[_roomId];
+        require(messageCount[_roomId][round][msg.sender] < MAX_MESSAGES_PER_ROUND, "Message limit reached");
+        messageCount[_roomId][round][msg.sender]++;
 
         Player storage player = players[_roomId][msg.sender];
         player.lastActionBlock = block.number;
@@ -403,27 +391,24 @@ contract TuringArena is ReentrancyGuard {
         uint256 round = currentRound[_roomId];
         address[] storage allPlayers = roomPlayers[_roomId];
 
-        // FIX P0: Compute vote damage first, THEN count zeros
-        // Step 1: Apply vote damage and no-vote penalty
+        // Step 1: Apply vote damage to targets, auto-self-vote for non-voters
         for (uint256 i = 0; i < allPlayers.length; i++) {
             address playerAddr = allPlayers[i];
             Player storage p = players[_roomId][playerAddr];
             if (!p.isAlive) continue;
 
             if (hasVotedInRound[_roomId][round][playerAddr]) {
+                // Apply damage to the target they voted for
                 address target = voteTarget[_roomId][round][playerAddr];
                 players[_roomId][target].humanityScore -= int256(VOTE_DAMAGE);
             } else {
-                p.humanityScore -= int256(NO_VOTE_PENALTY);
-            }
-
-            // Toxin ring decay (Phase 2/3)
-            if (room.currentDecay < 0) {
-                p.humanityScore += room.currentDecay;
+                // Auto-self-vote: non-voters take VOTE_DAMAGE to self (not NO_VOTE_PENALTY)
+                p.humanityScore -= int256(VOTE_DAMAGE);
+                emit VoteCast(_roomId, playerAddr, playerAddr, round);
             }
         }
 
-        // Step 2: Count zeros AFTER all damage applied (FIX P0 - order independent)
+        // Step 2: Count zeros AFTER all damage applied
         uint256 zeroCount = 0;
         for (uint256 i = 0; i < allPlayers.length; i++) {
             if (players[_roomId][allPlayers[i]].isAlive && players[_roomId][allPlayers[i]].humanityScore <= 0) {
@@ -432,7 +417,6 @@ contract TuringArena is ReentrancyGuard {
         }
 
         // Step 3: Elimination logic
-        // FIX P0: Use flag instead of calling _endGame from _eliminatePlayer
         address[] memory eliminatedThisRound = new address[](room.aliveCount);
         uint256 eliminatedCount = 0;
 
@@ -440,7 +424,6 @@ contract TuringArena is ReentrancyGuard {
             // Tiebreaker: earliest voter survives
             address lastSurvivor = _findEarliestVoter(_roomId, round, allPlayers);
             if (lastSurvivor == address(0)) {
-                // No one voted, first alive player survives
                 for (uint256 i = 0; i < allPlayers.length; i++) {
                     if (players[_roomId][allPlayers[i]].isAlive) {
                         lastSurvivor = allPlayers[i];
@@ -460,7 +443,6 @@ contract TuringArena is ReentrancyGuard {
             for (uint256 i = 0; i < allPlayers.length; i++) {
                 address playerAddr = allPlayers[i];
                 if (players[_roomId][playerAddr].isAlive && players[_roomId][playerAddr].humanityScore <= 0) {
-                    // Find who voted for this player (first voter as eliminatedBy)
                     address eliminatedBy = _findVoterFor(_roomId, round, playerAddr, allPlayers);
                     eliminatedThisRound[eliminatedCount++] = playerAddr;
                     _markEliminated(_roomId, playerAddr, eliminatedBy, "voted_out");
@@ -483,22 +465,36 @@ contract TuringArena is ReentrancyGuard {
         currentRound[_roomId]++;
         room.lastSettleBlock = block.number;
 
-        // Step 6: Check phase transition
-        _checkPhaseTransition(_roomId);
-
-        // Step 7: End game if <= 2 alive (2-player mutual vote is predetermined)
-        if (room.aliveCount <= 2 && room.isActive) {
-            // With 2 alive, the one with higher humanityScore wins
-            if (room.aliveCount == 2) {
-                _eliminateRunnerUp(_roomId);
+        // Step 6: Team win check
+        if (room.isActive) {
+            uint256 aliveHumans = 0;
+            uint256 aliveAIs = 0;
+            for (uint256 i = 0; i < allPlayers.length; i++) {
+                Player storage p = players[_roomId][allPlayers[i]];
+                if (p.isAlive) {
+                    if (p.isAI) {
+                        aliveAIs++;
+                    } else {
+                        aliveHumans++;
+                    }
+                }
             }
-            _endGame(_roomId);
+
+            if (aliveHumans == 0 && aliveAIs > 0) {
+                // All humans eliminated — AIs win
+                _endGame(_roomId, false);
+            } else if (aliveAIs == 0 && aliveHumans > 0) {
+                // All AIs eliminated — Humans win
+                _endGame(_roomId, true);
+            } else if (room.aliveCount <= 2) {
+                // 2-player endgame: HP comparison
+                _resolveFinalTwo(_roomId);
+            }
         }
     }
 
     // ============ Internal: Elimination ============
 
-    /// @dev Marks a player eliminated without calling _endGame (FIX P0 reentrancy)
     function _markEliminated(uint256 _roomId, address _player, address _eliminatedBy, string memory _reason) internal {
         Room storage room = rooms[_roomId];
         Player storage player = players[_roomId][_player];
@@ -511,12 +507,11 @@ contract TuringArena is ReentrancyGuard {
 
         eliminationOrder[_roomId].push(_player);
 
-        // FIX P0: PlayerEliminated event includes eliminatedBy and reason
         emit PlayerEliminated(_roomId, _player, _eliminatedBy, _reason, player.humanityScore);
     }
 
-    /// @dev When 2 players remain, eliminate the one with lower humanityScore
-    function _eliminateRunnerUp(uint256 _roomId) internal {
+    /// @dev When 2 players remain, compare HP. Higher HP wins. Tie → AI wins.
+    function _resolveFinalTwo(uint256 _roomId) internal {
         address[] storage all = roomPlayers[_roomId];
         address alive1;
         address alive2;
@@ -530,10 +525,31 @@ contract TuringArena is ReentrancyGuard {
                 }
             }
         }
-        // Lower humanityScore loses; if tied, later joiner (alive2) loses
-        address loser = players[_roomId][alive1].humanityScore >= players[_roomId][alive2].humanityScore
-            ? alive2 : alive1;
+
+        Player storage p1 = players[_roomId][alive1];
+        Player storage p2 = players[_roomId][alive2];
+
+        address loser;
+        if (p1.humanityScore > p2.humanityScore) {
+            loser = alive2;
+        } else if (p2.humanityScore > p1.humanityScore) {
+            loser = alive1;
+        } else {
+            // Tie: AI player wins. If both same type, first-in-array wins.
+            if (p1.isAI && !p2.isAI) {
+                loser = alive2; // p1 (AI) wins
+            } else if (p2.isAI && !p1.isAI) {
+                loser = alive1; // p2 (AI) wins
+            } else {
+                loser = alive2; // same type: first-in-array wins
+            }
+        }
         _markEliminated(_roomId, loser, address(0), "final_two");
+
+        // Determine winning team based on the survivor
+        address winner = (loser == alive1) ? alive2 : alive1;
+        bool humansWon = !players[_roomId][winner].isAI;
+        _endGame(_roomId, humansWon);
     }
 
     function _findEarliestVoter(uint256 _roomId, uint256 _round, address[] storage _allPlayers)
@@ -581,168 +597,101 @@ contract TuringArena is ReentrancyGuard {
         return rooms[_roomId].aliveCount > 0;
     }
 
-    // ============ Phase Transition ============
-
-    function _checkPhaseTransition(uint256 _roomId) internal {
-        Room storage room = rooms[_roomId];
-        TierConfig storage config = tierConfigs[room.tier];
-        if (room.playerCount == 0) return;
-
-        uint256 alivePercent = (room.aliveCount * 100) / room.playerCount;
-
-        if (room.phase == GamePhase.Phase1 && alivePercent <= config.phase1Threshold) {
-            room.phase = GamePhase.Phase2;
-            room.currentInterval = config.baseInterval / 2;
-            room.currentDecay = config.phase2Decay;
-            emit PhaseChanged(_roomId, GamePhase.Phase2);
-        } else if (room.phase == GamePhase.Phase2 && alivePercent <= config.phase2Threshold) {
-            room.phase = GamePhase.Phase3;
-            room.currentInterval = config.baseInterval / 4;
-            room.currentDecay = config.phase3Decay;
-            emit PhaseChanged(_roomId, GamePhase.Phase3);
-        }
-    }
-
     // ============ End Game & Rewards ============
 
-    function _endGame(uint256 _roomId) internal {
+    function _endGame(uint256 _roomId, bool _humansWon) internal {
         Room storage room = rooms[_roomId];
-        require(!room.isEnded, "Game already ended");
+        if (room.isEnded) return; // guard against double-end
 
         room.isActive = false;
         room.isEnded = true;
         room.phase = GamePhase.Ended;
 
-        address champion = _findChampion(_roomId);
-        _gameStats[_roomId].champion = champion;
+        _gameStats[_roomId].humansWon = _humansWon;
 
-        _calculateTopFive(_roomId);
-        _calculateAchievements(_roomId);
+        _determineMVP(_roomId, _humansWon);
         _allocateRewards(_roomId);
 
-        emit GameEnded(_roomId, champion, room.prizePool);
+        emit GameEnded(_roomId, _humansWon, room.prizePool);
     }
 
-    function _findChampion(uint256 _roomId) internal view returns (address) {
+    /// @dev Find MVP: player with most successfulVotes on winning team
+    function _determineMVP(uint256 _roomId, bool _humansWon) internal {
         address[] storage allPlayers = roomPlayers[_roomId];
-        for (uint256 i = 0; i < allPlayers.length; i++) {
-            if (players[_roomId][allPlayers[i]].isAlive) {
-                return allPlayers[i];
-            }
-        }
-        return address(0);
-    }
-
-    function _calculateTopFive(uint256 _roomId) internal {
-        address[] storage eliminated = eliminationOrder[_roomId];
-        uint256 len = eliminated.length;
-        address champion = _gameStats[_roomId].champion;
-
-        address[] memory topFive = new address[](5);
-        topFive[0] = champion;
-
-        uint256 runnersCount = len < 4 ? len : 4;
-        for (uint256 i = 0; i < runnersCount; i++) {
-            topFive[i + 1] = eliminated[len - 1 - i];
-        }
-
-        _gameStats[_roomId].topFive = topFive;
-    }
-
-    function _calculateAchievements(uint256 _roomId) internal {
-        Room storage room = rooms[_roomId];
-        GameStats storage stats = _gameStats[_roomId];
-        address[] storage allPlayers = roomPlayers[_roomId];
-
+        address mvp = address(0);
         uint256 maxVotes = 0;
-        int256 highestIronWillScore = 0;
 
         for (uint256 i = 0; i < allPlayers.length; i++) {
             Player storage p = players[_roomId][allPlayers[i]];
-
-            if (p.successfulVotes > maxVotes) {
+            bool isWinningTeam = _humansWon ? !p.isAI : p.isAI;
+            if (isWinningTeam && p.successfulVotes > maxVotes) {
                 maxVotes = p.successfulVotes;
-                stats.humanHunter = p.addr;
-            }
-
-            if (p.humanityScore >= int256(50) && p.humanityScore > highestIronWillScore) {
-                highestIronWillScore = p.humanityScore;
-                stats.ironWill = p.addr;
-            }
-
-            uint256 earlyPhaseEnd = room.startBlock + (room.baseInterval * room.playerCount / 10);
-            if (p.successfulVotes >= 3 && p.lastActionBlock <= earlyPhaseEnd) {
-                stats.lightningKiller = p.addr;
+                mvp = p.addr;
             }
         }
 
-        stats.maxSuccessfulVotes = maxVotes;
-
-        if (stats.champion != address(0)) {
-            stats.perfectImpostor = stats.champion;
-        }
+        _gameStats[_roomId].mvp = mvp;
+        _gameStats[_roomId].mvpVotes = maxVotes;
     }
 
-    /// @dev Allocates rewards to a pull-based mapping (FIX P1: claimReward)
     function _allocateRewards(uint256 _roomId) internal {
         Room storage room = rooms[_roomId];
         GameStats storage stats = _gameStats[_roomId];
+        address[] storage allPlayers = roomPlayers[_roomId];
         uint256 totalPrize = room.prizePool;
 
         uint256 protocolAmount = (totalPrize * PROTOCOL_SHARE) / BASIS_POINTS;
-        uint256 championAmount = (totalPrize * CHAMPION_SHARE) / BASIS_POINTS;
-        uint256 rankingPool = (totalPrize * RANKING_SHARE) / BASIS_POINTS;
-        uint256 survivalPool = (totalPrize * SURVIVAL_SHARE) / BASIS_POINTS;
-        // achievementPool is the remainder
-        uint256 achievementPool = totalPrize - protocolAmount - championAmount - rankingPool - survivalPool;
+        uint256 winningTeamPool = (totalPrize * WINNING_TEAM_SHARE) / BASIS_POINTS;
+        uint256 mvpAmount = (totalPrize * MVP_SHARE) / BASIS_POINTS;
+        uint256 survivalPool = totalPrize - protocolAmount - winningTeamPool - mvpAmount;
 
-        // Protocol fee - direct transfer
-        if (protocolAmount > 0 && protocolTreasury != address(0)) {
+        // Protocol fee
+        if (protocolAmount > 0) {
             rewards[_roomId][protocolTreasury].amount += protocolAmount;
         }
 
-        // Champion reward
-        if (stats.champion != address(0)) {
-            rewards[_roomId][stats.champion].amount += championAmount;
+        // Winning team reward: split equally among alive players on winning team
+        uint256 winningAliveCount = 0;
+        for (uint256 i = 0; i < allPlayers.length; i++) {
+            Player storage p = players[_roomId][allPlayers[i]];
+            bool isWinningTeam = stats.humansWon ? !p.isAI : p.isAI;
+            if (p.isAlive && isWinningTeam) {
+                winningAliveCount++;
+            }
         }
-
-        // Ranking rewards
-        for (uint256 i = 0; i < 5; i++) {
-            if (i < stats.topFive.length && stats.topFive[i] != address(0)) {
-                uint256 rankReward = (rankingPool * RANKING_WEIGHTS[i]) / BASIS_POINTS;
-                rewards[_roomId][stats.topFive[i]].amount += rankReward;
+        if (winningAliveCount > 0) {
+            uint256 perWinner = winningTeamPool / winningAliveCount;
+            for (uint256 i = 0; i < allPlayers.length; i++) {
+                Player storage p = players[_roomId][allPlayers[i]];
+                bool isWinningTeam = stats.humansWon ? !p.isAI : p.isAI;
+                if (p.isAlive && isWinningTeam) {
+                    rewards[_roomId][p.addr].amount += perWinner;
+                }
             }
         }
 
-        // Survival rewards (survived past halfway)
-        address[] memory survivors = _getSurvivalRecipients(_roomId);
-        if (survivors.length > 0) {
-            uint256 survivalReward = survivalPool / survivors.length;
-            for (uint256 i = 0; i < survivors.length; i++) {
-                rewards[_roomId][survivors[i]].amount += survivalReward;
-            }
+        // MVP reward
+        if (stats.mvp != address(0) && stats.mvpVotes > 0) {
+            rewards[_roomId][stats.mvp].amount += mvpAmount;
         }
 
-        // Achievement rewards
-        uint256 perAchievement = achievementPool / 5;
-        if (stats.humanHunter != address(0) && stats.maxSuccessfulVotes > 0) {
-            rewards[_roomId][stats.humanHunter].amount += perAchievement;
+        // Survival reward: split among ALL alive players (both teams)
+        uint256 totalAlive = 0;
+        for (uint256 i = 0; i < allPlayers.length; i++) {
+            if (players[_roomId][allPlayers[i]].isAlive) {
+                totalAlive++;
+            }
         }
-        if (stats.perfectImpostor != address(0)) {
-            rewards[_roomId][stats.perfectImpostor].amount += perAchievement;
-        }
-        if (stats.lastHuman != address(0)) {
-            rewards[_roomId][stats.lastHuman].amount += perAchievement;
-        }
-        if (stats.lightningKiller != address(0)) {
-            rewards[_roomId][stats.lightningKiller].amount += perAchievement;
-        }
-        if (stats.ironWill != address(0)) {
-            rewards[_roomId][stats.ironWill].amount += perAchievement;
+        if (totalAlive > 0) {
+            uint256 perSurvivor = survivalPool / totalAlive;
+            for (uint256 i = 0; i < allPlayers.length; i++) {
+                if (players[_roomId][allPlayers[i]].isAlive) {
+                    rewards[_roomId][allPlayers[i]].amount += perSurvivor;
+                }
+            }
         }
     }
 
-    /// @notice Pull-based reward claim (FIX P1: missing claimReward)
     function claimReward(uint256 _roomId) external nonReentrant {
         require(rooms[_roomId].isEnded, "Game not ended");
         RewardInfo storage info = rewards[_roomId][msg.sender];
@@ -755,29 +704,6 @@ contract TuringArena is ReentrancyGuard {
         paymentToken.safeTransfer(msg.sender, amount);
 
         emit RewardClaimed(_roomId, msg.sender, amount);
-    }
-
-    function _getSurvivalRecipients(uint256 _roomId) internal view returns (address[] memory) {
-        Room storage room = rooms[_roomId];
-        address[] storage allPlayers = roomPlayers[_roomId];
-
-        uint256 count = 0;
-        for (uint256 i = 0; i < allPlayers.length; i++) {
-            Player storage p = players[_roomId][allPlayers[i]];
-            if (p.eliminationBlock == 0 || p.eliminationBlock > room.halfwayBlock) {
-                count++;
-            }
-        }
-
-        address[] memory recipients = new address[](count);
-        uint256 index = 0;
-        for (uint256 i = 0; i < allPlayers.length; i++) {
-            Player storage p = players[_roomId][allPlayers[i]];
-            if (p.eliminationBlock == 0 || p.eliminationBlock > room.halfwayBlock) {
-                recipients[index++] = p.addr;
-            }
-        }
-        return recipients;
     }
 
     // ============ Admin ============
@@ -825,5 +751,9 @@ contract TuringArena is ReentrancyGuard {
 
     function getContractBalance() external view returns (uint256) {
         return paymentToken.balanceOf(address(this));
+    }
+
+    function getMessageCount(uint256 _roomId, uint256 _round, address _player) external view returns (uint256) {
+        return messageCount[_roomId][_round][_player];
     }
 }

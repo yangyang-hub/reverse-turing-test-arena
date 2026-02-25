@@ -231,27 +231,15 @@
 
 /* ============ Phase Color Coding ============ */
 
-.phase-1 {
+.phase-active {
   color: #00ff41;
-} /* Green */
-.phase-2 {
-  color: #ffcc00;
-} /* Yellow */
-.phase-3 {
-  color: #ff0040;
-} /* Red */
+} /* Green — single active phase */
 .phase-ended {
   color: #888888;
 }
 
-.phase-1-bg {
+.phase-active-bg {
   background-color: rgba(0, 255, 65, 0.1);
-}
-.phase-2-bg {
-  background-color: rgba(255, 204, 0, 0.1);
-}
-.phase-3-bg {
-  background-color: rgba(255, 0, 64, 0.1);
 }
 
 /* ============ Tier Colors ============ */

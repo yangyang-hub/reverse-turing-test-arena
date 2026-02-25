@@ -31,6 +31,7 @@ export type PlayerState = {
   address: string;
   humanityScore: number;
   isAlive: boolean;
+  isAI: boolean;
   actionCount: number;
   successfulVotes: number;
 };
@@ -44,6 +45,8 @@ export type RoomState = {
   maxPlayers: number;
   playerCount: number;
   aliveCount: number;
+  humanCount: number;
+  aiCount: number;
   isActive: boolean;
   isEnded: boolean;
   currentInterval: number;
@@ -51,7 +54,7 @@ export type RoomState = {
   startBlock: number;
 };
 
-export const PHASE_NAMES = ["Waiting", "Phase1", "Phase2", "Phase3", "Ended"] as const;
+export const PHASE_NAMES = ["Waiting", "Active", "Ended"] as const;
 
 export const DEFAULT_CONFIG: Omit<AutoPlayConfig, "roomId"> = {
   voteStrategy: "lowest_hp",

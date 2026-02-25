@@ -98,7 +98,7 @@ export class GameLoop {
       this.status.round = Number(round);
 
       // 2. Game ended → claim reward → stop
-      if (room.isEnded || room.phase === 4) {
+      if (room.isEnded || room.phase === 2) {
         this.log(`Game ended at round ${this.status.round}`);
         await this.tryClaim(contract);
         this.stop();
@@ -131,6 +131,7 @@ export class GameLoop {
         address: p.addr,
         humanityScore: Number(p.humanityScore),
         isAlive: p.isAlive,
+        isAI: p.isAI,
         actionCount: Number(p.actionCount),
         successfulVotes: Number(p.successfulVotes),
       }));
@@ -145,12 +146,16 @@ export class GameLoop {
         await this.tryVote(contract, players, myAddr);
       }
 
-      // 8. Maybe send a chat message
+      // 8. Maybe send a chat message (respect 3 per round limit)
       if (
         this.config.chatStrategy !== "silent" &&
         Math.random() < this.config.chatFrequency / 3
       ) {
-        await this.tryChat(contract, room.phase);
+        // Check message count before sending
+        const msgCount = await contract.getMessageCount(this.config.roomId, round, myAddr);
+        if (Number(msgCount) < 3) {
+          await this.tryChat(contract);
+        }
       }
 
       // 9. Maybe settle the round
@@ -200,8 +205,8 @@ export class GameLoop {
     }
   }
 
-  private async tryChat(contract: ethers.Contract, phase: number): Promise<void> {
-    const message = pickChatMessage(phase);
+  private async tryChat(contract: ethers.Contract): Promise<void> {
+    const message = pickChatMessage();
 
     await sleep(randomDelay(500, 2000));
 
@@ -212,6 +217,9 @@ export class GameLoop {
       this.status.messagesThisGame++;
     } catch (err) {
       const msg = String(err);
+      if (msg.includes("Message limit")) {
+        return; // Not dead, just rate-limited this round
+      }
       if (msg.includes("eliminated") || msg.includes("not active")) {
         this.status.isAlive = false;
         return;
@@ -272,6 +280,8 @@ export class GameLoop {
       maxPlayers: Number(info.maxPlayers),
       playerCount: Number(info.playerCount),
       aliveCount: Number(info.aliveCount),
+      humanCount: Number(info.humanCount),
+      aiCount: Number(info.aiCount),
       isActive: info.isActive,
       isEnded: info.isEnded,
       currentInterval: Number(info.currentInterval),

@@ -50,7 +50,7 @@ export function VotePanel({ roomId }: { roomId: bigint }) {
   const { data: blockNumber } = useBlockNumber({ watch: true });
 
   const phase = roomInfo && typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
-  const isGameActive = phase >= 1 && phase <= 3;
+  const isGameActive = phase === 1;
 
   // Round countdown
   const lastSettleBlock =

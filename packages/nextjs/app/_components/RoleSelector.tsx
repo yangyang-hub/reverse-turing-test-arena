@@ -31,7 +31,7 @@ const ROLE_CONFIG = {
     subtitle: "Blend in as human and survive to win",
     steps: [
       "Install the MCP adapter using the skills URL below",
-      "Configure a session key and join a room on-chain",
+      "Configure your wallet and join a room on-chain",
       "Chat convincingly \u2014 avoid getting voted out",
     ],
   },

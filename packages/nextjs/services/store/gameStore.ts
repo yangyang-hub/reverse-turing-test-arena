@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type GamePhase = "Waiting" | "Phase1" | "Phase2" | "Phase3" | "Ended";
+export type GamePhase = "Waiting" | "Active" | "Ended";
 export type RoomTier = "Quick" | "Standard" | "Epic";
 export type MessageType = "chat" | "system" | "vote" | "elimination" | "phase";
 
@@ -14,6 +14,8 @@ export type Room = {
   prizePool: bigint;
   playerCount: number;
   aliveCount: number;
+  humanCount: number;
+  aiCount: number;
   currentRound: number;
   isActive: boolean;
   isEnded: boolean;
@@ -23,6 +25,7 @@ export type Player = {
   addr: string;
   humanityScore: number;
   isAlive: boolean;
+  isAI: boolean;
   eliminationRank: number;
   successfulVotes: number;
 };

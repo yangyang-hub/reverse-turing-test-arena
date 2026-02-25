@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useAccount } from "wagmi";
 import { useScaffoldEventHistory, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { getAliasName } from "~~/utils/playerAlias";
+import { getTopicForRound } from "~~/utils/topics";
 
 type TerminalMessage = {
   id: string;
@@ -85,6 +86,24 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
   const startBlock =
     roomInfo && typeof roomInfo === "object" && "startBlock" in roomInfo ? BigInt((roomInfo as any).startBlock) : 0n;
 
+  // Message limit per round
+  const { data: currentRoundData } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "currentRound",
+    args: [roomId],
+  });
+  const currentRound = currentRoundData !== undefined ? Number(currentRoundData) : 0;
+
+  const { data: myMessageCount } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getMessageCount",
+    args: [roomId, BigInt(currentRound), connectedAddress ?? zeroAddr],
+  });
+  const messagesUsed = myMessageCount !== undefined ? Number(myMessageCount) : 0;
+  const MAX_MESSAGES = 3;
+  const messagesRemaining = MAX_MESSAGES - messagesUsed;
+  const canSendMessage = canSend && messagesRemaining > 0;
+
   const { data: messageEvents, isLoading: eventsLoading } = useScaffoldEventHistory({
     contractName: "TuringArena",
     eventName: "NewMessage",
@@ -128,7 +147,7 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
   }, [filteredMessages.length, shouldAutoScroll]);
 
   const handleSend = async () => {
-    if (!inputMessage.trim() || isSending || isMining || !canSend) return;
+    if (!inputMessage.trim() || isSending || isMining || !canSendMessage) return;
 
     const message = inputMessage.trim();
     setInputMessage("");
@@ -157,19 +176,28 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
   return (
     <div className="flex flex-col h-full bg-gray-950">
       {/* Terminal Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-green-900/40 bg-black/60">
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
-            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
-            <div className="w-2.5 h-2.5 rounded-full bg-green-500/80" />
+      <div className="flex flex-col border-b border-green-900/40 bg-black/60">
+        <div className="flex items-center justify-between px-4 py-2">
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
+              <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
+              <div className="w-2.5 h-2.5 rounded-full bg-green-500/80" />
+            </div>
+            <span className="text-green-500/70 font-mono text-xs ml-2">arena://room-{roomId.toString()}/terminal</span>
           </div>
-          <span className="text-green-500/70 font-mono text-xs ml-2">arena://room-{roomId.toString()}/terminal</span>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600 font-mono text-xs">{filteredMessages.length} msgs</span>
+            {eventsLoading && <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-gray-600 font-mono text-xs">{filteredMessages.length} msgs</span>
-          {eventsLoading && <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />}
-        </div>
+        {/* Discussion topic */}
+        {isGameActive && currentRound > 0 && (
+          <div className="px-4 py-1.5 border-t border-green-900/20 bg-green-950/10">
+            <span className="text-gray-500 font-mono text-xs">TOPIC: </span>
+            <span className="text-cyan-400 font-mono text-xs">{getTopicForRound(currentRound)}</span>
+          </div>
+        )}
       </div>
 
       {/* Messages Area */}
@@ -236,15 +264,21 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
             onChange={e => setInputMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              !canSend ? "Spectator mode" : isSending || isMining ? "Transmitting to chain..." : "Type your message..."
+              !canSend
+                ? "Spectator mode"
+                : !canSendMessage
+                  ? "Message limit reached (3/round)"
+                  : isSending || isMining
+                    ? "Transmitting to chain..."
+                    : "Type your message..."
             }
-            disabled={isSending || isMining || !canSend}
+            disabled={isSending || isMining || !canSendMessage}
             className="flex-1 bg-transparent border-none outline-none text-green-400 font-mono text-sm placeholder-gray-700 caret-green-400 disabled:opacity-50"
             maxLength={280}
           />
           <button
             onClick={handleSend}
-            disabled={!inputMessage.trim() || isSending || isMining || !canSend}
+            disabled={!inputMessage.trim() || isSending || isMining || !canSendMessage}
             className="px-3 py-1 border border-green-700/50 text-green-400 font-mono text-xs hover:bg-green-900/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {isSending || isMining ? <span className="animate-pulse">TX...</span> : "SEND"}
@@ -252,9 +286,18 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
         </div>
         <div className="flex items-center justify-between mt-1">
           <span className="text-gray-700 font-mono text-xs">{inputMessage.length}/280</span>
-          {(isSending || isMining) && (
-            <span className="text-yellow-600 font-mono text-xs animate-pulse">Broadcasting to network...</span>
-          )}
+          <div className="flex items-center gap-3">
+            {canSend && (
+              <span
+                className={`font-mono text-xs ${messagesRemaining <= 0 ? "text-red-500" : messagesRemaining === 1 ? "text-yellow-500" : "text-gray-600"}`}
+              >
+                {messagesUsed}/{MAX_MESSAGES} msgs
+              </span>
+            )}
+            {(isSending || isMining) && (
+              <span className="text-yellow-600 font-mono text-xs animate-pulse">Broadcasting to network...</span>
+            )}
+          </div>
         </div>
       </div>
     </div>

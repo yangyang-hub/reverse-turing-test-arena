@@ -4,17 +4,13 @@ import { useGameStore } from "~~/services/store/gameStore";
 
 const PHASE_COLORS: Record<string, string> = {
   Waiting: "text-gray-400 bg-gray-400/10",
-  Phase1: "text-green-400 bg-green-400/10",
-  Phase2: "text-yellow-400 bg-yellow-400/10",
-  Phase3: "text-red-400 bg-red-400/10",
+  Active: "text-green-400 bg-green-400/10",
   Ended: "text-gray-500 bg-gray-500/10",
 };
 
 const PHASE_LABELS: Record<string, string> = {
   Waiting: "WAITING",
-  Phase1: "PHASE 1",
-  Phase2: "PHASE 2",
-  Phase3: "PHASE 3",
+  Active: "ACTIVE",
   Ended: "ENDED",
 };
 

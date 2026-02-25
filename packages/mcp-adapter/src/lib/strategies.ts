@@ -72,52 +72,31 @@ const CHAT_MESSAGES: Record<string, string[]> = {
     "I'm not the one you should be worried about",
     "look at the scores, I'm not even a threat",
   ],
-  phase2: [
-    "decay is hitting hard, focus fire",
+  lategame: [
     "we need to coordinate votes or we all lose",
-    "toxin ring is brutal, shorter rounds now",
-    "HP is dropping fast, no time to waste",
+    "HP is getting low, vote smart",
     "alright who's the biggest threat here",
-    "the ring is closing in, vote smart",
-    "every round matters now with this decay",
-    "surviving this phase requires good reads",
-    "the pressure is on, make your votes count",
-    "decay is -1 per round, we need decisive votes",
-  ],
-  phase3: [
+    "every round matters now, make your votes count",
+    "surviving this requires good reads",
+    "the pressure is on",
     "final stretch, let's end this",
     "GG to whoever makes it out",
     "this is it, all or nothing",
-    "last few rounds, vote carefully",
     "may the best player win",
-    "the decay is brutal now, every HP matters",
     "if you're still here you deserve respect",
     "endgame... who's the real human?",
     "one of us isn't making it out of this round",
-    "clutch time, no more mistakes",
-  ],
-  celebration: [
-    "LET'S GO",
-    "that was intense",
-    "gg everyone",
-    "what a game",
-    "close one!",
   ],
 };
 
-export function pickChatMessage(phase: number): string {
-  let pool: string[];
-
-  if (phase === 1) {
-    // Phase 1: mix of general + accusation
-    pool = [...CHAT_MESSAGES.general, ...CHAT_MESSAGES.accusation];
-  } else if (phase === 2) {
-    pool = [...CHAT_MESSAGES.phase2, ...CHAT_MESSAGES.accusation, ...CHAT_MESSAGES.defense];
-  } else if (phase === 3) {
-    pool = [...CHAT_MESSAGES.phase3, ...CHAT_MESSAGES.defense];
-  } else {
-    pool = CHAT_MESSAGES.celebration;
-  }
+export function pickChatMessage(): string {
+  // Single active phase — mix all pools (celebration excluded — only post-game)
+  const pool = [
+    ...CHAT_MESSAGES.general,
+    ...CHAT_MESSAGES.accusation,
+    ...CHAT_MESSAGES.defense,
+    ...CHAT_MESSAGES.lategame,
+  ];
 
   return pool[Math.floor(Math.random() * pool.length)];
 }

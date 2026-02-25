@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   31337: {
     MockUSDC: {
-      address: "0x5d1ce2a19aa885765abcef89b7590e213422a8b9",
+      address: "0x700b6a60ce7eaaea56f065753d8dcb9653dbad35",
       abi: [
         {
           type: "constructor",
@@ -342,10 +342,10 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 10132,
+      deployedOnBlock: 124,
     },
     TuringArena: {
-      address: "0xd3497ab25da369b3ee5a239890348ea542b0f479",
+      address: "0xa15bb66138824a1c7167f5e85b957d04dd34e468",
       abi: [
         {
           type: "constructor",
@@ -365,19 +365,6 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "ACHIEVEMENT_SHARE",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
           name: "BASIS_POINTS",
           inputs: [],
           outputs: [
@@ -391,7 +378,7 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "CHAMPION_SHARE",
+          name: "MAX_FEE",
           inputs: [],
           outputs: [
             {
@@ -404,7 +391,7 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "MAX_FEE",
+          name: "MAX_MESSAGES_PER_ROUND",
           inputs: [],
           outputs: [
             {
@@ -456,7 +443,7 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "NO_VOTE_PENALTY",
+          name: "MVP_SHARE",
           inputs: [],
           outputs: [
             {
@@ -482,38 +469,6 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "RANKING_SHARE",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "RANKING_WEIGHTS",
-          inputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
           name: "SURVIVAL_SHARE",
           inputs: [],
           outputs: [
@@ -528,6 +483,19 @@ const deployedContracts = {
         {
           type: "function",
           name: "VOTE_DAMAGE",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "WINNING_TEAM_SHARE",
           inputs: [],
           outputs: [
             {
@@ -606,6 +574,11 @@ const deployedContracts = {
               name: "_entryFee",
               type: "uint256",
               internalType: "uint256",
+            },
+            {
+              name: "_isAI",
+              type: "bool",
+              internalType: "bool",
             },
           ],
           outputs: [
@@ -728,46 +701,50 @@ const deployedContracts = {
               internalType: "struct TuringArena.GameStats",
               components: [
                 {
-                  name: "champion",
+                  name: "humansWon",
+                  type: "bool",
+                  internalType: "bool",
+                },
+                {
+                  name: "mvp",
                   type: "address",
                   internalType: "address",
                 },
                 {
-                  name: "topFive",
-                  type: "address[]",
-                  internalType: "address[]",
-                },
-                {
-                  name: "humanHunter",
-                  type: "address",
-                  internalType: "address",
-                },
-                {
-                  name: "perfectImpostor",
-                  type: "address",
-                  internalType: "address",
-                },
-                {
-                  name: "lastHuman",
-                  type: "address",
-                  internalType: "address",
-                },
-                {
-                  name: "lightningKiller",
-                  type: "address",
-                  internalType: "address",
-                },
-                {
-                  name: "ironWill",
-                  type: "address",
-                  internalType: "address",
-                },
-                {
-                  name: "maxSuccessfulVotes",
+                  name: "mvpVotes",
                   type: "uint256",
                   internalType: "uint256",
                 },
               ],
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "getMessageCount",
+          inputs: [
+            {
+              name: "_roomId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "_round",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "_player",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
             },
           ],
           stateMutability: "view",
@@ -805,6 +782,11 @@ const deployedContracts = {
                 },
                 {
                   name: "isAlive",
+                  type: "bool",
+                  internalType: "bool",
+                },
+                {
+                  name: "isAI",
                   type: "bool",
                   internalType: "bool",
                 },
@@ -937,11 +919,6 @@ const deployedContracts = {
                   internalType: "uint256",
                 },
                 {
-                  name: "halfwayBlock",
-                  type: "uint256",
-                  internalType: "uint256",
-                },
-                {
                   name: "baseInterval",
                   type: "uint256",
                   internalType: "uint256",
@@ -972,9 +949,14 @@ const deployedContracts = {
                   internalType: "uint256",
                 },
                 {
-                  name: "currentDecay",
-                  type: "int256",
-                  internalType: "int256",
+                  name: "humanCount",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+                {
+                  name: "aiCount",
+                  type: "uint256",
+                  internalType: "uint256",
                 },
                 {
                   name: "lastSettleBlock",
@@ -1034,6 +1016,11 @@ const deployedContracts = {
               type: "uint256",
               internalType: "uint256",
             },
+            {
+              name: "_isAI",
+              type: "bool",
+              internalType: "bool",
+            },
           ],
           outputs: [],
           stateMutability: "nonpayable",
@@ -1050,6 +1037,35 @@ const deployedContracts = {
           ],
           outputs: [],
           stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "messageCount",
+          inputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
         },
         {
           type: "function",
@@ -1105,6 +1121,11 @@ const deployedContracts = {
             },
             {
               name: "isAlive",
+              type: "bool",
+              internalType: "bool",
+            },
+            {
+              name: "isAI",
               type: "bool",
               internalType: "bool",
             },
@@ -1254,11 +1275,6 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "halfwayBlock",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
               name: "baseInterval",
               type: "uint256",
               internalType: "uint256",
@@ -1289,9 +1305,14 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "currentDecay",
-              type: "int256",
-              internalType: "int256",
+              name: "humanCount",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "aiCount",
+              type: "uint256",
+              internalType: "uint256",
             },
             {
               name: "lastSettleBlock",
@@ -1370,31 +1391,6 @@ const deployedContracts = {
               name: "baseInterval",
               type: "uint256",
               internalType: "uint256",
-            },
-            {
-              name: "phase1Threshold",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "phase2Threshold",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "phase3ElimsPerRound",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "phase2Decay",
-              type: "int256",
-              internalType: "int256",
-            },
-            {
-              name: "phase3Decay",
-              type: "int256",
-              internalType: "int256",
             },
             {
               name: "rankingSlots",
@@ -1486,10 +1482,10 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "winner",
-              type: "address",
+              name: "humansWon",
+              type: "bool",
               indexed: false,
-              internalType: "address",
+              internalType: "bool",
             },
             {
               name: "totalPrize",
@@ -1552,25 +1548,6 @@ const deployedContracts = {
         },
         {
           type: "event",
-          name: "PhaseChanged",
-          inputs: [
-            {
-              name: "roomId",
-              type: "uint256",
-              indexed: true,
-              internalType: "uint256",
-            },
-            {
-              name: "newPhase",
-              type: "uint8",
-              indexed: false,
-              internalType: "enum TuringArena.GamePhase",
-            },
-          ],
-          anonymous: false,
-        },
-        {
-          type: "event",
           name: "PlayerEliminated",
           inputs: [
             {
@@ -1621,6 +1598,12 @@ const deployedContracts = {
               type: "address",
               indexed: true,
               internalType: "address",
+            },
+            {
+              name: "isAI",
+              type: "bool",
+              indexed: false,
+              internalType: "bool",
             },
           ],
           anonymous: false,
@@ -1728,6 +1711,12 @@ const deployedContracts = {
               indexed: false,
               internalType: "uint256",
             },
+            {
+              name: "isAI",
+              type: "bool",
+              indexed: false,
+              internalType: "bool",
+            },
           ],
           anonymous: false,
         },
@@ -1780,7 +1769,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 10132,
+      deployedOnBlock: 124,
     },
   },
 } as const;

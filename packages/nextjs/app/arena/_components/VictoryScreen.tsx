@@ -9,13 +9,17 @@ import { getPlayerAlias } from "~~/utils/playerAlias";
 
 export const VictoryScreen = ({
   roomId,
-  champion,
+  humansWon,
+  mvp,
+  mvpVotes,
   myRewardAmount,
   myRewardClaimed,
   onDismiss,
 }: {
   roomId: bigint;
-  champion: string;
+  humansWon: boolean;
+  mvp: string;
+  mvpVotes: number;
   myRewardAmount: bigint;
   myRewardClaimed: boolean;
   onDismiss: () => void;
@@ -24,7 +28,9 @@ export const VictoryScreen = ({
   const [justClaimed, setJustClaimed] = useState(false);
   const hasReward = myRewardAmount > 0n && !myRewardClaimed && !justClaimed;
 
-  const { writeContractAsync, isPending } = useScaffoldWriteContract("TuringArena");
+  const { writeContractAsync, isMining } = useScaffoldWriteContract({
+    contractName: "TuringArena",
+  });
 
   const { data: allPlayers } = useScaffoldReadContract({
     contractName: "TuringArena",
@@ -33,9 +39,9 @@ export const VictoryScreen = ({
   });
 
   const playerAddresses = (allPlayers as string[]) || [];
-  const championAlias = getPlayerAlias(playerAddresses, champion);
+  const mvpAlias = getPlayerAlias(playerAddresses, mvp);
 
-  // Gold particle celebration
+  // Particle celebration
   const initParticles = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -45,7 +51,10 @@ export const VictoryScreen = ({
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const COLORS = ["#FFD700", "#FFA500", "#FFEC8B", "#DAA520", "#F0E68C"];
+    const COLORS = humansWon
+      ? ["#00FF41", "#39FF14", "#00E676", "#76FF03", "#B2FF59"] // Green for humans
+      : ["#FF0040", "#FF1744", "#FF5252", "#FF8A80", "#E040FB"]; // Red/pink for AIs
+
     const particles: { x: number; y: number; vx: number; vy: number; size: number; alpha: number; color: string }[] =
       [];
 
@@ -82,7 +91,7 @@ export const VictoryScreen = ({
     animate();
 
     return () => cancelAnimationFrame(animationId);
-  }, []);
+  }, [humansWon]);
 
   useEffect(() => {
     const cleanup = initParticles();
@@ -101,6 +110,11 @@ export const VictoryScreen = ({
     }
   };
 
+  const teamIcon = humansWon ? "\u{1F9D1}" : "\u{1F916}";
+  const teamLabel = humansWon ? "HUMANS WIN" : "AIs WIN";
+  const teamColor = humansWon ? "text-green-400" : "text-red-400";
+  const teamGlow = humansWon ? "neon-text" : "";
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95">
       <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />
@@ -111,36 +125,45 @@ export const VictoryScreen = ({
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.5 }}
       >
-        {/* Crown */}
+        {/* Team icon */}
         <motion.div
           className="text-7xl md:text-9xl mb-4"
           animate={{ y: [0, -15, 0] }}
           transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
         >
-          <span role="img" aria-label="crown">
-            {"\u{1F451}"}
+          <span role="img" aria-label={humansWon ? "human" : "robot"}>
+            {teamIcon}
           </span>
         </motion.div>
 
-        <div className="text-yellow-400 font-mono text-lg tracking-[0.3em] mb-2">THE CHAMPION IS</div>
+        {/* Team result */}
+        <div className={`font-mono text-4xl md:text-6xl font-black mb-4 ${teamColor} ${teamGlow}`}>{teamLabel}</div>
 
-        <div className="text-4xl md:text-6xl font-mono font-black text-white mb-4 neon-text-gold">CHAMPION</div>
-
-        {/* Champion identity reveal */}
-        <div className="mb-6 flex flex-col items-center gap-2">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-full flex items-center justify-center font-mono text-lg font-bold text-black"
-              style={{ backgroundColor: championAlias.color }}
-            >
-              {championAlias.initial}
-            </div>
-            <span className="font-mono text-xl font-bold" style={{ color: championAlias.color }}>
-              {championAlias.name}
-            </span>
-          </div>
-          <Address address={champion as `0x${string}`} />
+        <div className="text-gray-400 font-mono text-sm mb-6">
+          {humansWon ? "The humans identified all AI agents!" : "The AI agents outsmarted the humans!"}
         </div>
+
+        {/* MVP */}
+        {mvp && mvp !== "0x0000000000000000000000000000000000000000" && (
+          <div className="mb-6 flex flex-col items-center gap-2">
+            <div className="text-yellow-400 font-mono text-xs tracking-[0.3em]">MOST VALUABLE PLAYER</div>
+            <div className="flex items-center gap-3">
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center font-mono text-lg font-bold text-black"
+                style={{ backgroundColor: mvpAlias.color }}
+              >
+                {mvpAlias.initial}
+              </div>
+              <div className="flex flex-col items-start">
+                <span className="font-mono text-xl font-bold" style={{ color: mvpAlias.color }}>
+                  {mvpAlias.name}
+                </span>
+                <span className="text-yellow-500 font-mono text-xs">{mvpVotes} successful votes</span>
+              </div>
+            </div>
+            <Address address={mvp as `0x${string}`} />
+          </div>
+        )}
 
         {/* My reward info */}
         {myRewardAmount > 0n && (
@@ -152,16 +175,18 @@ export const VictoryScreen = ({
           </div>
         )}
 
-        {/* Claim button (any player with unclaimed rewards) */}
+        {/* Claim button */}
         {hasReward && (
           <motion.button
             onClick={handleClaim}
-            disabled={isPending}
-            className="btn btn-lg font-mono tracking-widest bg-yellow-500 text-black hover:bg-yellow-400 border-none"
+            disabled={isMining}
+            className={`btn btn-lg font-mono tracking-widest border-none ${
+              humansWon ? "bg-green-500 text-black hover:bg-green-400" : "bg-red-500 text-white hover:bg-red-400"
+            }`}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            {isPending ? "CLAIMING..." : "CLAIM REWARD"}
+            {isMining ? "CLAIMING..." : "CLAIM REWARD"}
           </motion.button>
         )}
         {(myRewardClaimed || justClaimed) && myRewardAmount > 0n && (

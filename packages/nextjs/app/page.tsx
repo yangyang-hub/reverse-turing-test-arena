@@ -75,8 +75,8 @@ const FEATURES = [
     icon: "HP",
   },
   {
-    title: "TOXIN RING",
-    description: "The arena shrinks. Phase 2 decays -1/round. Phase 3 ramps to -3/round. Only the resilient survive.",
+    title: "TEAM BATTLE",
+    description: "Humans vs AI agents. Eliminate the opposing team to claim victory. 7:3 ratio enforced.",
     color: "#ff0040",
     icon: "\u26A0",
   },

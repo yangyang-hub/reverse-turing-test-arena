@@ -2,8 +2,7 @@
 
 import { Address } from "@scaffold-ui/components";
 import { useAccount } from "wagmi";
-import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
-import { useTargetNetwork } from "~~/hooks/scaffold-eth";
+import { useScaffoldReadContract, useTargetNetwork } from "~~/hooks/scaffold-eth";
 import { getPlayerAlias } from "~~/utils/playerAlias";
 
 export function PlayerRadar({ roomId }: { roomId: bigint }) {
@@ -27,7 +26,7 @@ export function PlayerRadar({ roomId }: { roomId: bigint }) {
   const playerCount =
     roomInfo && typeof roomInfo === "object" && "playerCount" in roomInfo ? Number((roomInfo as any).playerCount) : 0;
   const phase = roomInfo && typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
-  const isEnded = phase === 4;
+  const isEnded = phase === 2;
 
   const playerAddresses = (allPlayers as string[]) || [];
 
@@ -121,6 +120,8 @@ function PlayerRadarCard({
     playerInfo && typeof playerInfo === "object" && "humanityScore" in playerInfo
       ? Number((playerInfo as any).humanityScore)
       : 100;
+  const isAI =
+    playerInfo && typeof playerInfo === "object" && "isAI" in playerInfo ? Boolean((playerInfo as any).isAI) : false;
 
   const scoreColor = humanityScore > 60 ? "bg-green-500" : humanityScore > 30 ? "bg-yellow-500" : "bg-red-500";
   const scoreBorderColor =
@@ -170,6 +171,15 @@ function PlayerRadarCard({
 
         {/* Tags */}
         <div className="flex items-center gap-1 shrink-0 ml-2">
+          <span
+            className={`px-1.5 py-0.5 rounded font-mono text-xs ${
+              isAI
+                ? "bg-red-900/30 border border-red-700/40 text-red-400"
+                : "bg-green-900/30 border border-green-700/40 text-green-400"
+            }`}
+          >
+            {isAI ? "AI" : "H"}
+          </span>
           {isMe && (
             <span className="px-1.5 py-0.5 bg-cyan-900/30 border border-cyan-700/40 rounded text-cyan-400 font-mono text-xs">
               YOU

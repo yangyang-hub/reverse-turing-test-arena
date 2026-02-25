@@ -35,8 +35,8 @@ const TIER_CONFIG = [
   },
 ] as const;
 
-const PHASE_LABELS = ["Waiting", "Phase 1", "Phase 2", "Phase 3", "Ended"] as const;
-const PHASE_CLASSES = ["text-secondary", "phase-1", "phase-2", "phase-3", "phase-ended"] as const;
+const PHASE_LABELS = ["Waiting", "Active", "Ended"] as const;
+const PHASE_CLASSES = ["text-secondary", "phase-active", "phase-ended"] as const;
 
 type RoomCardProps = {
   roomId: bigint;
@@ -72,6 +72,7 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
 
   const { writeContractAsync: writeArena, isMining } = useScaffoldWriteContract({
     contractName: "TuringArena",
+    disableSimulate: true,
   });
 
   const config = useConfig();
@@ -104,6 +105,8 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
     maxPlayers: number;
     playerCount: number;
     creator: string;
+    humanCount: number;
+    aiCount: number;
   };
 
   const tierIndex = Number(room.tier);
@@ -116,8 +119,8 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
   const entryFee = room.entryFee ?? tier.fee;
   const prizePool = room.prizePool ?? 0n;
   const isWaiting = phaseIndex === 0;
-  const isActive = phaseIndex >= 1 && phaseIndex <= 3;
-  const isEnded = phaseIndex === 4;
+  const isActive = phaseIndex === 1;
+  const isEnded = phaseIndex === 2;
   const hasJoined =
     connectedAddress && players
       ? (players as string[]).some(p => p.toLowerCase() === connectedAddress.toLowerCase())
@@ -142,9 +145,9 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
       // Step 2: Join room (no value needed for ERC20)
       await writeArena({
         functionName: "joinRoom",
-        args: [roomId],
+        args: [roomId, false],
       });
-      router.push(`/arena?roomId=${roomId.toString()}`);
+      notification.success(`Joined Room #${roomId.toString()}! Waiting for players...`);
     } catch (e: any) {
       const msg = e?.shortMessage || e?.message || "Unknown error";
       if (!msg.includes("User rejected")) {
@@ -237,9 +240,17 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
           <span className="text-xs text-base-content/40">ENTRY FEE</span>
           <span className="font-mono text-sm text-secondary">{formatUnits(entryFee, 6)} USDC</span>
         </div>
-        <div className="col-span-2 flex flex-col">
+        <div className="flex flex-col">
+          <span className="text-xs text-base-content/40">HUMANS / AI</span>
+          <span className="font-mono text-sm">
+            <span className="text-green-400">{Number(room.humanCount)}</span>
+            <span className="text-base-content/30"> / </span>
+            <span className="text-red-400">{Number(room.aiCount)}</span>
+          </span>
+        </div>
+        <div className="flex flex-col">
           <span className="text-xs text-base-content/40">PRIZE POOL</span>
-          <span className={`font-mono text-lg font-bold ${tier.textClass}`}>{formatUnits(prizePool, 6)} USDC</span>
+          <span className={`font-mono text-sm font-bold ${tier.textClass}`}>{formatUnits(prizePool, 6)} USDC</span>
         </div>
       </div>
 
@@ -259,9 +270,12 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
       <div className="mt-1">
         {isWaiting && hasJoined && (
           <div className="flex gap-2">
-            <button className="btn btn-sm btn-secondary flex-1 font-bold tracking-widest" onClick={handleEnter}>
-              ENTER
-            </button>
+            <span
+              className="btn btn-sm btn-disabled flex-1 font-mono text-xs tracking-widest animate-pulse"
+              style={{ color: tier.color }}
+            >
+              WAITING {playerCount}/{maxPlayers}
+            </span>
             <button
               className="btn btn-sm btn-outline border-red-500/50 text-red-400 hover:bg-red-900/20 hover:border-red-500 font-bold tracking-widest"
               onClick={handleLeave}

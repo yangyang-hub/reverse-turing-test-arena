@@ -12,18 +12,14 @@ import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaf
 
 const PHASE_LABELS: Record<number, string> = {
   0: "WAITING",
-  1: "PHASE 1",
-  2: "PHASE 2",
-  3: "PHASE 3",
-  4: "ENDED",
+  1: "ACTIVE",
+  2: "ENDED",
 };
 
 const PHASE_COLORS: Record<number, string> = {
   0: "text-gray-400",
   1: "text-green-400",
-  2: "text-yellow-400",
-  3: "text-red-400",
-  4: "text-purple-400",
+  2: "text-purple-400",
 };
 
 function ArenaContent() {
@@ -88,7 +84,7 @@ function ArenaContent() {
   const phase = typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
   const prevPhaseRef = useRef(phase);
   useEffect(() => {
-    if (phase === 4 && prevPhaseRef.current !== 4 && prevPhaseRef.current !== 0) {
+    if (phase === 2 && prevPhaseRef.current !== 2 && prevPhaseRef.current !== 0) {
       setShowVictory(true);
     }
     prevPhaseRef.current = phase;
@@ -153,6 +149,28 @@ function ArenaContent() {
     );
   }
 
+  // Redirect to lobby if room is still in Waiting phase (game not started yet)
+  if (phase === 0) {
+    return (
+      <div className="flex items-center justify-center flex-1 bg-black">
+        <div className="text-center p-8 border border-yellow-500/30 bg-yellow-950/10 rounded-lg max-w-md">
+          <div className="text-yellow-400 text-5xl mb-4 font-mono animate-pulse">&#x23F3;</div>
+          <h2 className="text-yellow-400 text-xl font-mono mb-2">ROOM NOT READY</h2>
+          <p className="text-gray-500 font-mono text-sm">
+            Room #{rawRoomId} is still waiting for players. You&apos;ll be redirected automatically when the game
+            starts.
+          </p>
+          <Link
+            href="/lobby"
+            className="inline-block mt-6 px-6 py-2 border border-cyan-500/50 text-cyan-400 font-mono text-sm hover:bg-cyan-500/10 transition-colors"
+          >
+            BACK TO LOBBY
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   const aliveCount =
     typeof roomInfo === "object" && "aliveCount" in roomInfo ? Number((roomInfo as any).aliveCount) : 0;
   const playerCount =
@@ -177,7 +195,7 @@ function ArenaContent() {
   const canStartGame = phase === 0 && isCreator && playerCount >= 3;
 
   // Round timing
-  const isGameActive = phase >= 1 && phase <= 3;
+  const isGameActive = phase === 1;
   const currentBlock = blockNumber ? Number(blockNumber) : 0;
   const settleTargetBlock = lastSettleBlock + currentInterval;
   const blocksRemaining = isGameActive && currentBlock > 0 ? Math.max(0, settleTargetBlock - currentBlock) : 0;
@@ -266,7 +284,7 @@ function ArenaContent() {
               {(Number(prizePool) / 1e6).toFixed(2)} USDC
             </span>
           </div>
-          {isPlayerInGame && phase !== 4 && (
+          {isPlayerInGame && phase !== 2 && (
             <>
               <div className="h-4 w-px bg-gray-700" />
               <div className="flex items-center gap-1">
@@ -275,7 +293,7 @@ function ArenaContent() {
               </div>
             </>
           )}
-          {phase === 4 && (
+          {phase === 2 && (
             <>
               <div className="h-4 w-px bg-gray-700" />
               <div className="flex items-center gap-1">
@@ -355,10 +373,12 @@ function ArenaContent() {
       </div>
 
       {/* Victory Screen overlay */}
-      {showVictory && phase === 4 && gameStats && roomId !== undefined && (
+      {showVictory && phase === 2 && gameStats && roomId !== undefined && (
         <VictoryScreen
           roomId={roomId}
-          champion={(gameStats as any).champion ?? ""}
+          humansWon={Boolean((gameStats as any).humansWon)}
+          mvp={((gameStats as any).mvp as string) ?? ""}
+          mvpVotes={Number((gameStats as any).mvpVotes ?? 0)}
           myRewardAmount={rewardInfo ? BigInt((rewardInfo as any)[0] ?? 0) : 0n}
           myRewardClaimed={rewardInfo ? Boolean((rewardInfo as any)[1]) : false}
           onDismiss={() => {

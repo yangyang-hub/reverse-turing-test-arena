@@ -25,7 +25,7 @@ const TIERS = [
     id: 1,
     name: "Standard",
     label: "Silver",
-    defaultFee: 50,
+    defaultFee: 10,
     defaultMaxPlayers: 20,
     color: "#C0C0C0",
     borderClass: "tier-standard-border",
@@ -37,7 +37,7 @@ const TIERS = [
     id: 2,
     name: "Epic",
     label: "Gold",
-    defaultFee: 100,
+    defaultFee: 10,
     defaultMaxPlayers: 50,
     color: "#FFD700",
     borderClass: "tier-epic-border",
@@ -62,6 +62,7 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
 
   const { writeContractAsync } = useScaffoldWriteContract({
     contractName: "TuringArena",
+    disableSimulate: true,
   });
 
   const config = useConfig();
@@ -121,7 +122,7 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
       // Step 2: Create room (auto-joins creator)
       await writeContractAsync({
         functionName: "createRoom",
-        args: [selectedTier, BigInt(parsedMaxPlayers), feeInUnits],
+        args: [selectedTier, BigInt(parsedMaxPlayers), feeInUnits, false],
       });
 
       onClose();

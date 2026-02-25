@@ -74,7 +74,7 @@ contract SimulateGame is Script {
         console.log("[Step 1] Creating Quick-tier room...");
 
         vm.startBroadcast(PK1);
-        roomId = arena.createRoom(TuringArena.RoomTier.Quick, 10, 10e6);
+        roomId = arena.createRoom(TuringArena.RoomTier.Quick, 10, 10e6, false);
         vm.stopBroadcast();
 
         console.log("  Room ID:", roomId);
@@ -88,30 +88,25 @@ contract SimulateGame is Script {
         console.log("[Step 2] Players joining room (approve + join)...");
 
         uint256 fee = 10e6; // 10 USDC
-
-        vm.startBroadcast(PK1);
-        usdc.approve(address(arena), fee);
-        arena.joinRoom(roomId);
-        vm.stopBroadcast();
-        console.log("  Player 1 joined:", PLAYER1);
+        // Player 1 already auto-joined via createRoom (as human)
 
         vm.startBroadcast(PK2);
         usdc.approve(address(arena), fee);
-        arena.joinRoom(roomId);
+        arena.joinRoom(roomId, false); // human
         vm.stopBroadcast();
-        console.log("  Player 2 joined:", PLAYER2);
+        console.log("  Player 2 joined (human):", PLAYER2);
 
         vm.startBroadcast(PK3);
         usdc.approve(address(arena), fee);
-        arena.joinRoom(roomId);
+        arena.joinRoom(roomId, false); // human
         vm.stopBroadcast();
-        console.log("  Player 3 joined:", PLAYER3);
+        console.log("  Player 3 joined (human):", PLAYER3);
 
         vm.startBroadcast(PK4);
         usdc.approve(address(arena), fee);
-        arena.joinRoom(roomId);
+        arena.joinRoom(roomId, true); // AI agent
         vm.stopBroadcast();
-        console.log("  Player 4 joined:", PLAYER4);
+        console.log("  Player 4 joined (AI):", PLAYER4);
 
         TuringArena.Room memory room = arena.getRoomInfo(roomId);
         console.log("  Player count:", room.playerCount);
@@ -260,22 +255,10 @@ contract SimulateGame is Script {
         console.log("=== GAME RESULTS ===");
         console.log("Phase:", uint256(room.phase));
         console.log("Is Ended:", room.isEnded);
-        console.log("Champion:", stats.champion);
+        console.log("Humans Won:", stats.humansWon);
+        console.log("MVP:", stats.mvp);
+        console.log("MVP Votes:", stats.mvpVotes);
         console.log("Prize Pool:", room.prizePool, "USDC units");
-        console.log("");
-
-        console.log("Top 5:");
-        for (uint256 i = 0; i < stats.topFive.length; i++) {
-            if (stats.topFive[i] != address(0)) {
-                console.log("  #%s: %s", i + 1, stats.topFive[i]);
-            }
-        }
-        console.log("");
-
-        console.log("Achievements:");
-        console.log("  Human Hunter:", stats.humanHunter);
-        console.log("  Perfect Impostor:", stats.perfectImpostor);
-        console.log("  Iron Will:", stats.ironWill);
         console.log("");
 
         // Rewards info

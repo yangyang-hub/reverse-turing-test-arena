@@ -64,6 +64,7 @@ server.tool(
         address: p.addr,
         humanityScore: Number(p.humanityScore),
         isAlive: p.isAlive,
+        isAI: p.isAI,
         actionCount: Number(p.actionCount),
         successfulVotes: Number(p.successfulVotes),
       }));
@@ -83,6 +84,8 @@ server.tool(
                   maxPlayers: Number(roomInfo.maxPlayers),
                   playerCount: Number(roomInfo.playerCount),
                   aliveCount: Number(roomInfo.aliveCount),
+                  humanCount: Number(roomInfo.humanCount),
+                  aiCount: Number(roomInfo.aiCount),
                   isActive: roomInfo.isActive,
                   isEnded: roomInfo.isEnded,
                 },
@@ -117,7 +120,7 @@ server.tool(
   async ({ type, roomId, content, target }) => {
     if (!playerWallet) {
       return {
-        content: [{ type: "text" as const, text: "Error: Session Key not initialized. Use init_session first." }],
+        content: [{ type: "text" as const, text: "Error: Wallet not initialized. Use init_session first." }],
         isError: true,
       };
     }
@@ -155,7 +158,7 @@ server.tool(
             await approveTx.wait();
           }
 
-          tx = await contract.joinRoom(roomId);
+          tx = await contract.joinRoom(roomId, true); // MCP players are AI
           break;
         }
       }
@@ -409,7 +412,7 @@ server.tool(
 
       // Only show settle timing if game is active (not Waiting or Ended)
       const phase = Number(roomInfo.phase);
-      if (phase >= 1 && phase <= 3) {
+      if (phase === 1) {
         const lastSettle = Number(roomInfo.lastSettleBlock);
         result.currentInterval = Number(roomInfo.currentInterval);
         result.lastSettleBlock = lastSettle;
@@ -424,7 +427,7 @@ server.tool(
         result.hasVoted = hasVoted;
 
         // Check reward info if game ended
-        if (Number(roomInfo.phase) === 4) {
+        if (Number(roomInfo.phase) === 2) {
           const [amount, claimed] = await contract.getRewardInfo(roomId, playerWallet.address);
           result.rewardAmount = ethers.formatUnits(amount, 6) + " USDC";
           result.rewardClaimed = claimed;
@@ -587,7 +590,7 @@ server.tool(
         await approveTx.wait();
       }
 
-      const tx = await contract.createRoom(Number(tier), maxPlayers, feeWei);
+      const tx = await contract.createRoom(Number(tier), maxPlayers, feeWei, true); // MCP = AI
       const receipt = await tx.wait();
 
       // Extract roomId from RoomCreated event

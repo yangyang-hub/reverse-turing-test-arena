@@ -1,28 +1,33 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { readContract } from "@wagmi/core";
 import { AnimatePresence, motion } from "framer-motion";
 import type { NextPage } from "next";
 import { formatUnits } from "viem";
-import { useAccount } from "wagmi";
+import { useAccount, useConfig } from "wagmi";
 import CreateRoomModal from "~~/app/_components/CreateRoomModal";
+import QuickMatchButton from "~~/app/_components/QuickMatchButton";
 import RoomCard from "~~/app/_components/RoomCard";
-import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
 type FilterTab = "all" | "waiting" | "active" | "ended" | "mine";
 
 const FILTER_TABS: { id: FilterTab; label: string; phaseRange: number[] | null }[] = [
   { id: "all", label: "All", phaseRange: null },
   { id: "waiting", label: "Waiting", phaseRange: [0] },
-  { id: "active", label: "In Progress", phaseRange: [1, 2, 3] },
-  { id: "ended", label: "Completed", phaseRange: [4] },
+  { id: "active", label: "In Progress", phaseRange: [1] },
+  { id: "ended", label: "Completed", phaseRange: [2] },
   { id: "mine", label: "My Games", phaseRange: null },
 ];
 
-const LobbyPage: NextPage = () => {
+const LobbyPageContent = () => {
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { address: connectedAddress } = useAccount();
+  const searchParams = useSearchParams();
+  const isQuickMatch = searchParams.get("quickMatch") === "true";
 
   const { data: roomCount, isLoading: isLoadingCount } = useScaffoldReadContract({
     contractName: "TuringArena",
@@ -75,8 +80,9 @@ const LobbyPage: NextPage = () => {
             ))}
           </div>
 
-          {/* Room count + USDC faucet */}
+          {/* Quick Match + Room count + USDC faucet */}
           <div className="flex items-center gap-4">
+            <QuickMatchButton roomIds={roomIds} onNoMatch={() => setIsModalOpen(true)} autoMatch={isQuickMatch} />
             <UsdcFaucet />
             <div className="hidden text-xs tracking-widest text-base-content/40 md:block">
               {isLoadingCount ? (
@@ -131,6 +137,9 @@ const LobbyPage: NextPage = () => {
 
       {/* Create Room Modal */}
       <CreateRoomModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+
+      {/* Auto-navigate to arena when a joined room becomes Active */}
+      {connectedAddress && roomIds.length > 0 && <RoomPhaseWatcher roomIds={roomIds} />}
     </div>
   );
 };
@@ -273,5 +282,74 @@ const UsdcFaucet = () => {
     </div>
   );
 };
+
+/**
+ * Polls rooms the connected user has joined. When any room transitions
+ * from Waiting (0) to Active (1), auto-navigates to the arena.
+ */
+const RoomPhaseWatcher = ({ roomIds }: { roomIds: bigint[] }) => {
+  const router = useRouter();
+  const wagmiConfig = useConfig();
+  const { address } = useAccount();
+  const { data: arenaInfo } = useDeployedContractInfo({ contractName: "TuringArena" });
+
+  useEffect(() => {
+    if (!address || !arenaInfo?.address || !arenaInfo.abi || roomIds.length === 0) return;
+
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        for (let i = roomIds.length - 1; i >= 0; i--) {
+          if (cancelled) return;
+          const roomId = roomIds[i];
+
+          const roomInfo = (await readContract(wagmiConfig, {
+            address: arenaInfo.address,
+            abi: arenaInfo.abi,
+            functionName: "getRoomInfo",
+            args: [roomId],
+          })) as { phase: number };
+
+          const phase = Number(roomInfo.phase);
+
+          // Only care about Active rooms
+          if (phase !== 1) continue;
+
+          // Check if user is in this room
+          const players = (await readContract(wagmiConfig, {
+            address: arenaInfo.address,
+            abi: arenaInfo.abi,
+            functionName: "getAllPlayers",
+            args: [roomId],
+          })) as string[];
+
+          const isInRoom = players.some(p => p.toLowerCase() === address.toLowerCase());
+          if (isInRoom && !cancelled) {
+            router.push(`/arena?roomId=${roomId.toString()}`);
+            return;
+          }
+        }
+      } catch {
+        // Silently retry on next interval
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [address, arenaInfo, roomIds, wagmiConfig, router]);
+
+  return null;
+};
+
+const LobbyPage: NextPage = () => (
+  <Suspense>
+    <LobbyPageContent />
+  </Suspense>
+);
 
 export default LobbyPage;

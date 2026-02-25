@@ -36,54 +36,63 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ### Key Rules
 
+- Team-based game: Humans vs AI agents — eliminate the opposing team to win
+- Web players = Human tag, MCP players = AI tag (30% AI slot cap enforced)
+- Game phases: Waiting → Active → Ended (simplified from 5-phase system)
 - 人性分 (humanityScore) 只减不加，初始 100
-- 每周期强制投票，未投票扣 20 分，投票扣目标 10 分
-- Phase 1/2/3 用颜色编码: green/yellow/red
+- 每轮强制投票，未投票自投 -10 分 (VOTE_DAMAGE)，投票扣目标 -10 分
+- 每轮最多 3 条消息 (MAX_MESSAGES_PER_ROUND)
+- 房间满员自动开始游戏 (auto-start)
+- Team win: 所有 AI 被淘汰 → 人类胜; 所有人类被淘汰 → AI 胜; 剩余 2 人 → HP 比较 (平局 AI 胜)
+- 奖励分配: 70% 获胜队伍, 10% MVP, 10% 存活, 10% 协议
 - 房间三档: Quick(Bronze) / Standard(Silver) / Epic(Gold)
 - 所有聊天内容仅通过事件存储，不写入 storage
-- 毒素环: Phase 2 衰减 -3/round, Phase 3 衰减 -5~-8/round
 - Quick 局 baseInterval=100 (Monad ≈ 40s/轮), Standard/Epic=150 (≈ 60s/轮)
+- `createRoom(RoomTier, uint256 _maxPlayers, uint256 _entryFee, bool _isAI)` — 4th param: creator is human (web) or AI (MCP)
+- `joinRoom(uint256 _roomId, bool _isAI)` — 2nd param: player identity tag
 
 ---
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-24 — Remove dead code: TierConfig (minPlayers/maxPlayers/entryFee), Player.isVerifiedHuman, unused console import; make protocolTreasury immutable; fix MCP tool count 13→14, rename sessionWallet→playerWallet, deduplicate PHASE_NAME_MAP
+> **Last updated**: 2026-02-25 — Quick Match button: auto-scan rooms + join from lobby/landing page
 
-### Current Status: Phase 8 (Complete) + USDC Migration + Custom Room Params + Leave/Cancel Room + Auto-Join + Narrative Flip + Anonymity + MCP Skills + Auto-Play + Game End UX + Balance Tuning
+### Current Status: Game Mechanics Overhaul Complete (Team-Based Humans vs AI)
 
 | Module | Status | Notes |
 |--------|--------|-------|
 | Design Doc (IMPLEMENTATION_PLAN.md) | DONE | 12 sections, ~6800 lines |
-| TuringArena.sol | DONE | USDC ERC-20, custom maxPlayers & entryFee, leaveRoom/cancelRoom, auto-join, 2-player endgame, auto-settle on last vote, protocolTreasury immutable, 36 tests passing |
+| TuringArena.sol | DONE | Team-based Humans vs AI, simplified {Waiting, Active, Ended}, 7:3 ratio, auto-start, 3 msg/round, self-vote -10, 48 tests passing |
 | MockUSDC.sol | DONE | Test USDC mock with 6 decimals, public mint |
 | Deploy Script | DONE | DeployTuringArena.s.sol — deploys MockUSDC + TuringArena |
-| Contract Tests | DONE | 36 test cases, 100% pass (incl. custom room params + leave/cancel room + auto-join + auto-close) |
-| Zustand gameStore | DONE | gameStore.ts with types and actions |
+| Contract Tests | DONE | 48 test cases, 100% pass (incl. team win, AI slot cap, auto-start, message limit) |
+| Zustand gameStore | DONE | gameStore.ts with team-based types (GamePhase: Waiting/Active/Ended, Player.isAI) |
 | Cyberpunk CSS | DONE | globals.css with glitch text, cyber-grid-bg, tier/phase classes |
 | scaffold.config.ts | DONE | Foundry + Monad Testnet, env-based dev/prod config |
 | Landing Page | DONE | page.tsx — HeroSection (with RoleSelector dual-path), How It Works, live stats |
 | Lobby Page | DONE | lobby/page.tsx — room browser with filter tabs (All/Waiting/Active/Ended/My Games) |
 | Lobby Components | DONE | HeroSection.tsx, RoleSelector.tsx, RoomCard.tsx, CreateRoomModal.tsx |
 | Arena Page | DONE | arena/page.tsx with 3-column grid, HUD top bar, Suspense |
-| ArenaTerminal | DONE | Terminal chat UI, on-chain messages via NewMessage events |
+| ArenaTerminal | DONE | Terminal chat UI, on-chain messages, 3/round message limit, discussion topics per round |
 | VotePanel | DONE | Vote target selection, humanity score bars, castVote flow |
-| PlayerRadar | DONE | Player list with Address component, HP bars, alive/dead status |
+| PlayerRadar | DONE | Player list with AI/Human badges, HP bars, alive/dead status |
 | GameHUD | DONE | Sticky top bar with phase/alive/humanity/round |
 | GameCountdown | DONE | 3-2-1-FIGHT fullscreen countdown with framer-motion |
 | PhaseTransition | DONE | Phase change fullscreen wipe animation |
-| VictoryScreen | DONE | Gold particle canvas, champion display, claim reward for any rewarded player (not just champion) |
+| VictoryScreen | DONE | Team-based display (HUMANS WIN / AIs WIN), MVP section, claim button |
 | KillFeed | DONE | Fixed sidebar elimination notifications |
 | ChatMessage | DONE | 5 message types with styled rendering |
 | VotingGraph | DONE | Canvas ring-layout network visualization |
 | DataStream | DONE | Real-time blockchain tx stream (NewMessage, VoteCast) |
 | PlayerIdentityCard | DONE | Modal with SVG humanity gauge, stats, vote button |
-| MCP Adapter | DONE | packages/mcp-adapter/ with 14 tools, auto-play game loop, direct key session |
-| MCP Auto-Play | DONE | GameLoop class (lib/gameLoop.ts), vote strategies, chat pool, standalone bot (autoplay.ts) |
-| Skills Page | DONE | packages/nextjs/public/skills.md — 14 tools documented, standalone bot usage, linked from RoleSelector |
+| MCP Adapter | DONE | packages/mcp-adapter/ with 14 tools, team-based (MCP=AI, Web=Human), auto-play game loop |
+| MCP Auto-Play | DONE | GameLoop class (lib/gameLoop.ts), vote strategies, chat pool, 3 msg/round limit, standalone bot |
+| Skills Page | DONE | packages/nextjs/public/skills.md — 14 tools, team-based rules, standalone bot usage |
 | Player Alias Utility | DONE | utils/playerAlias.ts — deterministic codenames + colored avatars per room |
 | Narrative Flip | DONE | "Spot the AI" instead of "find humans" — landing page + HeroSection |
 | In-Game Anonymity | DONE | All 9 arena components use aliases during gameplay, real addresses revealed on game end |
+| Discussion Topics | DONE | utils/topics.ts — 30 per-round topics, deterministic by round number |
+| Quick Match | DONE | QuickMatchButton.tsx — auto-scan & join waiting rooms, landing page + lobby integration |
 
 ### Known Design Bugs (from review)
 
@@ -95,8 +104,8 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 4. ~~**P1 — createRoom 签名不匹配**~~ (aligned: contract takes tier enum)
 5. ~~**P1 — entry fee 值不一致**~~ (unified in TierConfig)
 6. ~~**P1 — 缺少 claimReward 函数**~~ (implemented in contract)
-7. **P1 — halfwayBlock 不准确**: 未考虑 phase acceleration (deferred — non-critical for MVP)
-8. **P1 — _updateEntropy 从未调用**: EntropyEngine was dropped in implementation (not needed for MVP)
+7. ~~**P1 — halfwayBlock 不准确**: 未考虑 phase acceleration~~ (no longer applicable — multi-phase removed)
+8. ~~**P1 — _updateEntropy 从未调用**: EntropyEngine was dropped~~ (no longer applicable — removed)
 9. **P2 — 投票透明**: 无 commit-reveal 机制 (future enhancement)
 10. **P2 — 无 Sybil 防护**: 无准入机制 (future enhancement)
 11. ~~**P2 — 无房间取消/退款**: createRoom 后无法退出~~ (implemented: leaveRoom + _cancelRoom with full USDC refund)
