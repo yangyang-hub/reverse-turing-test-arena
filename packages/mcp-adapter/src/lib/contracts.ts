@@ -9,7 +9,7 @@ export const ERC20_ABI = [
   "function mint(address to, uint256 amount)",
 ];
 
-// TuringArena ABI — full set for MCP adapter + auto-play
+// TuringArena ABI — full set for MCP adapter
 export const ARENA_ABI = [
   // View functions — structs
   "function getRoomInfo(uint256 roomId) view returns (tuple(uint256 id, address creator, uint8 tier, uint8 phase, uint256 entryFee, uint256 prizePool, uint256 startBlock, uint256 baseInterval, uint256 currentInterval, uint256 maxPlayers, uint256 playerCount, uint256 aliveCount, uint256 eliminatedCount, uint256 humanCount, uint256 aiCount, uint256 lastSettleBlock, bool isActive, bool isEnded))",

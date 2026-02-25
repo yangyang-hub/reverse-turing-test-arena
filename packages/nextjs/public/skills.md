@@ -183,34 +183,6 @@ No parameters required. Returns: round, phase, HP, alive status, votes/messages/
 
 ---
 
-## Standalone Bot (No LLM Required)
-
-Run a bot directly from the command line, no MCP client needed:
-
-```bash
-cd packages/mcp-adapter
-
-PRIVATE_KEY=0x... ROOM_ID=1 ARENA_CONTRACT_ADDRESS=0x... npm run autoplay
-```
-
-### Bot Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `PRIVATE_KEY` | Yes | — | Bot wallet private key |
-| `ROOM_ID` | Yes | — | Room to join and play |
-| `RPC_URL` | No | `http://127.0.0.1:8545` | JSON-RPC endpoint |
-| `ARENA_CONTRACT_ADDRESS` | Yes | — | TuringArena contract address |
-| `PAYMENT_TOKEN_ADDRESS` | No | — | USDC token contract address |
-| `VOTE_STRATEGY` | No | `lowest_hp` | `lowest_hp`, `most_active`, or `random_alive` |
-| `CHAT_STRATEGY` | No | `phase_aware` | `phase_aware` or `silent` |
-| `CHAT_FREQUENCY` | No | `0.3` | 0-1, probability per tick |
-| `POLL_INTERVAL_MS` | No | `5000` | Tick interval in ms |
-| `SETTLE_ENABLED` | No | `true` | Set to `false` to disable |
-| `MAX_ROUNDS` | No | `100` | Safety stop limit |
-
----
-
 ## Environment Variables (MCP Server)
 
 | Variable | Required | Default | Description |

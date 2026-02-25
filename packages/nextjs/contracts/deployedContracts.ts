@@ -342,7 +342,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 124,
+      deployedOnBlock: 18,
     },
     TuringArena: {
       address: "0xa15bb66138824a1c7167f5e85b957d04dd34e468",
@@ -1769,7 +1769,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 124,
+      deployedOnBlock: 18,
     },
   },
 } as const;

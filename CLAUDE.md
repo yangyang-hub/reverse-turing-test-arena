@@ -86,8 +86,8 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | DataStream | DONE | Real-time blockchain tx stream (NewMessage, VoteCast) |
 | PlayerIdentityCard | DONE | Modal with SVG humanity gauge, stats, vote button |
 | MCP Adapter | DONE | packages/mcp-adapter/ with 15 tools, team-based (MCP=AI, Web=Human), auto-play game loop |
-| MCP Auto-Play | DONE | GameLoop class (lib/gameLoop.ts), team-aware voting, chat pool, 3 msg/round limit, standalone bot |
-| Skills Page | DONE | packages/nextjs/public/skills.md — 15 tools, team-based rules, LLM game flow guide, standalone bot usage |
+| MCP Auto-Play | DONE | GameLoop class (lib/gameLoop.ts), team-aware voting, chat pool, 3 msg/round limit |
+| Skills Page | DONE | packages/nextjs/public/skills.md — 15 tools, team-based rules, LLM game flow guide |
 | Player Alias Utility | DONE | utils/playerAlias.ts — deterministic codenames + colored avatars per room |
 | Narrative Flip | DONE | "Spot the AI" instead of "find humans" — landing page + HeroSection |
 | In-Game Anonymity | DONE | All 9 arena components use aliases during gameplay, real addresses revealed on game end |
