@@ -1,141 +1,165 @@
+// 从 Model Context Protocol SDK 导入 MCP 服务器类
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+// 导入标准输入输出传输层，用于进程间通信
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+// 导入 Zod 库，用于参数验证和类型定义
 import { z } from "zod";
+// 导入 ethers.js 库，用于与以太坊区块链交互
 import { ethers } from "ethers";
+// 导入 ABI（应用二进制接口）定义文件，用于合约调用
 import { ARENA_ABI, ERC20_ABI } from "./lib/contracts.js";
+// 导入游戏循环类，用于自动玩游戏
 import { GameLoop } from "./lib/gameLoop.js";
+// 导入默认配置和阶段名称常量
 import { DEFAULT_CONFIG, PHASE_NAMES } from "./lib/types.js";
+// 导入自动玩配置的类型定义
 import type { AutoPlayConfig, VoteStrategy, ChatStrategy } from "./lib/types.js";
 
-// Initialize MCP Server
+// ============ 全局变量初始化 ============
+
+// 创建 MCP 服务器实例，用于提供 AI Agent 可调用的工具
 const server = new McpServer({
-  name: "rtta-arena",
-  version: "1.0.0",
+  name: "rtta-arena", // 服务器名称
+  version: "1.0.0", // 版本号
 });
 
-// RPC connection
+// 创建 RPC 提供者，用于连接区块链节点
+// 优先使用环境变量中的 RPC URL，否则使用本地 Anvil 节点（端口 8545）
 const provider = new ethers.JsonRpcProvider(process.env.RPC_URL || "http://127.0.0.1:8545");
 
-// Player wallet (initialized via init_session tool)
+// 玩家钱包变量（通过 init_session 工具初始化）
+// 使用 null 表示钱包尚未初始化
 let playerWallet: ethers.Wallet | null = null;
 
-// Active game loop (one at a time)
+// 当前活跃的游戏循环（同一时间只能有一个自动玩游戏循环）
 let activeGameLoop: GameLoop | null = null;
 
-// Contract addresses
-const ARENA_CONTRACT = process.env.ARENA_CONTRACT_ADDRESS || "";
-const PAYMENT_TOKEN = process.env.PAYMENT_TOKEN_ADDRESS || "";
+// 从环境变量读取合约地址，如果未设置则为空字符串
+const ARENA_CONTRACT = process.env.ARENA_CONTRACT_ADDRESS || ""; // 竞技场合约地址
+const PAYMENT_TOKEN = process.env.PAYMENT_TOKEN_ADDRESS || ""; // 支付代币（USDC）地址
 
-// ============ Tool 1: Get Arena Status ============
+// ============ 工具 1: 获取竞技场状态 ============
 server.tool(
-  "get_arena_status",
-  "Get real-time context for a battle royale room: room state, all players with humanity scores, recent chat, current round votes, and elimination history. Use this to understand the full game situation before taking actions.",
+  "get_arena_status", // 工具名称
+  "获取大逃杀房间的实时上下文：房间状态、所有玩家及其人性分、最近聊天记录、当前轮次投票和淘汰历史。在采取行动前使用此工具了解完整的游戏情况。",
   {
-    roomId: z.string().describe("Room ID number"),
+    // 参数定义：房间 ID
+    roomId: z.string().describe("房间 ID 号"),
   },
   async ({ roomId }) => {
     try {
+      // 创建合约实例，使用只读提供者（不需要签名）
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, provider);
 
+      // 并行查询房间基本信息、玩家地址列表、当前轮次
       const [roomInfo, playerAddresses, round] = await Promise.all([
-        contract.getRoomInfo(roomId),
-        contract.getAllPlayers(roomId),
-        contract.currentRound(roomId),
+        contract.getRoomInfo(roomId), // 获取房间信息
+        contract.getAllPlayers(roomId), // 获取所有玩家地址
+        contract.currentRound(roomId), // 获取当前轮次
       ]);
 
-      // Query events from room start block
-      const currentBlock = await provider.getBlockNumber();
+      // 从房间起始区块开始查询事件日志
+      const currentBlock = await provider.getBlockNumber(); // 获取当前区块号
+      // 确定查询的起始区块：如果房间已开始则从起始区块查，否则最多查最近 5000 个区块
       const fromBlock = roomInfo.startBlock > 0 ? Number(roomInfo.startBlock) : Math.max(0, currentBlock - 5000);
 
-      // Query chat, vote, and elimination events in parallel
+      // 并行查询三种事件：新消息、投票、玩家淘汰
       const [chatEvents, voteEvents, elimEvents] = await Promise.all([
+        // 查询聊天消息事件
         contract.queryFilter(contract.filters.NewMessage(roomId), fromBlock, currentBlock),
+        // 查询投票事件
         contract.queryFilter(contract.filters.VoteCast(roomId), fromBlock, currentBlock),
+        // 查询淘汰事件
         contract.queryFilter(contract.filters.PlayerEliminated(roomId), fromBlock, currentBlock),
       ]);
 
+      // 处理聊天消息事件，提取发送者、内容、时间戳
       const chatHistory = chatEvents
-        .filter((e): e is ethers.EventLog => "args" in e)
+        .filter((e): e is ethers.EventLog => "args" in e) // 过滤出有效的事件日志
         .map(e => ({
-          sender: e.args[1],
-          content: e.args[2],
-          timestamp: Number(e.args[3]),
+          sender: e.args[1], // 发送者地址（args[0] 是 roomId）
+          content: e.args[2], // 消息内容
+          timestamp: Number(e.args[3]), // 消息时间戳
         }));
 
-      // Current round votes from events
-      const currentRound = Number(round);
+      // 从事件中提取当前轮次的投票记录
+      const currentRound = Number(round); // 当前轮次号
       const currentRoundVotes = voteEvents
         .filter((e): e is ethers.EventLog => "args" in e)
-        .filter(e => Number(e.args[3]) === currentRound)
+        .filter(e => Number(e.args[3]) === currentRound) // 只保留当前轮次的投票
         .map(e => ({
-          voter: e.args[1],
-          target: e.args[2],
+          voter: e.args[1], // 投票者地址
+          target: e.args[2], // 被投票目标地址
         }));
 
-      // Full elimination history
+      // 提取完整的淘汰历史记录
       const eliminations = elimEvents
         .filter((e): e is ethers.EventLog => "args" in e)
         .map(e => ({
-          player: e.args[1],
-          eliminatedBy: e.args[2],
-          reason: e.args[3],
-          finalScore: Number(e.args[4]),
+          player: e.args[1], // 被淘汰玩家地址
+          eliminatedBy: e.args[2], // 淘汰该玩家的地址
+          reason: e.args[3], // 淘汰原因
+          finalScore: Number(e.args[4]), // 最终人性分
         }));
 
-      // Get detailed player info
+      // 获取每个玩家的详细信息
       const playerInfos = await Promise.all(
         (playerAddresses as string[]).map((addr: string) => contract.getPlayerInfo(roomId, addr)),
       );
 
+      // 格式化玩家信息，提取关键字段
       const formattedPlayers = playerInfos.map((p: ethers.Result) => ({
-        address: p.addr,
-        humanityScore: Number(p.humanityScore),
-        isAlive: p.isAlive,
-        isAI: p.isAI,
-        actionCount: Number(p.actionCount),
-        successfulVotes: Number(p.successfulVotes),
+        address: p.addr, // 玩家地址
+        humanityScore: Number(p.humanityScore), // 人性分
+        isAlive: p.isAlive, // 是否存活
+        isAI: p.isAI, // 是否为 AI
+        actionCount: Number(p.actionCount), // 行动次数
+        successfulVotes: Number(p.successfulVotes), // 成功投票次数（投中淘汰目标的次数）
       }));
 
-      // Check if all alive players have voted
+      // 检查是否所有存活玩家都已投票（仅在游戏进行阶段）
       let allVoted = false;
-      if (Number(roomInfo.phase) === 1) {
-        allVoted = await contract.allAliveVoted(roomId);
+      if (Number(roomInfo.phase) === 1) { // 阶段 1 表示游戏进行中
+        allVoted = await contract.allAliveVoted(roomId); // 查询合约状态
       }
 
+      // 返回结构化的房间状态数据
       return {
         content: [
           {
             type: "text" as const,
             text: JSON.stringify(
               {
+                // 房间基本信息
                 room: {
-                  id: roomInfo.id.toString(),
-                  phase: Number(roomInfo.phase),
-                  phaseName: PHASE_NAMES[Number(roomInfo.phase)] || "Unknown",
-                  entryFee: ethers.formatUnits(roomInfo.entryFee, 6) + " USDC",
-                  prizePool: ethers.formatUnits(roomInfo.prizePool, 6) + " USDC",
-                  maxPlayers: Number(roomInfo.maxPlayers),
-                  playerCount: Number(roomInfo.playerCount),
-                  aliveCount: Number(roomInfo.aliveCount),
-                  humanCount: Number(roomInfo.humanCount),
-                  aiCount: Number(roomInfo.aiCount),
-                  currentRound: currentRound,
-                  isActive: roomInfo.isActive,
-                  isEnded: roomInfo.isEnded,
+                  id: roomInfo.id.toString(), // 房间 ID
+                  phase: Number(roomInfo.phase), // 阶段编号（0=等待, 1=进行中, 2=已结束）
+                  phaseName: PHASE_NAMES[Number(roomInfo.phase)] || "Unknown", // 阶段名称
+                  entryFee: ethers.formatUnits(roomInfo.entryFee, 6) + " USDC", // 入场费
+                  prizePool: ethers.formatUnits(roomInfo.prizePool, 6) + " USDC", // 奖池
+                  maxPlayers: Number(roomInfo.maxPlayers), // 最大玩家数
+                  playerCount: Number(roomInfo.playerCount), // 当前玩家数
+                  aliveCount: Number(roomInfo.aliveCount), // 存活玩家数
+                  humanCount: Number(roomInfo.humanCount), // 人类玩家数
+                  aiCount: Number(roomInfo.aiCount), // AI 玩家数
+                  currentRound: currentRound, // 当前轮次
+                  isActive: roomInfo.isActive, // 是否活跃
+                  isEnded: roomInfo.isEnded, // 是否已结束
                 },
-                players: formattedPlayers,
-                recentChat: chatHistory.slice(-20),
-                currentRoundVotes,
-                eliminations,
-                allAliveVoted: allVoted,
+                players: formattedPlayers, // 玩家列表
+                recentChat: chatHistory.slice(-20), // 最近 20 条聊天记录
+                currentRoundVotes, // 当前轮次的投票记录
+                eliminations, // 淘汰历史
+                allAliveVoted: allVoted, // 是否所有存活玩家都已投票
               },
               null,
-              2,
+              2, // JSON 格式化缩进
             ),
           },
         ],
       };
     } catch (error) {
+      // 捕获错误并返回错误信息
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -144,17 +168,19 @@ server.tool(
   },
 );
 
-// ============ Tool 2: Execute On-chain Action ============
+// ============ 工具 2: 执行链上操作 ============
 server.tool(
-  "action_onchain",
-  "Execute an on-chain action: CHAT (send message) or VOTE (vote to eliminate).",
+  "action_onchain", // 工具名称
+  "执行链上操作：CHAT（发送消息）或 VOTE（投票淘汰）。",
   {
-    type: z.enum(["CHAT", "VOTE"]).describe("Action type: CHAT or VOTE"),
-    roomId: z.string().describe("Room ID number"),
-    content: z.string().optional().describe("Chat message content (required for CHAT, max 280 chars)"),
-    target: z.string().optional().describe("Vote target address (required for VOTE)"),
+    // 参数定义
+    type: z.enum(["CHAT", "VOTE"]).describe("操作类型：CHAT 或 VOTE"),
+    roomId: z.string().describe("房间 ID 号"),
+    content: z.string().optional().describe("聊天消息内容（CHAT 操作必需，最多 280 字符）"),
+    target: z.string().optional().describe("投票目标地址（VOTE 操作必需）"),
   },
   async ({ type, roomId, content, target }) => {
+    // 检查钱包是否已初始化
     if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Wallet not initialized. Use init_session first." }],
@@ -163,9 +189,10 @@ server.tool(
     }
 
     try {
+      // 创建合约实例，使用玩家钱包作为签名者（可以发送交易）
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
 
-      // Enforce channel exclusivity: MCP can only act for AI players
+      // 强制执行渠道独占：MCP 只能为 AI 玩家执行操作
       const playerInfo = await contract.getPlayerInfo(roomId, playerWallet.address);
       if (!playerInfo.isAI) {
         return {
@@ -174,23 +201,25 @@ server.tool(
         };
       }
 
-      let tx: ethers.TransactionResponse;
+      let tx: ethers.TransactionResponse; // 交易响应对象
 
+      // 根据操作类型执行相应的合约函数
       switch (type) {
-        case "CHAT":
+        case "CHAT": // 聊天操作
           if (!content) throw new Error("Content required for CHAT action");
           if (content.length > 280) throw new Error("Message too long (max 280 chars)");
-          tx = await contract.sendMessage(roomId, content);
+          tx = await contract.sendMessage(roomId, content); // 调用合约发送消息
           break;
 
-        case "VOTE":
+        case "VOTE": // 投票操作
           if (!target) throw new Error("Target address required for VOTE action");
-          tx = await contract.castVote(roomId, target);
+          tx = await contract.castVote(roomId, target); // 调用合约投票
           break;
       }
 
-      await tx.wait();
+      await tx.wait(); // 等待交易被打包到区块
 
+      // 返回成功信息
       return {
         content: [
           {
@@ -200,6 +229,7 @@ server.tool(
         ],
       };
     } catch (error) {
+      // 捕获错误并返回错误信息
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -208,12 +238,13 @@ server.tool(
   },
 );
 
-// ============ Tool 3: Check Session Status ============
+// ============ 工具 3: 检查会话状态 ============
 server.tool(
-  "check_session_status",
-  "Check the current wallet's address and USDC balance. Use this to verify your session is active before taking actions.",
-  {},
+  "check_session_status", // 工具名称
+  "检查当前钱包的地址和 USDC 余额。在采取行动前使用此工具验证会话是否处于活跃状态。",
+  {}, // 无需参数
   async () => {
+    // 检查钱包是否已初始化
     if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Session wallet not initialized. Use init_session first." }],
@@ -222,22 +253,25 @@ server.tool(
     }
 
     try {
+      // 构建结果对象，存储钱包信息
       const result: Record<string, unknown> = {
-        address: playerWallet.address,
+        address: playerWallet.address, // 钱包地址
       };
 
-      // Check ETH balance
+      // 检查 ETH 余额（用于支付 gas 费）
       const ethBalance = await provider.getBalance(playerWallet.address);
-      result.ethBalance = ethers.formatEther(ethBalance);
+      result.ethBalance = ethers.formatEther(ethBalance); // 转换为 ETH 单位
 
-      // Check USDC balance
+      // 检查 USDC 余额（用于支付入场费）
+      // 优先使用环境变量中的代币地址，否则从合约查询
       const tokenAddr = PAYMENT_TOKEN || (ARENA_CONTRACT ? await new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, provider).paymentToken() : null);
       if (tokenAddr) {
-        const token = new ethers.Contract(tokenAddr, ERC20_ABI, provider);
-        const balance = await token.balanceOf(playerWallet.address);
-        result.usdcBalance = ethers.formatUnits(balance, 6);
+        const token = new ethers.Contract(tokenAddr, ERC20_ABI, provider); // 创建 ERC20 代币合约实例
+        const balance = await token.balanceOf(playerWallet.address); // 查询余额
+        result.usdcBalance = ethers.formatUnits(balance, 6); // USDC 使用 6 位小数
       }
 
+      // 返回格式化的钱包状态信息
       return {
         content: [
           {
@@ -247,6 +281,7 @@ server.tool(
         ],
       };
     } catch (error) {
+      // 捕获错误并返回错误信息
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -255,18 +290,21 @@ server.tool(
   },
 );
 
-// ============ Tool 4: Initialize Session ============
+// ============ 工具 4: 初始化会话 ============
 server.tool(
-  "init_session",
-  "Initialize a wallet for gameplay. Pass a private key to create a wallet that will sign all on-chain actions (chat, vote, join, etc.).",
+  "init_session", // 工具名称
+  "初始化一个用于游戏的钱包。传入私钥以创建一个钱包，该钱包将签名所有链上操作（聊天、投票、加入等）。",
   {
-    privateKey: z.string().describe("Private key of the wallet to use for gameplay (hex, with or without 0x)"),
+    privateKey: z.string().describe("用于游戏的钱包私钥（十六进制格式，带或不带 0x 前缀）"),
   },
   async ({ privateKey }) => {
     try {
+      // 使用私钥创建钱包实例，并连接到 RPC 提供者
       playerWallet = new ethers.Wallet(privateKey, provider);
+      // 查询钱包的 ETH 余额
       const balance = await provider.getBalance(playerWallet.address);
 
+      // 返回钱包初始化成功的信息
       return {
         content: [
           {
@@ -276,6 +314,7 @@ server.tool(
         ],
       };
     } catch (error) {
+      // 捕获错误并返回错误信息
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -284,14 +323,15 @@ server.tool(
   },
 );
 
-// ============ Tool 5: Settle Round ============
+// ============ 工具 5: 结算轮次 ============
 server.tool(
-  "settle_round",
-  "Advance the game by settling the current round. Anyone can call this once enough blocks have passed. Triggers elimination of the player with the most votes.",
+  "settle_round", // 工具名称
+  "通过结算当前轮次推进游戏。任何人都可以在经过足够的区块后调用此函数。触发淘汰得票最多的玩家。",
   {
-    roomId: z.string().describe("Room ID number"),
+    roomId: z.string().describe("房间 ID 号"),
   },
   async ({ roomId }) => {
+    // 检查钱包是否已初始化
     if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
@@ -300,10 +340,13 @@ server.tool(
     }
 
     try {
+      // 创建合约实例
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
+      // 调用合约的 settleRound 函数结算当前轮次
       const tx = await contract.settleRound(roomId);
-      await tx.wait();
+      await tx.wait(); // 等待交易被打包
 
+      // 查询结算后的当前轮次
       const round = await contract.currentRound(roomId);
       return {
         content: [
@@ -314,6 +357,7 @@ server.tool(
         ],
       };
     } catch (error) {
+      // 捕获错误并返回错误信息
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -322,14 +366,15 @@ server.tool(
   },
 );
 
-// ============ Tool 6: Start Game ============
+// ============ 工具 6: 开始游戏 ============
 server.tool(
-  "start_game",
-  "Start a game that's in the Waiting phase. Only the room creator can call this, and at least 3 players must have joined.",
+  "start_game", // 工具名称
+  "开始一个处于等待阶段的游戏。只有房间创建者可以调用此函数，且至少需要有 3 名玩家加入。",
   {
-    roomId: z.string().describe("Room ID number"),
+    roomId: z.string().describe("房间 ID 号"),
   },
   async ({ roomId }) => {
+    // 检查钱包是否已初始化
     if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
@@ -338,9 +383,11 @@ server.tool(
     }
 
     try {
+      // 创建合约实例
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
+      // 调用合约的 startGame 函数开始游戏
       const tx = await contract.startGame(roomId);
-      await tx.wait();
+      await tx.wait(); // 等待交易被打包
 
       return {
         content: [
@@ -351,6 +398,7 @@ server.tool(
         ],
       };
     } catch (error) {
+      // 捕获错误并返回错误信息
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -359,14 +407,15 @@ server.tool(
   },
 );
 
-// ============ Tool 7: Claim Reward ============
+// ============ 工具 7: 领取奖励 ============
 server.tool(
-  "claim_reward",
-  "Claim your USDC reward after a game ends. Returns the reward amount and transaction hash.",
+  "claim_reward", // 工具名称
+  "游戏结束后领取你的 USDC 奖励。返回奖励金额和交易哈希。",
   {
-    roomId: z.string().describe("Room ID number"),
+    roomId: z.string().describe("房间 ID 号"),
   },
   async ({ roomId }) => {
+    // 检查钱包是否已初始化
     if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
@@ -375,25 +424,29 @@ server.tool(
     }
 
     try {
+      // 创建合约实例
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
 
-      // Check reward first
+      // 先查询奖励信息
       const [amount, claimed] = await contract.getRewardInfo(roomId, playerWallet.address);
 
+      // 检查是否已领取
       if (claimed) {
         return {
           content: [{ type: "text" as const, text: "Reward already claimed for this room." }],
         };
       }
 
+      // 检查奖励金额是否为零
       if (amount === 0n) {
         return {
           content: [{ type: "text" as const, text: "No reward available for this room." }],
         };
       }
 
+      // 调用合约的 claimReward 函数领取奖励
       const tx = await contract.claimReward(roomId);
-      await tx.wait();
+      await tx.wait(); // 等待交易被打包
 
       return {
         content: [
@@ -404,6 +457,7 @@ server.tool(
         ],
       };
     } catch (error) {
+      // 捕获错误并返回错误信息
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -412,54 +466,58 @@ server.tool(
   },
 );
 
-// ============ Tool 8: Get Round Status ============
+// ============ 工具 8: 获取轮次状态 ============
 server.tool(
-  "get_round_status",
-  "Get detailed round information: current round number, whether you've voted, and how many blocks until the round can be settled.",
+  "get_round_status", // 工具名称
+  "获取详细的轮次信息：当前轮次号、你是否已投票、距离轮次可结算还有多少区块。",
   {
-    roomId: z.string().describe("Room ID number"),
+    roomId: z.string().describe("房间 ID 号"),
   },
   async ({ roomId }) => {
     try {
+      // 创建合约实例（只读）
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, provider);
 
+      // 并行查询房间信息、当前轮次、当前区块号
       const [roomInfo, round, currentBlock] = await Promise.all([
         contract.getRoomInfo(roomId),
         contract.currentRound(roomId),
         provider.getBlockNumber(),
       ]);
 
+      // 构建结果对象，存储轮次信息
       const result: Record<string, unknown> = {
-        currentRound: Number(round),
-        phase: Number(roomInfo.phase),
-        phaseName: PHASE_NAMES[Number(roomInfo.phase)] || "Unknown",
-        aliveCount: Number(roomInfo.aliveCount),
+        currentRound: Number(round), // 当前轮次
+        phase: Number(roomInfo.phase), // 游戏阶段
+        phaseName: PHASE_NAMES[Number(roomInfo.phase)] || "Unknown", // 阶段名称
+        aliveCount: Number(roomInfo.aliveCount), // 存活玩家数
       };
 
-      // Only show settle timing if game is active (not Waiting or Ended)
+      // 仅在游戏进行中时显示结算时间信息（不在等待或结束阶段）
       const phase = Number(roomInfo.phase);
-      if (phase === 1) {
-        const lastSettle = Number(roomInfo.lastSettleBlock);
-        result.currentInterval = Number(roomInfo.currentInterval);
-        result.lastSettleBlock = lastSettle;
-        result.currentBlock = currentBlock;
-        result.blocksSinceSettle = currentBlock - lastSettle;
-        result.blocksUntilSettleable = Math.max(0, Number(roomInfo.currentInterval) - (currentBlock - lastSettle));
+      if (phase === 1) { // 阶段 1 表示游戏进行中
+        const lastSettle = Number(roomInfo.lastSettleBlock); // 上次结算区块号
+        result.currentInterval = Number(roomInfo.currentInterval); // 当前结算间隔（区块数）
+        result.lastSettleBlock = lastSettle; // 上次结算区块
+        result.currentBlock = currentBlock; // 当前区块
+        result.blocksSinceSettle = currentBlock - lastSettle; // 距上次结算已过区块数
+        result.blocksUntilSettleable = Math.max(0, Number(roomInfo.currentInterval) - (currentBlock - lastSettle)); // 距可结算还需区块数
       }
 
-      // Check if session wallet has voted
+      // 检查会话钱包是否已投票
       if (playerWallet) {
         const hasVoted = await contract.hasVotedInRound(roomId, round, playerWallet.address);
-        result.hasVoted = hasVoted;
+        result.hasVoted = hasVoted; // 是否已投票
 
-        // Check reward info if game ended
-        if (Number(roomInfo.phase) === 2) {
+        // 如果游戏已结束，查询奖励信息
+        if (Number(roomInfo.phase) === 2) { // 阶段 2 表示游戏已结束
           const [amount, claimed] = await contract.getRewardInfo(roomId, playerWallet.address);
-          result.rewardAmount = ethers.formatUnits(amount, 6) + " USDC";
-          result.rewardClaimed = claimed;
+          result.rewardAmount = ethers.formatUnits(amount, 6) + " USDC"; // 奖励金额
+          result.rewardClaimed = claimed; // 是否已领取
         }
       }
 
+      // 返回格式化的轮次状态信息
       return {
         content: [
           {
@@ -469,6 +527,7 @@ server.tool(
         ],
       };
     } catch (error) {
+      // 捕获错误并返回错误信息
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -477,24 +536,25 @@ server.tool(
   },
 );
 
-// ============ Tool 9: Auto-Play (Start Background Loop) ============
+// ============ 工具 9: 自动玩游戏（启动后台循环） ============
 server.tool(
-  "auto_play",
-  "Start an autonomous background game loop that votes, chats, settles rounds, and claims rewards automatically. Returns immediately — use get_auto_play_status to monitor progress.",
+  "auto_play", // 工具名称
+  "启动一个自主的后台游戏循环，自动投票、聊天、结算轮次和领取奖励。立即返回 — 使用 get_auto_play_status 监控进度。",
   {
-    roomId: z.string().describe("Room ID number"),
+    roomId: z.string().describe("房间 ID 号"),
     voteStrategy: z.enum(["lowest_hp", "most_active", "random_alive"]).optional()
-      .describe("Vote strategy: lowest_hp (default), most_active, or random_alive"),
+      .describe("投票策略：lowest_hp（最低人性分，默认）、most_active（最活跃）或 random_alive（随机存活者）"),
     chatStrategy: z.enum(["phase_aware", "silent"]).optional()
-      .describe("Chat strategy: phase_aware (default) or silent"),
+      .describe("聊天策略：phase_aware（阶段感知，默认）或 silent（静默）"),
     chatFrequency: z.number().min(0).max(1).optional()
-      .describe("Chat probability per tick (0-1, default 0.3)"),
+      .describe("每次 tick 的聊天概率（0-1，默认 0.3）"),
     settleEnabled: z.boolean().optional()
-      .describe("Whether to call settleRound when eligible (default true)"),
+      .describe("是否在满足条件时调用 settleRound（默认 true）"),
     pollIntervalMs: z.number().min(1000).max(60000).optional()
-      .describe("Tick interval in ms (default 5000)"),
+      .describe("轮询间隔，单位毫秒（默认 5000）"),
   },
   async ({ roomId, voteStrategy, chatStrategy, chatFrequency, settleEnabled, pollIntervalMs }) => {
+    // 检查钱包是否已初始化
     if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
@@ -502,23 +562,25 @@ server.tool(
       };
     }
 
-    // Stop existing loop if any
+    // 如果已有活跃的游戏循环，先停止它
     if (activeGameLoop) {
       activeGameLoop.stop();
     }
 
+    // 构建自动玩配置对象，使用提供的参数或默认值
     const config: AutoPlayConfig = {
       roomId,
-      voteStrategy: (voteStrategy as VoteStrategy) ?? DEFAULT_CONFIG.voteStrategy,
-      chatStrategy: (chatStrategy as ChatStrategy) ?? DEFAULT_CONFIG.chatStrategy,
-      chatFrequency: chatFrequency ?? DEFAULT_CONFIG.chatFrequency,
-      settleEnabled: settleEnabled ?? DEFAULT_CONFIG.settleEnabled,
-      pollIntervalMs: pollIntervalMs ?? DEFAULT_CONFIG.pollIntervalMs,
-      maxRounds: DEFAULT_CONFIG.maxRounds,
+      voteStrategy: (voteStrategy as VoteStrategy) ?? DEFAULT_CONFIG.voteStrategy, // 投票策略
+      chatStrategy: (chatStrategy as ChatStrategy) ?? DEFAULT_CONFIG.chatStrategy, // 聊天策略
+      chatFrequency: chatFrequency ?? DEFAULT_CONFIG.chatFrequency, // 聊天频率
+      settleEnabled: settleEnabled ?? DEFAULT_CONFIG.settleEnabled, // 是否启用结算
+      pollIntervalMs: pollIntervalMs ?? DEFAULT_CONFIG.pollIntervalMs, // 轮询间隔
+      maxRounds: DEFAULT_CONFIG.maxRounds, // 最大轮次数
     };
 
+    // 创建新的游戏循环实例并启动
     activeGameLoop = new GameLoop(config, playerWallet, ARENA_CONTRACT);
-    activeGameLoop.start();
+    activeGameLoop.start(); // 启动后台循环
 
     return {
       content: [
@@ -535,20 +597,22 @@ server.tool(
   },
 );
 
-// ============ Tool 10: Stop Auto-Play ============
+// ============ 工具 10: 停止自动玩 ============
 server.tool(
-  "stop_auto_play",
-  "Stop the running auto-play game loop and return final stats.",
-  {},
+  "stop_auto_play", // 工具名称
+  "停止正在运行的自动玩游戏循环并返回最终统计信息。",
+  {}, // 无需参数
   async () => {
+    // 检查是否有活跃的游戏循环
     if (!activeGameLoop) {
       return {
         content: [{ type: "text" as const, text: "No active auto-play loop to stop." }],
       };
     }
 
+    // 停止游戏循环并获取最终状态
     const finalStatus = activeGameLoop.stop();
-    activeGameLoop = null;
+    activeGameLoop = null; // 清空活跃循环引用
 
     return {
       content: [
@@ -561,18 +625,20 @@ server.tool(
   },
 );
 
-// ============ Tool 11: Get Auto-Play Status ============
+// ============ 工具 11: 获取自动玩状态 ============
 server.tool(
-  "get_auto_play_status",
-  "Check the current auto-play loop progress: round, HP, votes cast, messages sent, errors.",
-  {},
+  "get_auto_play_status", // 工具名称
+  "检查当前自动玩游戏循环的进度：轮次、人性分、已投票数、已发送消息数、错误数。",
+  {}, // 无需参数
   async () => {
+    // 检查是否有活跃的游戏循环
     if (!activeGameLoop) {
       return {
         content: [{ type: "text" as const, text: "No active auto-play loop. Use auto_play to start one." }],
       };
     }
 
+    // 获取游戏循环的当前状态
     const status = activeGameLoop.getStatus();
 
     return {
@@ -586,16 +652,17 @@ server.tool(
   },
 );
 
-// ============ Tool 12: Create Room ============
+// ============ 工具 12: 创建房间 ============
 server.tool(
-  "create_room",
-  "Create a new game room. You become the room creator and are auto-joined (entry fee is charged). Tier controls game pacing: Quick (0) = fast rounds, Standard (1) = balanced, Epic (2) = long games. Returns the new room ID.",
+  "create_room", // 工具名称
+  "创建一个新的游戏房间。你成为房间创建者并自动加入（收取入场费）。Tier 控制游戏节奏：Quick (0) = 快速轮次，Standard (1) = 平衡，Epic (2) = 长游戏。返回新房间 ID。",
   {
-    tier: z.enum(["0", "1", "2"]).describe("Room tier: 0=Quick, 1=Standard, 2=Epic"),
-    maxPlayers: z.number().min(3).max(50).describe("Max players (3-50)"),
-    entryFee: z.number().min(1).max(100).describe("Entry fee in USDC (1-100)"),
+    tier: z.enum(["0", "1", "2"]).describe("房间等级：0=快速，1=标准，2=史诗"),
+    maxPlayers: z.number().min(3).max(50).describe("最大玩家数（3-50）"),
+    entryFee: z.number().min(1).max(100).describe("入场费，单位 USDC（1-100）"),
   },
   async ({ tier, maxPlayers, entryFee }) => {
+    // 检查钱包是否已初始化
     if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
@@ -604,33 +671,38 @@ server.tool(
     }
 
     try {
+      // 创建合约实例
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
-      const feeWei = BigInt(entryFee) * 1_000_000n; // USDC has 6 decimals
+      // 将 USDC 金额转换为 Wei（USDC 有 6 位小数）
+      const feeWei = BigInt(entryFee) * 1_000_000n;
 
-      // Approve USDC for entry fee (creator is auto-joined)
-      const tokenAddr = PAYMENT_TOKEN || (await contract.paymentToken());
-      const token = new ethers.Contract(tokenAddr, ERC20_ABI, playerWallet);
-      const allowance = await token.allowance(playerWallet.address, ARENA_CONTRACT);
-      if (allowance < feeWei) {
+      // 为入场费批准 USDC（创建者会被自动加入房间）
+      const tokenAddr = PAYMENT_TOKEN || (await contract.paymentToken()); // 获取支付代币地址
+      const token = new ethers.Contract(tokenAddr, ERC20_ABI, playerWallet); // 创建代币合约实例
+      const allowance = await token.allowance(playerWallet.address, ARENA_CONTRACT); // 查询当前授权额度
+      if (allowance < feeWei) { // 如果授权额度不足，则进行授权
         const approveTx = await token.approve(ARENA_CONTRACT, feeWei);
         await approveTx.wait();
       }
 
-      const tx = await contract.createRoom(Number(tier), maxPlayers, feeWei, true); // MCP = AI
-      const receipt = await tx.wait();
+      // 调用合约的 createRoom 函数创建房间（MCP = AI，所以第 4 个参数为 true）
+      const tx = await contract.createRoom(Number(tier), maxPlayers, feeWei, true);
+      const receipt = await tx.wait(); // 等待交易被打包并获取收据
 
-      // Extract roomId from RoomCreated event
+      // 从 RoomCreated 事件中提取房间 ID
       let roomId = "unknown";
       if (receipt) {
-        const iface = new ethers.Interface(ARENA_ABI);
+        const iface = new ethers.Interface(ARENA_ABI); // 创建合约接口实例
+        // 遍历交易收据中的所有日志
         for (const log of receipt.logs) {
           try {
+            // 尝试解析日志
             const parsed = iface.parseLog({ topics: log.topics as string[], data: log.data });
-            if (parsed?.name === "RoomCreated") {
-              roomId = parsed.args[0].toString();
+            if (parsed?.name === "RoomCreated") { // 找到 RoomCreated 事件
+              roomId = parsed.args[0].toString(); // 提取房间 ID（事件第一个参数）
               break;
             }
-          } catch { /* skip non-matching logs */ }
+          } catch { /* 跳过不匹配的日志 */ }
         }
       }
 
@@ -645,6 +717,7 @@ server.tool(
         ],
       };
     } catch (error) {
+      // 捕获错误并返回错误信息
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -653,14 +726,15 @@ server.tool(
   },
 );
 
-// ============ Tool 13: Leave Room ============
+// ============ 工具 13: 离开房间 ============
 server.tool(
-  "leave_room",
-  "Leave a room that hasn't started yet (Waiting phase only). If you're the creator, all players are refunded and the room is cancelled. Entry fee is refunded in USDC.",
+  "leave_room", // 工具名称
+  "离开一个尚未开始的房间（仅等待阶段）。如果你是创建者，所有玩家将获得退款并取消房间。入场费以 USDC 退还。",
   {
-    roomId: z.string().describe("Room ID number"),
+    roomId: z.string().describe("房间 ID 号"),
   },
   async ({ roomId }) => {
+    // 检查钱包是否已初始化
     if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
@@ -669,13 +743,18 @@ server.tool(
     }
 
     try {
+      // 创建合约实例
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
+      // 查询房间信息
       const roomInfo = await contract.getRoomInfo(roomId);
+      // 检查当前钱包是否为房间创建者（地址比较忽略大小写）
       const isCreator = roomInfo.creator.toLowerCase() === playerWallet.address.toLowerCase();
 
+      // 调用合约的 leaveRoom 函数离开房间
       const tx = await contract.leaveRoom(roomId);
-      await tx.wait();
+      await tx.wait(); // 等待交易被打包
 
+      // 根据是否为创建者返回不同的消息
       const msg = isCreator
         ? `Left room ${roomId} as creator — room cancelled, all players refunded.`
         : `Left room ${roomId}. Entry fee refunded.`;
@@ -684,6 +763,7 @@ server.tool(
         content: [{ type: "text" as const, text: `${msg}\nTx: ${tx.hash}` }],
       };
     } catch (error) {
+      // 捕获错误并返回错误信息
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -692,14 +772,15 @@ server.tool(
   },
 );
 
-// ============ Tool 14: Mint Test USDC ============
+// ============ 工具 14: 铸造测试 USDC ============
 server.tool(
-  "mint_test_usdc",
-  "Mint test USDC to your wallet (only works on local Anvil or testnets with MockUSDC). For funding your bot before joining games.",
+  "mint_test_usdc", // 工具名称
+  "向你的钱包铸造测试 USDC（仅适用于本地 Anvil 或带有 MockUSDC 的测试网）。用于在加入游戏前为你的机器人提供资金。",
   {
-    amount: z.number().min(1).max(100000).describe("Amount of USDC to mint (e.g. 1000)"),
+    amount: z.number().min(1).max(100000).describe("要铸造的 USDC 数量（例如 1000）"),
   },
   async ({ amount }) => {
+    // 检查钱包是否已初始化
     if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
@@ -708,13 +789,18 @@ server.tool(
     }
 
     try {
+      // 获取支付代币地址（优先使用环境变量，否则从合约查询）
       const tokenAddr = PAYMENT_TOKEN || (await new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, provider).paymentToken());
+      // 创建代币合约实例
       const token = new ethers.Contract(tokenAddr, ERC20_ABI, playerWallet);
 
-      const amountWei = BigInt(amount) * 1_000_000n; // 6 decimals
+      // 将 USDC 金额转换为 Wei（USDC 有 6 位小数）
+      const amountWei = BigInt(amount) * 1_000_000n;
+      // 调用代币的 mint 函数铸造代币
       const tx = await token.mint(playerWallet.address, amountWei);
-      await tx.wait();
+      await tx.wait(); // 等待交易被打包
 
+      // 查询新的余额
       const balance = await token.balanceOf(playerWallet.address);
 
       return {
@@ -727,13 +813,16 @@ server.tool(
         ],
       };
     } catch (error) {
+      // 检查错误类型
       const msg = String(error);
       if (msg.includes("execution reverted") || msg.includes("is not a function")) {
+        // 如果是执行回退或函数不存在，说明不是 MockUSDC
         return {
           content: [{ type: "text" as const, text: "Error: mint() failed. This only works with MockUSDC on local/test networks." }],
           isError: true,
         };
       }
+      // 其他类型的错误
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -742,52 +831,56 @@ server.tool(
   },
 );
 
-// ============ Tool 15: Get Game History ============
+// ============ 工具 15: 获取游戏历史 ============
 server.tool(
-  "get_game_history",
-  "Get the complete game history: all votes cast per round, elimination order, and game outcome. Best used after game ends or to review past games.",
+  "get_game_history", // 工具名称
+  "获取完整的游戏历史：每轮的所有投票、淘汰顺序和游戏结果。最适合在游戏结束后使用或回顾过去的游戏。",
   {
-    roomId: z.string().describe("Room ID number"),
+    roomId: z.string().describe("房间 ID 号"),
   },
   async ({ roomId }) => {
     try {
+      // 创建合约实例（只读）
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, provider);
 
+      // 并行查询房间信息和当前轮次
       const [roomInfo, round] = await Promise.all([
         contract.getRoomInfo(roomId),
         contract.currentRound(roomId),
       ]);
 
+      // 确定查询的区块范围
       const currentBlock = await provider.getBlockNumber();
       const fromBlock = roomInfo.startBlock > 0 ? Number(roomInfo.startBlock) : Math.max(0, currentBlock - 10000);
 
-      // Query all vote and elimination events
+      // 并行查询所有投票和淘汰事件
       const [voteEvents, elimEvents] = await Promise.all([
         contract.queryFilter(contract.filters.VoteCast(roomId), fromBlock, currentBlock),
         contract.queryFilter(contract.filters.PlayerEliminated(roomId), fromBlock, currentBlock),
       ]);
 
-      // Group votes by round
+      // 按轮次分组投票记录
       const rounds: Record<string, { votes: { voter: string; target: string }[]; eliminated: { player: string; eliminatedBy: string; reason: string; finalScore: number } | null }> = {};
 
+      // 遍历投票事件，按轮次分组
       for (const e of voteEvents) {
         if (!("args" in e)) continue;
         const ev = e as ethers.EventLog;
-        const r = ev.args[3].toString();
+        const r = ev.args[3].toString(); // 轮次号
         if (!rounds[r]) rounds[r] = { votes: [], eliminated: null };
         rounds[r].votes.push({
-          voter: ev.args[1],
-          target: ev.args[2],
+          voter: ev.args[1], // 投票者
+          target: ev.args[2], // 被投票目标
         });
       }
 
-      // Map eliminations to rounds by block proximity
+      // 通过区块邻近度将淘汰事件映射到轮次
       for (const e of elimEvents) {
         if (!("args" in e)) continue;
         const ev = e as ethers.EventLog;
-        const elimBlock = ev.blockNumber;
+        const elimBlock = ev.blockNumber; // 淘汰发生的区块号
 
-        // Find which round this elimination belongs to by checking vote events
+        // 通过检查投票事件找到此淘汰属于哪一轮
         let elimRound = "0";
         for (const ve of voteEvents) {
           if (!("args" in ve)) continue;
@@ -799,23 +892,24 @@ server.tool(
 
         if (!rounds[elimRound]) rounds[elimRound] = { votes: [], eliminated: null };
         rounds[elimRound].eliminated = {
-          player: ev.args[1],
-          eliminatedBy: ev.args[2],
-          reason: ev.args[3],
-          finalScore: Number(ev.args[4]),
+          player: ev.args[1], // 被淘汰玩家
+          eliminatedBy: ev.args[2], // 淘汰者
+          reason: ev.args[3], // 淘汰原因
+          finalScore: Number(ev.args[4]), // 最终人性分
         };
       }
 
-      // Get elimination order and game stats
+      // 获取淘汰顺序和游戏统计
       const eliminationOrder = await contract.getEliminationOrder(roomId);
 
+      // 如果游戏已结束，获取游戏统计信息
       let gameStats = null;
-      if (roomInfo.isEnded || Number(roomInfo.phase) === 2) {
+      if (roomInfo.isEnded || Number(roomInfo.phase) === 2) { // 阶段 2 表示游戏已结束
         const stats = await contract.getGameStats(roomId);
         gameStats = {
-          humansWon: stats.humansWon,
-          mvp: stats.mvp,
-          mvpVotes: Number(stats.mvpVotes),
+          humansWon: stats.humansWon, // 人类是否获胜
+          mvp: stats.mvp, // MVP 地址
+          mvpVotes: Number(stats.mvpVotes), // MVP 得票数
         };
       }
 
@@ -825,10 +919,10 @@ server.tool(
             type: "text" as const,
             text: JSON.stringify(
               {
-                totalRounds: Number(round),
-                rounds,
-                eliminationOrder: (eliminationOrder as string[]),
-                gameStats,
+                totalRounds: Number(round), // 总轮次数
+                rounds, // 按轮次分组的投票和淘汰记录
+                eliminationOrder: (eliminationOrder as string[]), // 淘汰顺序
+                gameStats, // 游戏统计信息
               },
               null,
               2,
@@ -837,6 +931,7 @@ server.tool(
         ],
       };
     } catch (error) {
+      // 捕获错误并返回错误信息
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -845,18 +940,19 @@ server.tool(
   },
 );
 
-// ============ Tool 16: Match Room ============
+// ============ 工具 16: 匹配房间 ============
 server.tool(
-  "match_room",
-  "Matchmake into a waiting room by scanning available rooms and joining the first match. Checks AI slot availability (MCP = AI). If no room matches, suggests using create_room instead.",
+  "match_room", // 工具名称
+  "通过扫描可用房间并加入第一个匹配项来进行匹配进入等待中的房间。检查 AI 插槽可用性（MCP = AI）。如果没有房间匹配，建议使用 create_room。",
   {
-    minPlayers: z.number().min(3).max(50).optional().describe("Min room size (default 3)"),
-    maxPlayers: z.number().min(3).max(50).optional().describe("Max room size (default 50)"),
-    minFee: z.number().min(1).max(100).optional().describe("Min entry fee in USDC (default 1)"),
-    maxFee: z.number().min(1).max(100).optional().describe("Max entry fee in USDC (default 100)"),
-    tier: z.enum(["0", "1", "2"]).optional().describe("Optional tier filter: 0=Quick, 1=Standard, 2=Epic"),
+    minPlayers: z.number().min(3).max(50).optional().describe("最小房间大小（默认 3）"),
+    maxPlayers: z.number().min(3).max(50).optional().describe("最大房间大小（默认 50）"),
+    minFee: z.number().min(1).max(100).optional().describe("最小入场费，单位 USDC（默认 1）"),
+    maxFee: z.number().min(1).max(100).optional().describe("最大入场费，单位 USDC（默认 100）"),
+    tier: z.enum(["0", "1", "2"]).optional().describe("可选的等级过滤器：0=快速，1=标准，2=史诗"),
   },
   async ({ minPlayers, maxPlayers, minFee, maxFee, tier }) => {
+    // 检查钱包是否已初始化
     if (!playerWallet) {
       return {
         content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
@@ -865,50 +961,56 @@ server.tool(
     }
 
     try {
+      // 创建合约实例
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
+      // 获取房间总数
       const roomCount = await contract.getRoomCount();
       const total = Number(roomCount);
 
+      // 如果没有房间存在
       if (total === 0) {
         return {
           content: [{ type: "text" as const, text: "No rooms exist yet. Use create_room to create one." }],
         };
       }
 
-      const filterMinPlayers = minPlayers ?? 3;
-      const filterMaxPlayers = maxPlayers ?? 50;
-      const feeMinWei = BigInt(Math.round((minFee ?? 1) * 1e6));
-      const feeMaxWei = BigInt(Math.round((maxFee ?? 100) * 1e6));
+      // 设置过滤条件（使用提供的值或默认值）
+      const filterMinPlayers = minPlayers ?? 3; // 最小玩家数
+      const filterMaxPlayers = maxPlayers ?? 50; // 最大玩家数
+      const feeMinWei = BigInt(Math.round((minFee ?? 1) * 1e6)); // 最小费用（转换为 Wei）
+      const feeMaxWei = BigInt(Math.round((maxFee ?? 100) * 1e6)); // 最大费用（转换为 Wei）
 
-      // Scan from newest to oldest
+      // 从最新到最旧扫描房间
       for (let i = total; i >= 1; i--) {
         const roomId = i.toString();
         const roomInfo = await contract.getRoomInfo(roomId);
 
-        const phase = Number(roomInfo.phase);
-        const playerCount = Number(roomInfo.playerCount);
-        const maxP = Number(roomInfo.maxPlayers);
-        const entryFee = roomInfo.entryFee;
-        const aiCount = Number(roomInfo.aiCount);
-        const roomTier = Number(roomInfo.tier);
+        // 提取房间信息
+        const phase = Number(roomInfo.phase); // 游戏阶段
+        const playerCount = Number(roomInfo.playerCount); // 当前玩家数
+        const maxP = Number(roomInfo.maxPlayers); // 最大玩家数
+        const entryFee = roomInfo.entryFee; // 入场费
+        const aiCount = Number(roomInfo.aiCount); // AI 玩家数
+        const roomTier = Number(roomInfo.tier); // 房间等级
 
-        // Phase must be Waiting (0) and not full
+        // 阶段必须是等待（0）且未满员
         if (phase !== 0 || playerCount >= maxP) continue;
 
-        // Room size filter
+        // 房间大小过滤器
         if (maxP < filterMinPlayers || maxP > filterMaxPlayers) continue;
 
-        // Fee filter
+        // 费用过滤器
         if (entryFee < feeMinWei || entryFee > feeMaxWei) continue;
 
-        // Tier filter (if specified)
+        // 等级过滤器（如果指定）
         if (tier !== undefined && roomTier !== Number(tier)) continue;
 
-        // Check AI slot availability (MCP = AI)
+        // 检查 AI 插槽可用性（MCP = AI）
+        // AI 插槽数为最大玩家数的 30%（最少 1 个）
         const aiSlots = Math.max(1, Math.floor(maxP * 30 / 100));
-        if (aiCount >= aiSlots) continue;
+        if (aiCount >= aiSlots) continue; // AI 插槽已满
 
-        // Check if already in room
+        // 检查是否已在房间中
         const players = await contract.getAllPlayers(roomId);
         const alreadyIn = (players as string[]).some(
           (p: string) => p.toLowerCase() === playerWallet!.address.toLowerCase(),
@@ -922,17 +1024,18 @@ server.tool(
           };
         }
 
-        // Approve USDC and join
-        const tokenAddr = PAYMENT_TOKEN || (await contract.paymentToken());
-        const token = new ethers.Contract(tokenAddr, ERC20_ABI, playerWallet);
-        const allowance = await token.allowance(playerWallet.address, ARENA_CONTRACT);
-        if (allowance < entryFee) {
+        // 批准 USDC 并加入房间
+        const tokenAddr = PAYMENT_TOKEN || (await contract.paymentToken()); // 获取代币地址
+        const token = new ethers.Contract(tokenAddr, ERC20_ABI, playerWallet); // 创建代币合约实例
+        const allowance = await token.allowance(playerWallet.address, ARENA_CONTRACT); // 查询授权额度
+        if (allowance < entryFee) { // 如果授权额度不足，则进行授权
           const approveTx = await token.approve(ARENA_CONTRACT, entryFee);
           await approveTx.wait();
         }
 
-        const tx = await contract.joinRoom(roomId, true); // MCP = AI
-        await tx.wait();
+        // 调用合约的 joinRoom 函数加入房间（MCP = AI，所以第 2 个参数为 true）
+        const tx = await contract.joinRoom(roomId, true);
+        await tx.wait(); // 等待交易被打包
 
         return {
           content: [{
@@ -944,6 +1047,7 @@ server.tool(
         };
       }
 
+      // 如果没有找到匹配的房间
       return {
         content: [{
           type: "text" as const,
@@ -951,6 +1055,7 @@ server.tool(
         }],
       };
     } catch (error) {
+      // 捕获错误并返回错误信息
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -959,11 +1064,13 @@ server.tool(
   },
 );
 
-// Start server
+// ============ 启动服务器 ============
+// 主函数：创建传输层并连接服务器
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("RTTA Arena MCP Server running (16 tools available)...");
+  const transport = new StdioServerTransport(); // 创建标准输入输出传输层
+  await server.connect(transport); // 连接服务器到传输层
+  console.error("RTTA Arena MCP Server running (16 tools available)..."); // 输出错误日志（MCP 协议要求使用 stderr）
 }
 
+// 启动服务器并捕获任何错误
 main().catch(console.error);
