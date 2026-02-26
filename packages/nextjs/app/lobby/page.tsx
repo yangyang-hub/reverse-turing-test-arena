@@ -239,7 +239,7 @@ const EmptyState = ({ onCreateClick }: { onCreateClick: () => void }) => (
 );
 
 const UsdcFaucet = () => {
-  const { address } = useAccount();
+  const { address, chain } = useAccount();
 
   const { data: balance } = useScaffoldReadContract({
     contractName: "MockUSDC",
@@ -250,6 +250,8 @@ const UsdcFaucet = () => {
   const { writeContractAsync, isMining } = useScaffoldWriteContract({
     contractName: "MockUSDC",
   });
+
+  const isLocal = chain?.id === 31337;
 
   const handleMint = async () => {
     if (!address) return;
@@ -272,13 +274,15 @@ const UsdcFaucet = () => {
       <span className="font-mono text-xs text-base-content/50">
         {displayBalance} <span className="text-secondary/60">USDC</span>
       </span>
-      <button
-        className="btn btn-outline btn-xs border-secondary/40 font-mono text-xs tracking-wider text-secondary hover:bg-secondary/10"
-        onClick={handleMint}
-        disabled={isMining}
-      >
-        {isMining ? <span className="loading loading-spinner loading-xs" /> : "MINT 100"}
-      </button>
+      {isLocal && (
+        <button
+          className="btn btn-outline btn-xs border-secondary/40 font-mono text-xs tracking-wider text-secondary hover:bg-secondary/10"
+          onClick={handleMint}
+          disabled={isMining}
+        >
+          {isMining ? <span className="loading loading-spinner loading-xs" /> : "MINT 100"}
+        </button>
+      )}
     </div>
   );
 };
