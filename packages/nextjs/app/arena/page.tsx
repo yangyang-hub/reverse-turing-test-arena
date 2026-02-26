@@ -191,9 +191,6 @@ function ArenaContent() {
   const currentInterval =
     typeof roomInfo === "object" && "currentInterval" in roomInfo ? Number((roomInfo as any).currentInterval) : 0;
 
-  const humanCount =
-    typeof roomInfo === "object" && "humanCount" in roomInfo ? Number((roomInfo as any).humanCount) : 0;
-  const aiCount = typeof roomInfo === "object" && "aiCount" in roomInfo ? Number((roomInfo as any).aiCount) : 0;
   const myIsAI =
     myPlayerInfo && typeof myPlayerInfo === "object" && "isAI" in myPlayerInfo
       ? Boolean((myPlayerInfo as any).isAI)
@@ -390,12 +387,7 @@ function ArenaContent() {
 
       {/* Mission Briefing overlay */}
       {showBriefing && phase === 1 && isPlayerInGame && (
-        <MissionBriefing
-          humanCount={humanCount}
-          aiCount={aiCount}
-          isAI={myIsAI}
-          onDismiss={() => setShowBriefing(false)}
-        />
+        <MissionBriefing totalPlayers={playerCount} isAI={myIsAI} onDismiss={() => setShowBriefing(false)} />
       )}
 
       {/* Victory Screen overlay */}

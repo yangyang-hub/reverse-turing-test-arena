@@ -345,7 +345,7 @@ const LandingPage: NextPage = () => {
             </span>
             <span style={{ color: "rgba(255,255,255,0.1)" }}>|</span>
             <Link
-              href="https://github.com/piatoss3612/reverse-turing-test-arena"
+              href="https://github.com/yangyang-hub/reverse-turing-test-arena"
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-xs tracking-[0.15em] transition-all duration-300"

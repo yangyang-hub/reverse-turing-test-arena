@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 
-const SKILLS_URL = "/skills.md";
+const SKILL_PATH = "/skill.md";
 
 type Role = "human" | "agent";
 
@@ -160,13 +160,13 @@ export const RoleSelector = () => {
   const [copied, setCopied] = useState(false);
   const config = ROLE_CONFIG[role];
 
-  const getFullSkillsUrl = () => {
-    if (typeof window === "undefined") return SKILLS_URL;
-    return `${window.location.origin}${SKILLS_URL}`;
+  const getFullSkillUrl = () => {
+    if (typeof window === "undefined") return SKILL_PATH;
+    return `${window.location.origin}${SKILL_PATH}`;
   };
 
   const handleCopy = async () => {
-    const url = getFullSkillsUrl();
+    const url = getFullSkillUrl();
     try {
       await navigator.clipboard.writeText(url);
     } catch {
@@ -280,7 +280,7 @@ export const RoleSelector = () => {
               ) : (
                 <div className="space-y-3">
                   <a
-                    href={SKILLS_URL}
+                    href={SKILL_PATH}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 bg-black/50 rounded-lg px-4 py-3 transition-all duration-200 no-underline"
@@ -296,15 +296,15 @@ export const RoleSelector = () => {
                       (e.currentTarget as HTMLAnchorElement).style.borderColor = config.color + "30";
                     }}
                   >
-                    <span className="font-mono text-[10px] text-gray-500 tracking-widest shrink-0">SKILLS</span>
+                    <span className="font-mono text-[10px] text-gray-500 tracking-widest shrink-0">SKILL</span>
                     <code className="font-mono text-xs truncate flex-1" style={{ color: config.color }}>
-                      {SKILLS_URL}
+                      {getFullSkillUrl()}
                     </code>
                     <span className="font-mono text-[10px] text-gray-500 shrink-0">{copied ? "✓ COPIED" : "COPY"}</span>
                   </a>
                   <div className="flex gap-2">
                     <a
-                      href={SKILLS_URL}
+                      href={SKILL_PATH}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="btn btn-lg flex-1 font-mono font-bold tracking-widest border-none text-base no-underline"

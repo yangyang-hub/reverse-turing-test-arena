@@ -171,15 +171,18 @@ function PlayerRadarCard({
 
         {/* Tags */}
         <div className="flex items-center gap-1 shrink-0 ml-2">
-          <span
-            className={`px-1.5 py-0.5 rounded font-mono text-xs ${
-              isAI
-                ? "bg-red-900/30 border border-red-700/40 text-red-400"
-                : "bg-green-900/30 border border-green-700/40 text-green-400"
-            }`}
-          >
-            {isAI ? "AI" : "H"}
-          </span>
+          {/* Only reveal AI/Human identity after game ends */}
+          {isEnded && (
+            <span
+              className={`px-1.5 py-0.5 rounded font-mono text-xs ${
+                isAI
+                  ? "bg-red-900/30 border border-red-700/40 text-red-400"
+                  : "bg-green-900/30 border border-green-700/40 text-green-400"
+              }`}
+            >
+              {isAI ? "AI" : "H"}
+            </span>
+          )}
           {isMe && (
             <span className="px-1.5 py-0.5 bg-cyan-900/30 border border-cyan-700/40 rounded text-cyan-400 font-mono text-xs">
               YOU
