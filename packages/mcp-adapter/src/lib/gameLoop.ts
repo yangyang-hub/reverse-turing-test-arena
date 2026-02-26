@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import { getArenaContract } from "./contracts.js";
 import { pickVoteTarget, pickChatMessage, randomDelay, sleep } from "./strategies.js";
 import { PHASE_NAMES } from "./types.js";
-import type { AutoPlayConfig, AutoPlayStatus, PlayerState, RoomState } from "./types.js";
+import type { AutoPlayConfig, AutoPlayStatus, PlayerState, RoomState, ChatMessage, VoteRecord } from "./types.js";
 
 /**
  * GameLoop 类 - 自动玩游戏的后台循环
@@ -22,6 +22,8 @@ export class GameLoop {
 
   private status: AutoPlayStatus; // 自动玩状态
   private recentErrors: string[] = []; // 最近的错误列表
+  private chatHistory: ChatMessage[] = []; // 聊天历史记录
+  private voteHistory: VoteRecord[] = []; // 投票历史记录
   private stopped = false; // 停止标志
   private log: (msg: string) => void; // 日志函数
 
@@ -57,6 +59,8 @@ export class GameLoop {
       votesThisGame: 0, // 本游戏投票计数
       messagesThisGame: 0, // 本游戏消息计数
       settlesThisGame: 0, // 本游戏结算计数
+      chatHistory: [], // 聊天历史
+      voteHistory: [], // 投票历史
       errors: [], // 错误列表
       startedAt: Date.now(), // 开始时间
       lastTickAt: 0, // 最后 tick 时间
@@ -100,10 +104,15 @@ export class GameLoop {
 
   /**
    * 获取当前状态
-   * @returns 当前状态的副本（包含最近 10 个错误）
+   * @returns 当前状态的副本（包含最近 10 个错误、完整聊天和投票历史）
    */
   getStatus(): AutoPlayStatus {
-    return { ...this.status, errors: [...this.recentErrors].slice(-10) };
+    return {
+      ...this.status,
+      chatHistory: [...this.chatHistory],
+      voteHistory: [...this.voteHistory],
+      errors: [...this.recentErrors].slice(-10),
+    };
   }
 
   /**
@@ -128,17 +137,22 @@ export class GameLoop {
     this.ticking = true; // 设置防护标志
     this.status.lastTickAt = Date.now(); // 记录本次 tick 时间
 
+    const tickTime = new Date().toISOString();
+    this.log(`\n🔄 [${tickTime}] Tick #${Math.floor((this.status.lastTickAt - this.status.startedAt) / this.config.pollIntervalMs)}`);
+
     try {
       // 创建合约实例
       const contract = getArenaContract(this.arenaAddress, this.wallet);
       const myAddr = this.wallet.address;
 
       // ========== 步骤 1: 读取房间状态 ==========
+      this.log(`📡 RPC: getRoomInfo/getAllPlayers/currentRound`);
       const [roomInfo, playerAddresses, round] = await Promise.all([
         contract.getRoomInfo(this.config.roomId), // 房间信息
         contract.getAllPlayers(this.config.roomId), // 所有玩家地址
         contract.currentRound(this.config.roomId), // 当前轮次
       ]);
+      this.log(`✅ RPC: Round ${round.toString()}, Phase ${roomInfo.phase.toString()}`);
 
       // 解析房间信息
       const room = this.parseRoomInfo(roomInfo);
@@ -170,17 +184,20 @@ export class GameLoop {
       }
 
       // ========== 步骤 4: 读取自己的玩家信息 ==========
+      this.log(`📡 RPC: getPlayerInfo (my address)`);
       const myInfo = await contract.getPlayerInfo(this.config.roomId, myAddr);
       this.status.humanityScore = Number(myInfo.humanityScore);
       this.status.isAlive = myInfo.isAlive;
+      this.log(`👤 My status: HP=${this.status.humanityScore}, Alive=${myInfo.isAlive}`);
 
       // ========== 步骤 5: 已淘汰 → 等待游戏结束 ==========
       if (!myInfo.isAlive) {
-        this.log("Eliminated, waiting for game to end...");
+        this.log("💀 Eliminated, waiting for game to end...");
         return; // 什么都不做，等待游戏结束
       }
 
       // ========== 步骤 6: 获取所有玩家状态用于策略 ==========
+      this.log(`📡 RPC: getAllPlayerInfos (${playerAddresses.length} players)`);
       const playerInfos = await Promise.all(
         (playerAddresses as string[]).map((addr: string) =>
           contract.getPlayerInfo(this.config.roomId, addr),
@@ -197,13 +214,17 @@ export class GameLoop {
       }));
 
       // ========== 步骤 7: 如果本轮未投票 → 投票 ==========
+      this.log(`📡 RPC: hasVotedInRound`);
       const hasVoted = await contract.hasVotedInRound(
         this.config.roomId,
         round,
         myAddr,
       );
       if (!hasVoted) {
+        this.log(`🗳️ Not voted yet, attempting to vote...`);
         await this.tryVote(contract, players, myAddr, myInfo.isAI);
+      } else {
+        this.log(`✅ Already voted this round`);
       }
 
       // ========== 步骤 8: 可能发送聊天消息（遵守每轮 3 条限制） ==========
@@ -212,8 +233,10 @@ export class GameLoop {
         Math.random() < this.config.chatFrequency / 3 // 根据频率概率决定
       ) {
         // 发送前检查消息数
+        this.log(`📡 RPC: getMessageCount`);
         const msgCount = await contract.getMessageCount(this.config.roomId, round, myAddr);
         if (Number(msgCount) < 3) { // 每轮最多 3 条
+          this.log(`💬 Attempting to send chat (${Number(msgCount)}/3 messages sent)...`);
           await this.tryChat(contract);
         }
       }
@@ -256,20 +279,34 @@ export class GameLoop {
     await sleep(randomDelay(1000, 4000));
 
     try {
-      this.log(`Voting for ${target} (strategy: ${this.config.voteStrategy})`);
+      this.log(`🗳️  Voting for ${target.slice(0, 8)}... (strategy: ${this.config.voteStrategy})`);
+      this.log(`📡 RPC: castVote`);
       const tx = await contract.castVote(this.config.roomId, target);
-      await tx.wait(); // 等待交易被打包
+      this.log(`⏳ Tx submitted: ${tx.hash.slice(0, 10)}..., waiting for confirmation...`);
+      const receipt = await tx.wait(); // 等待交易被打包
+      this.log(`✅ Vote confirmed! Block: ${receipt?.blockNumber}`);
       this.status.votesThisGame++; // 增加投票计数
+
+      // 记录投票历史
+      this.voteHistory.push({
+        round: this.status.round,
+        target,
+        timestamp: Date.now(),
+        txHash: receipt?.hash,
+      });
     } catch (err) {
       const msg = String(err);
       // 良性竞态条件 — 静默跳过
       if (msg.includes("Already voted") || msg.includes("Round not ended")) {
+        this.log(`⚠️  Vote skipped: ${msg.split(":")[0]}`);
         return; // 已经投票或轮次未结束，忽略
       }
       if (msg.includes("eliminated") || msg.includes("not active")) {
+        this.log(`💀 Eliminated during vote attempt`);
         this.status.isAlive = false; // 已淘汰，更新状态
         return;
       }
+      this.log(`❌ Vote failed: ${msg}`);
       throw err; // 其他错误继续抛出
     }
   }
@@ -285,19 +322,33 @@ export class GameLoop {
     await sleep(randomDelay(500, 2000));
 
     try {
-      this.log(`Sending message: "${message}"`);
+      this.log(`💬  Sending: "${message.slice(0, 50)}${message.length > 50 ? "..." : ""}"`);
+      this.log(`📡 RPC: sendMessage`);
       const tx = await contract.sendMessage(this.config.roomId, message);
-      await tx.wait(); // 等待交易被打包
+      this.log(`⏳ Tx submitted: ${tx.hash.slice(0, 10)}..., waiting for confirmation...`);
+      const receipt = await tx.wait(); // 等待交易被打包
+      this.log(`✅ Message sent! Block: ${receipt?.blockNumber}`);
       this.status.messagesThisGame++; // 增加消息计数
+
+      // 记录聊天历史
+      this.chatHistory.push({
+        round: this.status.round,
+        content: message,
+        timestamp: Date.now(),
+        txHash: receipt?.hash,
+      });
     } catch (err) {
       const msg = String(err);
       if (msg.includes("Message limit")) {
+        this.log(`⚠️  Chat skipped: message limit reached`);
         return; // 消息限制，非致命错误
       }
       if (msg.includes("eliminated") || msg.includes("not active")) {
+        this.log(`💀 Eliminated during chat attempt`);
         this.status.isAlive = false; // 已淘汰，更新状态
         return;
       }
+      this.log(`❌ Chat failed: ${msg}`);
       throw err; // 其他错误继续抛出
     }
   }
@@ -388,20 +439,35 @@ export class GameLoop {
   private handleError(err: unknown): void {
     const msg = String(err);
 
+    // 记录错误到stderr，便于调试
+    console.error(`\n❌ [GameLoop] Error at ${new Date().toISOString()}:`);
+    console.error(`   Message: ${msg.slice(0, 200)}${msg.length > 200 ? "..." : ""}`);
+
     // ===== 致命错误 — 停止循环 =====
     if (msg.includes("insufficient funds") || msg.includes("nonce too low")) {
-      this.log(`Fatal error: ${msg}`);
+      this.log(`💀 Fatal error: ${msg}`);
       this.recentErrors.push(msg.slice(0, 200));
+      this.status.errors = [...this.recentErrors];
       this.stop(); // 停止自动玩
       return;
     }
 
     // ===== 瞬态错误 — 记录并下次重试 =====
-    this.log(`Tick error (will retry): ${msg.slice(0, 200)}`);
+    // 检测特定错误类型
+    if (msg.includes("missing revert data") || msg.includes("CALL_EXCEPTION")) {
+      this.log(`⚠️  RPC Error (will retry): ${msg.slice(0, 100)}...`);
+    } else if (msg.includes("50/second request limit")) {
+      this.log(`⚠️  Rate limit exceeded, will retry...`);
+      // 注意：不能在非async函数中await，下次轮询会自动等待
+    } else {
+      this.log(`⚠️  Tick error (will retry): ${msg.slice(0, 100)}...`);
+    }
+
     this.recentErrors.push(msg.slice(0, 200));
     // 保持错误列表在合理大小（最多 20 个，最后 10 个）
     if (this.recentErrors.length > 20) {
       this.recentErrors = this.recentErrors.slice(-10);
     }
+    this.status.errors = [...this.recentErrors];
   }
 }

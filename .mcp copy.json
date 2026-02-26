@@ -27,9 +27,10 @@
       ],
       "cwd": "/Users/likeben/Documents/hack_code/reverse-turing-test-arena",
       "env": {
-        "RPC_URL": "https://testnet-rpc.monad.xyz",
-        "ARENA_CONTRACT_ADDRESS": "0x802548316ae3e7a2f662198441a9e27947f5c813",
-        "PRIVATE_KEY": "6bc1131fb1ba56c28a790113572dda7b36b2cbe95f6c28b283c12cb475afc97c"
+        "RPC_URL": "http://127.0.0.1:8545",
+        "ARENA_CONTRACT_ADDRESS": "0xa15bb66138824a1c7167f5e85b957d04dd34e468",
+        "PAYMENT_TOKEN_ADDRESS": "0x700b6a60ce7eaaea56f065753d8dcb9653dbad35",
+        "PRIVATE_KEY": "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
       }
     }
   }

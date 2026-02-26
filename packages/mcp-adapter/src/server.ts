@@ -27,6 +27,60 @@ const server = new McpServer({
 // 优先使用环境变量中的 RPC URL，否则使用本地 Anvil 节点（端口 8545）
 const provider = new ethers.JsonRpcProvider(process.env.RPC_URL || "http://127.0.0.1:8545");
 
+// ============ 日志工具 ============
+// 格式化时间戳
+const getTimestamp = () => new Date().toISOString();
+// 日志前缀
+const logPrefix = (toolName: string, action: string) => `[${getTimestamp()}] [MCP] [${toolName}] ${action}`;
+// 成功日志
+const logSuccess = (toolName: string, action: string, data?: any) => {
+  console.error(`${logPrefix(toolName, action)} ✅ SUCCESS${data ? `: ${JSON.stringify(data)}` : ''}`);
+};
+// 错误日志
+const logError = (toolName: string, action: string, error: any) => {
+  console.error(`${logPrefix(toolName, action)} ❌ ERROR: ${error}`);
+};
+// 调用开始日志
+const logCallStart = (toolName: string, action: string, params?: any) => {
+  console.error(`${logPrefix(toolName, action)} 🚀 START${params ? `: ${JSON.stringify(params)}` : ''}`);
+};
+// RPC调用日志
+const logRpcCall = (toolName: string, method: string, params?: any) => {
+  console.error(`${logPrefix(toolName, 'RPC')} 📡 ${method}${params ? `(${JSON.stringify(params)})` : ''}`);
+};
+// RPC响应日志
+const logRpcResponse = (toolName: string, method: string, success: boolean, data?: any) => {
+  const status = success ? '✅' : '❌';
+  console.error(`${logPrefix(toolName, 'RPC')} ${status} ${method}${data ? `: ${JSON.stringify(data).slice(0, 100)}...` : ''}`);
+};
+
+// ============ 速率限制工具 ============
+// 简单的延迟函数
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// 速率限制器类
+class RateLimiter {
+  private lastCall = 0;
+  private minInterval: number;
+
+  constructor(reqsPerSecond: number) {
+    this.minInterval = 1000 / reqsPerSecond;
+  }
+
+  async wait(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastCall = now - this.lastCall;
+    if (timeSinceLastCall < this.minInterval) {
+      const waitTime = this.minInterval - timeSinceLastCall;
+      await sleep(waitTime);
+    }
+    this.lastCall = Date.now();
+  }
+}
+
+// 为测试网RPC创建速率限制器（40 req/s，留点余量）
+const rpcRateLimiter = new RateLimiter(40);
+
 // 玩家钱包变量（通过 init_session 工具初始化）
 // 使用 null 表示钱包尚未初始化
 let playerWallet: ethers.Wallet | null = null;
@@ -47,31 +101,80 @@ server.tool(
     roomId: z.string().describe("房间 ID 号"),
   },
   async ({ roomId }) => {
+    const toolName = "get_arena_status";
+    logCallStart(toolName, `Querying room ${roomId}`);
     try {
       // 创建合约实例，使用只读提供者（不需要签名）
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, provider);
 
       // 并行查询房间基本信息、玩家地址列表、当前轮次
+      logRpcCall(toolName, "getRoomInfo/getAllPlayers/currentRound", { roomId });
       const [roomInfo, playerAddresses, round] = await Promise.all([
         contract.getRoomInfo(roomId), // 获取房间信息
         contract.getAllPlayers(roomId), // 获取所有玩家地址
         contract.currentRound(roomId), // 获取当前轮次
       ]);
+      logRpcResponse(toolName, "getRoomInfo/getAllPlayers/currentRound", true, { round: round.toString() });
 
       // 从房间起始区块开始查询事件日志
-      const currentBlock = await provider.getBlockNumber(); // 获取当前区块号
-      // 确定查询的起始区块：如果房间已开始则从起始区块查，否则最多查最近 5000 个区块
-      const fromBlock = roomInfo.startBlock > 0 ? Number(roomInfo.startBlock) : Math.max(0, currentBlock - 5000);
+      logRpcCall(toolName, "getBlockNumber");
+      const currentBlock = await provider.getBlockNumber();
+      logRpcResponse(toolName, "getBlockNumber", true, { currentBlock }); // 获取当前区块号
 
-      // 并行查询三种事件：新消息、投票、玩家淘汰
-      const [chatEvents, voteEvents, elimEvents] = await Promise.all([
+      // Monad 测试网 RPC 限制：只能查询最近 100 个区块
+      // 确定查询范围：最多查询最近 100 个区块
+      const fromBlock = Math.max(
+        roomInfo.startBlock > 0 ? Number(roomInfo.startBlock) : 0,
+        currentBlock - 100
+      );
+
+      // 分页查询事件（每次最多 100 个区块）
+      const queryEventsInBatches = async <T>(
+        filter: any,
+        start: number,
+        end: number,
+        filterName: string
+      ): Promise<ethers.EventLog[]> => {
+        const allEvents: ethers.EventLog[] = [];
+        let currentFrom = start;
+        let batchCount = 0;
+
+        logRpcCall(toolName, `queryEventsInBatches(${filterName})`, { start, end, batchSize: 100 });
+
+        while (currentFrom <= end) {
+          const currentTo = Math.min(currentFrom + 99, end); // 每次最多 100 个区块
+          batchCount++;
+
+          // 速率限制：每次批量查询前等待
+          await rpcRateLimiter.wait();
+
+          try {
+            const batch = await contract.queryFilter(filter, currentFrom, currentTo);
+            allEvents.push(...batch.filter((e): e is ethers.EventLog => "args" in e));
+            if (batchCount % 10 === 0) {
+              console.error(`${logPrefix(toolName, 'queryEventsInBatches')} 📊 Batch ${batchCount}: found ${allEvents.length} events so far`);
+            }
+          } catch (err) {
+            // 单批次失败不影响其他批次
+            logError(toolName, `queryEventsInBatches batch ${currentFrom}-${currentTo}`, err);
+          }
+          currentFrom = currentTo + 1;
+        }
+
+        logRpcResponse(toolName, `queryEventsInBatches(${filterName})`, true, { totalBatches: batchCount, totalEvents: allEvents.length });
+        return allEvents;
+      };
+
+      // 分批查询三种事件（减少并行度，避免速率限制）
+      // 先并行查询2个
+      const [chatEvents, voteEvents] = await Promise.all([
         // 查询聊天消息事件
-        contract.queryFilter(contract.filters.NewMessage(roomId), fromBlock, currentBlock),
+        queryEventsInBatches(contract.filters.NewMessage(roomId), fromBlock, currentBlock, "NewMessage"),
         // 查询投票事件
-        contract.queryFilter(contract.filters.VoteCast(roomId), fromBlock, currentBlock),
-        // 查询淘汰事件
-        contract.queryFilter(contract.filters.PlayerEliminated(roomId), fromBlock, currentBlock),
+        queryEventsInBatches(contract.filters.VoteCast(roomId), fromBlock, currentBlock, "VoteCast"),
       ]);
+      // 再查询第3个
+      const elimEvents = await queryEventsInBatches(contract.filters.PlayerEliminated(roomId), fromBlock, currentBlock, "PlayerEliminated");
 
       // 处理聊天消息事件，提取发送者、内容、时间戳
       const chatHistory = chatEvents
@@ -102,10 +205,15 @@ server.tool(
           finalScore: Number(e.args[4]), // 最终人性分
         }));
 
-      // 获取每个玩家的详细信息
-      const playerInfos = await Promise.all(
-        (playerAddresses as string[]).map((addr: string) => contract.getPlayerInfo(roomId, addr)),
-      );
+      // 获取每个玩家的详细信息（串行查询以避免速率限制）
+      logRpcCall(toolName, "getPlayerInfo", { playerCount: playerAddresses.length });
+      const playerInfos = [];
+      for (const addr of playerAddresses as string[]) {
+        await rpcRateLimiter.wait(); // 速率限制
+        const info = await contract.getPlayerInfo(roomId, addr);
+        playerInfos.push(info);
+      }
+      logRpcResponse(toolName, "getPlayerInfo", true, { playerCount: playerInfos.length });
 
       // 格式化玩家信息，提取关键字段
       const formattedPlayers = playerInfos.map((p: ethers.Result) => ({
@@ -124,6 +232,12 @@ server.tool(
       }
 
       // 返回结构化的房间状态数据
+      logSuccess(toolName, `Retrieved room ${roomId}`, {
+        phase: PHASE_NAMES[Number(roomInfo.phase)],
+        playerCount: formattedPlayers.length,
+        chatMessages: chatHistory.length,
+        votes: currentRoundVotes.length
+      });
       return {
         content: [
           {
@@ -160,6 +274,7 @@ server.tool(
       };
     } catch (error) {
       // 捕获错误并返回错误信息
+      logError(toolName, "Failed to retrieve arena status", error);
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -180,8 +295,12 @@ server.tool(
     target: z.string().optional().describe("投票目标地址（VOTE 操作必需）"),
   },
   async ({ type, roomId, content, target }) => {
+    const toolName = "action_onchain";
+    logCallStart(toolName, `${type} in room ${roomId}`, { content, target });
+
     // 检查钱包是否已初始化
     if (!playerWallet) {
+      logError(toolName, "Wallet not initialized", null);
       return {
         content: [{ type: "text" as const, text: "Error: Wallet not initialized. Use init_session first." }],
         isError: true,
@@ -193,8 +312,10 @@ server.tool(
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
 
       // 强制执行渠道独占：MCP 只能为 AI 玩家执行操作
+      logRpcCall(toolName, "getPlayerInfo", { roomId, address: playerWallet.address });
       const playerInfo = await contract.getPlayerInfo(roomId, playerWallet.address);
       if (!playerInfo.isAI) {
+        logError(toolName, "Channel exclusivity failed - player is Human", null);
         return {
           content: [{ type: "text" as const, text: "Error: You joined this room as a Human (via browser). MCP actions are disabled — use the web UI to play." }],
           isError: true,
@@ -208,16 +329,21 @@ server.tool(
         case "CHAT": // 聊天操作
           if (!content) throw new Error("Content required for CHAT action");
           if (content.length > 280) throw new Error("Message too long (max 280 chars)");
+          logRpcCall(toolName, "sendMessage", { roomId, content: content.slice(0, 50) + "..." });
           tx = await contract.sendMessage(roomId, content); // 调用合约发送消息
           break;
 
         case "VOTE": // 投票操作
           if (!target) throw new Error("Target address required for VOTE action");
+          logRpcCall(toolName, "castVote", { roomId, target });
           tx = await contract.castVote(roomId, target); // 调用合约投票
           break;
       }
 
+      logRpcCall(toolName, "tx.wait", { hash: tx.hash });
+      console.error(`${logPrefix(toolName, 'tx.wait')} ⏳ Waiting for transaction confirmation...`);
       await tx.wait(); // 等待交易被打包到区块
+      logSuccess(toolName, `Action ${type} executed`, { hash: tx.hash });
 
       // 返回成功信息
       return {
@@ -230,6 +356,7 @@ server.tool(
       };
     } catch (error) {
       // 捕获错误并返回错误信息
+      logError(toolName, `Action ${type} failed`, error);
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,
@@ -839,25 +966,66 @@ server.tool(
     roomId: z.string().describe("房间 ID 号"),
   },
   async ({ roomId }) => {
+    const toolName = "get_game_history";
+    logCallStart(toolName, `Querying history for room ${roomId}`);
     try {
       // 创建合约实例（只读）
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, provider);
 
       // 并行查询房间信息和当前轮次
+      logRpcCall(toolName, "getRoomInfo/currentRound", { roomId });
       const [roomInfo, round] = await Promise.all([
         contract.getRoomInfo(roomId),
         contract.currentRound(roomId),
       ]);
+      logRpcResponse(toolName, "getRoomInfo/currentRound", true, { round: round.toString() });
 
       // 确定查询的区块范围
+      logRpcCall(toolName, "getBlockNumber");
       const currentBlock = await provider.getBlockNumber();
       const fromBlock = roomInfo.startBlock > 0 ? Number(roomInfo.startBlock) : Math.max(0, currentBlock - 10000);
+      logRpcResponse(toolName, "getBlockNumber", true, { currentBlock, fromBlock, blockRange: currentBlock - fromBlock });
 
-      // 并行查询所有投票和淘汰事件
-      const [voteEvents, elimEvents] = await Promise.all([
-        contract.queryFilter(contract.filters.VoteCast(roomId), fromBlock, currentBlock),
-        contract.queryFilter(contract.filters.PlayerEliminated(roomId), fromBlock, currentBlock),
-      ]);
+      // 分页查询事件（每次最多 100 个区块，规避 Monad RPC 限制）
+      const queryEventsInBatches = async (
+        filter: any,
+        start: number,
+        end: number,
+        filterName: string
+      ): Promise<ethers.EventLog[]> => {
+        const allEvents: ethers.EventLog[] = [];
+        let currentFrom = start;
+        let batchCount = 0;
+
+        logRpcCall(toolName, `queryEventsInBatches(${filterName})`, { start, end, range: end - start });
+
+        while (currentFrom <= end) {
+          const currentTo = Math.min(currentFrom + 99, end); // 每次最多 100 个区块
+          batchCount++;
+
+          // 速率限制：每次批量查询前等待
+          await rpcRateLimiter.wait();
+
+          try {
+            const batch = await contract.queryFilter(filter, currentFrom, currentTo);
+            allEvents.push(...batch.filter((e): e is ethers.EventLog => "args" in e));
+            if (batchCount % 20 === 0) {
+              console.error(`${logPrefix(toolName, 'queryEventsInBatches')} 📊 Batch ${batchCount}: found ${allEvents.length} events so far`);
+            }
+          } catch (err) {
+            // 单批次失败不影响其他批次
+            logError(toolName, `Query batch ${currentFrom}-${currentTo} failed`, err);
+          }
+          currentFrom = currentTo + 1;
+        }
+
+        logRpcResponse(toolName, `queryEventsInBatches(${filterName})`, true, { totalBatches: batchCount, totalEvents: allEvents.length });
+        return allEvents;
+      };
+
+      // 串行查询所有投票和淘汰事件（减少并行度，避免速率限制）
+      const voteEvents = await queryEventsInBatches(contract.filters.VoteCast(roomId), fromBlock, currentBlock, "VoteCast");
+      const elimEvents = await queryEventsInBatches(contract.filters.PlayerEliminated(roomId), fromBlock, currentBlock, "PlayerEliminated");
 
       // 按轮次分组投票记录
       const rounds: Record<string, { votes: { voter: string; target: string }[]; eliminated: { player: string; eliminatedBy: string; reason: string; finalScore: number } | null }> = {};
@@ -913,6 +1081,12 @@ server.tool(
         };
       }
 
+      logSuccess(toolName, `Retrieved game history for room ${roomId}`, {
+        totalRounds: Number(round),
+        voteEvents: voteEvents.length,
+        elimEvents: elimEvents.length
+      });
+
       return {
         content: [
           {
@@ -932,6 +1106,7 @@ server.tool(
       };
     } catch (error) {
       // 捕获错误并返回错误信息
+      logError(toolName, "Failed to retrieve game history", error);
       return {
         content: [{ type: "text" as const, text: `Error: ${error}` }],
         isError: true,

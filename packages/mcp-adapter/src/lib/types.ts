@@ -20,6 +20,22 @@ export type AutoPlayConfig = {
   maxRounds: number; // 最大轮次数（安全限制，自动停止）
 };
 
+// ============ 聊天记录类型 ============
+export type ChatMessage = {
+  round: number; // 轮次号
+  content: string; // 消息内容
+  timestamp: number; // 发送时间（Unix 时间戳，毫秒）
+  txHash?: string; // 交易哈希（可选）
+};
+
+// ============ 投票记录类型 ============
+export type VoteRecord = {
+  round: number; // 轮次号
+  target: string; // 投票目标地址
+  timestamp: number; // 投票时间（Unix 时间戳，毫秒）
+  txHash?: string; // 交易哈希（可选）
+};
+
 // ============ 自动玩状态类型 ============
 export type AutoPlayStatus = {
   running: boolean; // 是否正在运行
@@ -32,6 +48,8 @@ export type AutoPlayStatus = {
   votesThisGame: number; // 本游戏已投票数
   messagesThisGame: number; // 本游戏已发送消息数
   settlesThisGame: number; // 本游戏已结算轮次数
+  chatHistory: ChatMessage[]; // 聊天历史记录
+  voteHistory: VoteRecord[]; // 投票历史记录
   errors: string[]; // 错误列表
   startedAt: number; // 开始时间（Unix 时间戳，毫秒）
   lastTickAt: number; // 最后一次 tick 时间（Unix 时间戳，毫秒）
