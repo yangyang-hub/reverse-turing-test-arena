@@ -94,86 +94,270 @@ const FEATURES = [
   },
 ] as const;
 
+// ── STEP ARROW COMPONENT ──
+// Decorative arrow used to indicate flow between steps in "How It Works"
 const StepArrow = () => (
-  <div className="hidden items-center justify-center text-primary/30 md:flex">
-    <svg className="h-6 w-10" fill="none" viewBox="0 0 40 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2 12h32m0 0l-6-6m6 6l-6 6" />
+  <div className="hidden items-center justify-center md:flex">
+    <svg className="h-6 w-10" fill="none" viewBox="0 0 40 24">
+      <defs>
+        <linearGradient id="arrowGrad" x1="0" y1="12" x2="40" y2="12" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#d946ef" stopOpacity="0.2" />
+          <stop offset="50%" stopColor="#00e5ff" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#d946ef" stopOpacity="0.2" />
+        </linearGradient>
+      </defs>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M2 12h32m0 0l-6-6m6 6l-6 6"
+        stroke="url(#arrowGrad)"
+        strokeWidth={1.5}
+      />
     </svg>
   </div>
 );
 
 const LandingPage: NextPage = () => {
   return (
-    <div className="flex min-h-screen flex-col cyber-grid-bg">
+    <div className="flex min-h-screen flex-col" style={{ background: "#080612" }}>
       {/* Hero Section */}
       <HeroSection />
 
-      {/* How It Works */}
-      <section className="mx-auto w-full max-w-5xl px-4 py-12 md:py-16">
-        <h2 className="mb-10 text-center font-mono text-xs tracking-[0.3em] text-base-content/40">
-          {"// HOW IT WORKS"}
-        </h2>
-        <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:gap-4">
-          {HOW_IT_WORKS.map((item, i) => (
-            <Fragment key={item.step}>
-              <div className="glass-panel flex flex-col items-center gap-4 rounded-lg border border-primary/10 p-6 text-center transition-all duration-300 hover:border-primary/30 hover:shadow-[0_0_20px_rgba(0,255,65,0.05)]">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full border border-primary/30 text-primary">
-                  {item.icon}
-                </div>
-                <span className="font-mono text-xs tracking-widest text-primary/50">{item.step}</span>
-                <h3 className="text-sm font-bold tracking-widest text-secondary">{item.title}</h3>
-                <p className="text-xs leading-relaxed tracking-wider text-base-content/50">{item.description}</p>
-              </div>
-              {i < HOW_IT_WORKS.length - 1 && <StepArrow />}
-            </Fragment>
-          ))}
-        </div>
-      </section>
+      {/* ═══════ HOW IT WORKS ═══════ */}
+      <section
+        className="relative w-full overflow-hidden"
+        style={{ background: "linear-gradient(180deg, #080612 0%, #0c0a1a 50%, #080612 100%)" }}
+      >
+        {/* Subtle grid overlay to maintain cyberpunk aesthetic */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: [
+              "repeating-linear-gradient(90deg, rgba(217,70,239,0.04) 0px, transparent 1px, transparent 80px, rgba(217,70,239,0.04) 81px)",
+              "repeating-linear-gradient(0deg, rgba(0,229,255,0.03) 0px, transparent 1px, transparent 60px, rgba(0,229,255,0.03) 61px)",
+            ].join(", "),
+          }}
+        />
 
-      {/* Features */}
-      <section className="mx-auto w-full max-w-5xl px-4 py-12 md:py-16">
-        <h2 className="mb-10 text-center font-mono text-xs tracking-[0.3em] text-base-content/40">
-          {"// CORE MECHANICS"}
-        </h2>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {FEATURES.map(f => (
+        <div className="relative z-10 mx-auto w-full max-w-5xl px-4 py-16 md:py-24">
+          {/* Section title with flanking glow lines */}
+          <div className="mb-12 flex items-center justify-center gap-4">
             <div
-              key={f.title}
-              className="glass-panel flex items-start gap-4 rounded-lg border p-5 transition-all duration-300 hover:shadow-[0_0_16px_rgba(0,255,65,0.06)]"
-              style={{ borderColor: `${f.color}20` }}
+              className="h-px flex-1 max-w-[100px]"
+              style={{ background: "linear-gradient(90deg, transparent, rgba(217,70,239,0.4))" }}
+            />
+            <h2
+              className="text-center font-mono text-xs tracking-[0.35em]"
+              style={{ color: "#d946ef", textShadow: "0 0 12px rgba(217,70,239,0.4)" }}
             >
-              <div
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded border font-mono text-lg font-bold"
-                style={{ borderColor: `${f.color}40`, color: f.color }}
-              >
-                {f.icon}
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-bold tracking-widest" style={{ color: f.color }}>
-                  {f.title}
-                </span>
-                <p className="text-xs leading-relaxed tracking-wider text-base-content/50">{f.description}</p>
-              </div>
-            </div>
-          ))}
+              {"// HOW IT WORKS"}
+            </h2>
+            <div
+              className="h-px flex-1 max-w-[100px]"
+              style={{ background: "linear-gradient(90deg, rgba(217,70,239,0.4), transparent)" }}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 items-center gap-6 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:gap-4">
+            {HOW_IT_WORKS.map((item, i) => (
+              <Fragment key={item.step}>
+                <div
+                  className="group relative flex flex-col items-center gap-4 rounded-lg p-6 text-center transition-all duration-500"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(217,70,239,0.06) 0%, rgba(0,229,255,0.04) 100%)",
+                    border: "1px solid rgba(217,70,239,0.15)",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(217,70,239,0.4)";
+                    (e.currentTarget as HTMLDivElement).style.boxShadow =
+                      "0 0 24px rgba(217,70,239,0.12), inset 0 1px 0 rgba(255,255,255,0.05)";
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(217,70,239,0.15)";
+                    (e.currentTarget as HTMLDivElement).style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.03)";
+                  }}
+                >
+                  {/* Corner accents */}
+                  <div
+                    className="pointer-events-none absolute top-0 left-0 w-3 h-3 border-t border-l"
+                    style={{ borderColor: "rgba(0,229,255,0.4)" }}
+                  />
+                  <div
+                    className="pointer-events-none absolute top-0 right-0 w-3 h-3 border-t border-r"
+                    style={{ borderColor: "rgba(0,229,255,0.4)" }}
+                  />
+                  <div
+                    className="pointer-events-none absolute bottom-0 left-0 w-3 h-3 border-b border-l"
+                    style={{ borderColor: "rgba(0,229,255,0.4)" }}
+                  />
+                  <div
+                    className="pointer-events-none absolute bottom-0 right-0 w-3 h-3 border-b border-r"
+                    style={{ borderColor: "rgba(0,229,255,0.4)" }}
+                  />
+
+                  {/* Icon */}
+                  <div
+                    className="flex h-14 w-14 items-center justify-center rounded-full"
+                    style={{
+                      border: "1px solid rgba(0,229,255,0.3)",
+                      color: "#00e5ff",
+                      background: "rgba(0,229,255,0.05)",
+                      boxShadow: "0 0 16px rgba(0,229,255,0.1)",
+                    }}
+                  >
+                    {item.icon}
+                  </div>
+
+                  {/* Step number */}
+                  <span
+                    className="font-mono text-[10px] tracking-[0.4em]"
+                    style={{ color: "#d946ef", textShadow: "0 0 8px rgba(217,70,239,0.5)" }}
+                  >
+                    STEP {item.step}
+                  </span>
+
+                  {/* Title */}
+                  <h3
+                    className="text-sm font-bold tracking-[0.2em]"
+                    style={{ color: "#00e5ff", textShadow: "0 0 6px rgba(0,229,255,0.3)" }}
+                  >
+                    {item.title}
+                  </h3>
+
+                  {/* Description */}
+                  <p className="text-xs leading-relaxed tracking-wider" style={{ color: "rgba(255,255,255,0.45)" }}>
+                    {item.description}
+                  </p>
+                </div>
+                {i < HOW_IT_WORKS.length - 1 && <StepArrow />}
+              </Fragment>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="mt-auto border-t border-primary/10 py-6">
-        <div className="mx-auto flex max-w-5xl flex-col items-center gap-3 px-4 md:flex-row md:justify-between">
-          <span className="font-mono text-xs tracking-widest text-base-content/30">
+      {/* ═══════ CORE MECHANICS ═══════ */}
+      <section
+        className="relative w-full overflow-hidden"
+        style={{ background: "linear-gradient(180deg, #080612 0%, #0a0818 50%, #080612 100%)" }}
+      >
+        {/* Glow accent */}
+
+        <div className="relative z-10 mx-auto w-full max-w-5xl px-4 py-16 md:py-24">
+          {/* Section title */}
+          <div className="mb-12 flex items-center justify-center gap-4">
+            <div
+              className="h-px flex-1 max-w-[100px]"
+              style={{ background: "linear-gradient(90deg, transparent, rgba(0,229,255,0.4))" }}
+            />
+            <h2
+              className="text-center font-mono text-xs tracking-[0.35em]"
+              style={{ color: "#00e5ff", textShadow: "0 0 12px rgba(0,229,255,0.4)" }}
+            >
+              {"// CORE MECHANICS"}
+            </h2>
+            <div
+              className="h-px flex-1 max-w-[100px]"
+              style={{ background: "linear-gradient(90deg, rgba(0,229,255,0.4), transparent)" }}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            {FEATURES.map(f => (
+              <div
+                key={f.title}
+                className="group relative flex items-start gap-4 rounded-lg p-5 transition-all duration-500"
+                style={{
+                  background: `linear-gradient(135deg, ${f.color}08 0%, transparent 100%)`,
+                  border: `1px solid ${f.color}20`,
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)",
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLDivElement).style.borderColor = `${f.color}50`;
+                  (e.currentTarget as HTMLDivElement).style.boxShadow =
+                    `0 0 20px ${f.color}15, inset 0 1px 0 rgba(255,255,255,0.04)`;
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLDivElement).style.borderColor = `${f.color}20`;
+                  (e.currentTarget as HTMLDivElement).style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.02)";
+                }}
+              >
+                {/* Corner accents */}
+                <div
+                  className="pointer-events-none absolute top-0 left-0 w-2.5 h-2.5 border-t border-l"
+                  style={{ borderColor: `${f.color}40` }}
+                />
+                <div
+                  className="pointer-events-none absolute bottom-0 right-0 w-2.5 h-2.5 border-b border-r"
+                  style={{ borderColor: `${f.color}40` }}
+                />
+
+                {/* Icon badge */}
+                <div
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded font-mono text-base font-bold"
+                  style={{
+                    border: `1px solid ${f.color}35`,
+                    color: f.color,
+                    background: `${f.color}0a`,
+                    boxShadow: `0 0 12px ${f.color}10`,
+                    textShadow: `0 0 8px ${f.color}60`,
+                  }}
+                >
+                  {f.icon}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <span
+                    className="text-xs font-bold tracking-[0.2em]"
+                    style={{ color: f.color, textShadow: `0 0 6px ${f.color}40` }}
+                  >
+                    {f.title}
+                  </span>
+                  <p className="text-xs leading-relaxed tracking-wider" style={{ color: "rgba(255,255,255,0.4)" }}>
+                    {f.description}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════ FOOTER ═══════ */}
+      <footer className="relative mt-auto" style={{ background: "#060510" }}>
+        <div className="mx-auto flex max-w-5xl flex-col items-center gap-3 px-4 py-8 md:flex-row md:justify-between">
+          <span
+            className="font-mono text-xs tracking-[0.2em]"
+            style={{ color: "rgba(217,70,239,0.4)", textShadow: "0 0 6px rgba(217,70,239,0.15)" }}
+          >
             REVERSE TURING TEST ARENA &copy; {new Date().getFullYear()}
           </span>
           <div className="flex items-center gap-4">
-            <span className="text-xs tracking-wider text-base-content/20">POWERED BY</span>
-            <span className="font-mono text-xs font-bold tracking-wider text-secondary/50">MONAD EVM</span>
-            <span className="text-base-content/10">|</span>
+            <span className="text-[10px] tracking-[0.2em]" style={{ color: "rgba(255,255,255,0.2)" }}>
+              POWERED BY
+            </span>
+            <span
+              className="font-mono text-xs font-bold tracking-[0.15em]"
+              style={{ color: "#00e5ff", textShadow: "0 0 8px rgba(0,229,255,0.3)" }}
+            >
+              MONAD EVM
+            </span>
+            <span style={{ color: "rgba(255,255,255,0.1)" }}>|</span>
             <Link
               href="https://github.com/piatoss3612/reverse-turing-test-arena"
               target="_blank"
               rel="noopener noreferrer"
-              className="font-mono text-xs tracking-wider text-primary/40 transition-colors hover:text-primary/70"
+              className="font-mono text-xs tracking-[0.15em] transition-all duration-300"
+              style={{ color: "rgba(217,70,239,0.5)" }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLAnchorElement).style.color = "rgba(217,70,239,0.9)";
+                (e.currentTarget as HTMLAnchorElement).style.textShadow = "0 0 10px rgba(217,70,239,0.4)";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLAnchorElement).style.color = "rgba(217,70,239,0.5)";
+                (e.currentTarget as HTMLAnchorElement).style.textShadow = "none";
+              }}
             >
               GITHUB
             </Link>
