@@ -574,3 +574,26 @@
   height: 100dvh;
   overflow: hidden;
 }
+
+/* ============ Hero Image Glow Animation ============ */
+
+@keyframes hero-glow-breathe {
+  0%, 100% {
+    filter:
+      drop-shadow(0 0 8px rgba(0, 229, 255, 0.3))
+      drop-shadow(0 0 20px rgba(189, 0, 255, 0.15));
+    transform: translateY(0px);
+  }
+  50% {
+    filter:
+      drop-shadow(0 0 18px rgba(0, 229, 255, 0.55))
+      drop-shadow(0 0 40px rgba(189, 0, 255, 0.35))
+      drop-shadow(0 0 60px rgba(255, 0, 200, 0.2));
+    transform: translateY(-6px);
+  }
+}
+
+.hero-glow-img {
+  animation: hero-glow-breathe 4s ease-in-out infinite;
+  will-change: filter, transform;
+}

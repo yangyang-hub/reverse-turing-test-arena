@@ -4,13 +4,12 @@ import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 type MissionBriefingProps = {
-  humanCount: number;
-  aiCount: number;
+  totalPlayers: number;
   isAI: boolean;
   onDismiss: () => void;
 };
 
-export const MissionBriefing = ({ humanCount, aiCount, isAI, onDismiss }: MissionBriefingProps) => {
+export const MissionBriefing = ({ totalPlayers, isAI, onDismiss }: MissionBriefingProps) => {
   // Auto-dismiss after 8 seconds
   useEffect(() => {
     const timer = setTimeout(onDismiss, 8000);
@@ -50,15 +49,12 @@ export const MissionBriefing = ({ humanCount, aiCount, isAI, onDismiss }: Missio
             {/* Divider */}
             <div className="w-full h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
 
-            {/* Team composition */}
-            <div className="flex items-center gap-4 font-mono text-lg">
-              <span className="text-green-400 font-bold">
-                {humanCount} HUMAN{humanCount !== 1 ? "S" : ""}
+            {/* Player count (no team breakdown) */}
+            <div className="flex items-center gap-3 font-mono text-lg">
+              <span className="text-cyan-400 font-bold">
+                {totalPlayers} PLAYER{totalPlayers !== 1 ? "S" : ""}
               </span>
-              <span className="text-gray-600">vs</span>
-              <span className="text-red-400 font-bold">
-                {aiCount} AI{aiCount !== 1 ? "s" : ""}
-              </span>
+              <span className="text-gray-600 text-sm">in the arena</span>
             </div>
 
             {/* Divider */}

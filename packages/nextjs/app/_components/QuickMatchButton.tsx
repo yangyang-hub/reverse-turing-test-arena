@@ -87,7 +87,13 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
           abi: arenaContractInfo.abi,
           functionName: "getRoomInfo",
           args: [roomId],
-        })) as { phase: number; maxPlayers: number; playerCount: number; entryFee: bigint; humanCount: number };
+        })) as unknown as {
+          phase: bigint;
+          maxPlayers: bigint;
+          playerCount: bigint;
+          entryFee: bigint;
+          humanCount: bigint;
+        };
 
         const phase = Number(roomInfo.phase);
         const playerCount = Number(roomInfo.playerCount);
