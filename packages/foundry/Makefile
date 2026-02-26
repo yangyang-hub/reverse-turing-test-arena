@@ -18,7 +18,8 @@ fork: setup-anvil-wallet
 # Deploy the contracts
 deploy:
 	@if [ ! -f "$(DEPLOY_SCRIPT)" ]; then 		echo "Error: Deploy script '$(DEPLOY_SCRIPT)' not found"; 		exit 1; 	fi
-	@if [ "$(RPC_URL)" = "localhost" ]; then 		if [ "$(ETH_KEYSTORE_ACCOUNT)" = "scaffold-eth-default" ]; then 			forge script $(DEPLOY_SCRIPT) --rpc-url localhost --password localhost --broadcast --ffi; 		else 			forge script $(DEPLOY_SCRIPT) --rpc-url localhost --broadcast --ffi; 		fi 	else 		forge script $(DEPLOY_SCRIPT) --rpc-url $(RPC_URL) --broadcast --ffi; 	fi
+	@# Clean old broadcast for this chain to prevent stale contract entries in generated ABIs
+	@if [ "$(RPC_URL)" = "localhost" ]; then 		rm -rf broadcast/Deploy.s.sol/31337; 		if [ "$(ETH_KEYSTORE_ACCOUNT)" = "scaffold-eth-default" ]; then 			forge script $(DEPLOY_SCRIPT) --rpc-url localhost --password localhost --broadcast --ffi; 		else 			forge script $(DEPLOY_SCRIPT) --rpc-url localhost --broadcast --ffi; 		fi 	else 		CHAIN_ID=$$(cast chain-id --rpc-url $(RPC_URL) 2>/dev/null) && 		if [ -n "$$CHAIN_ID" ]; then rm -rf broadcast/Deploy.s.sol/$$CHAIN_ID; fi; 		forge script $(DEPLOY_SCRIPT) --rpc-url $(RPC_URL) --broadcast --ffi; 	fi
 
 # Deploy and generate ABIs
 deploy-and-generate-abis: deploy generate-abis 
