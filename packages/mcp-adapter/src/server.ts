@@ -205,19 +205,23 @@ server.tool(
           finalScore: Number(e.args[4]), // 最终人性分
         }));
 
-      // 获取每个玩家的详细信息（串行查询以避免速率限制）
-      logRpcCall(toolName, "getPlayerInfo", { playerCount: playerAddresses.length });
+      // 获取每个玩家的详细信息 + 名称
+      logRpcCall(toolName, "getPlayerInfo + getRoomPlayerNames", { playerCount: playerAddresses.length });
       const playerInfos = [];
       for (const addr of playerAddresses as string[]) {
         await rpcRateLimiter.wait(); // 速率限制
         const info = await contract.getPlayerInfo(roomId, addr);
         playerInfos.push(info);
       }
-      logRpcResponse(toolName, "getPlayerInfo", true, { playerCount: playerInfos.length });
+      await rpcRateLimiter.wait();
+      const playerNames = await contract.getRoomPlayerNames(roomId);
+      const names = playerNames as string[];
+      logRpcResponse(toolName, "getPlayerInfo + names", true, { playerCount: playerInfos.length });
 
       // 格式化玩家信息，提取关键字段
-      const formattedPlayers = playerInfos.map((p: ethers.Result) => ({
+      const formattedPlayers = playerInfos.map((p: ethers.Result, idx: number) => ({
         address: p.addr, // 玩家地址
+        name: names[idx] || "", // 玩家名称
         humanityScore: Number(p.humanityScore), // 人性分
         isAlive: p.isAlive, // 是否存活
         isAI: p.isAI, // 是否为 AI
@@ -787,8 +791,9 @@ server.tool(
     tier: z.enum(["0", "1", "2"]).describe("房间等级：0=快速，1=标准，2=史诗"),
     maxPlayers: z.number().min(3).max(50).describe("最大玩家数（3-50）"),
     entryFee: z.number().min(1).max(100).describe("入场费，单位 USDC（1-100）"),
+    name: z.string().min(1).max(20).optional().describe("玩家名称（1-20 字符，默认：AI-XXXX）"),
   },
-  async ({ tier, maxPlayers, entryFee }) => {
+  async ({ tier, maxPlayers, entryFee, name }) => {
     // 检查钱包是否已初始化
     if (!playerWallet) {
       return {
@@ -800,6 +805,15 @@ server.tool(
     try {
       // 创建合约实例
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
+      // 检查是否已在房间中
+      const activeRoom = await contract.playerActiveRoom(playerWallet.address);
+      if (activeRoom > 0n) {
+        return {
+          content: [{ type: "text" as const, text: `已在房间 #${activeRoom} 中。请先离开或完成游戏再创建新房间。` }],
+          isError: true,
+        };
+      }
+
       // 将 USDC 金额转换为 Wei（USDC 有 6 位小数）
       const feeWei = BigInt(entryFee) * 1_000_000n;
 
@@ -812,8 +826,11 @@ server.tool(
         await approveTx.wait();
       }
 
+      // 生成玩家名称（使用提供的名称或默认 AI-XXXX）
+      const playerName = name || `AI-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
       // 调用合约的 createRoom 函数创建房间（MCP = AI，所以第 4 个参数为 true）
-      const tx = await contract.createRoom(Number(tier), maxPlayers, feeWei, true);
+      const tx = await contract.createRoom(Number(tier), maxPlayers, feeWei, true, playerName);
       const receipt = await tx.wait(); // 等待交易被打包并获取收据
 
       // 从 RoomCreated 事件中提取房间 ID
@@ -1125,8 +1142,9 @@ server.tool(
     minFee: z.number().min(1).max(100).optional().describe("最小入场费，单位 USDC（默认 1）"),
     maxFee: z.number().min(1).max(100).optional().describe("最大入场费，单位 USDC（默认 100）"),
     tier: z.enum(["0", "1", "2"]).optional().describe("可选的等级过滤器：0=快速，1=标准，2=史诗"),
+    name: z.string().min(1).max(20).optional().describe("玩家名称（1-20 字符，默认：AI-XXXX）"),
   },
-  async ({ minPlayers, maxPlayers, minFee, maxFee, tier }) => {
+  async ({ minPlayers, maxPlayers, minFee, maxFee, tier, name }) => {
     // 检查钱包是否已初始化
     if (!playerWallet) {
       return {
@@ -1138,6 +1156,15 @@ server.tool(
     try {
       // 创建合约实例
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
+      // 检查是否已在房间中
+      const activeRoom = await contract.playerActiveRoom(playerWallet.address);
+      if (activeRoom > 0n) {
+        return {
+          content: [{ type: "text" as const, text: `已在房间 #${activeRoom} 中。请先离开或完成游戏再加入其他房间。` }],
+          isError: true,
+        };
+      }
+
       // 获取房间总数
       const roomCount = await contract.getRoomCount();
       const total = Number(roomCount);
@@ -1185,21 +1212,7 @@ server.tool(
         const aiSlots = Math.max(1, Math.floor(maxP * 30 / 100));
         if (aiCount >= aiSlots) continue; // AI 插槽已满
 
-        // 检查是否已在房间中
-        const players = await contract.getAllPlayers(roomId);
-        const alreadyIn = (players as string[]).some(
-          (p: string) => p.toLowerCase() === playerWallet!.address.toLowerCase(),
-        );
-        if (alreadyIn) {
-          return {
-            content: [{
-              type: "text" as const,
-              text: `Already in Room #${roomId} (${playerCount}/${maxP} players). Waiting for game to start.`,
-            }],
-          };
-        }
-
-        // 批准 USDC 并加入房间
+        // 批准 USDC 并加入房间 — 合约通过 playerActiveRoom 强制单房间限制
         const tokenAddr = PAYMENT_TOKEN || (await contract.paymentToken()); // 获取代币地址
         const token = new ethers.Contract(tokenAddr, ERC20_ABI, playerWallet); // 创建代币合约实例
         const allowance = await token.allowance(playerWallet.address, ARENA_CONTRACT); // 查询授权额度
@@ -1208,8 +1221,11 @@ server.tool(
           await approveTx.wait();
         }
 
+        // 生成玩家名称（使用提供的名称或默认 AI-XXXX）
+        const playerName = name || `AI-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
         // 调用合约的 joinRoom 函数加入房间（MCP = AI，所以第 2 个参数为 true）
-        const tx = await contract.joinRoom(roomId, true);
+        const tx = await contract.joinRoom(roomId, true, playerName);
         await tx.wait(); // 等待交易被打包
 
         return {

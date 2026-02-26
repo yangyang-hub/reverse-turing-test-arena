@@ -66,6 +66,19 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "MAX_NAME_LENGTH",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
           name: "MAX_PLAYERS",
           inputs: [],
           outputs: [
@@ -241,6 +254,11 @@ const deployedContracts = {
               name: "_isAI",
               type: "bool",
               internalType: "bool",
+            },
+            {
+              name: "_name",
+              type: "string",
+              internalType: "string",
             },
           ],
           outputs: [
@@ -489,6 +507,30 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "getPlayerName",
+          inputs: [
+            {
+              name: "_roomId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "_player",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "string",
+              internalType: "string",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
           name: "getRewardInfo",
           inputs: [
             {
@@ -642,6 +684,25 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "getRoomPlayerNames",
+          inputs: [
+            {
+              name: "_roomId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "string[]",
+              internalType: "string[]",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
           name: "hasVotedInRound",
           inputs: [
             {
@@ -682,6 +743,11 @@ const deployedContracts = {
               name: "_isAI",
               type: "bool",
               internalType: "bool",
+            },
+            {
+              name: "_name",
+              type: "string",
+              internalType: "string",
             },
           ],
           outputs: [],
@@ -751,6 +817,49 @@ const deployedContracts = {
               name: "",
               type: "address",
               internalType: "contract IERC20",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "playerActiveRoom",
+          inputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "playerNames",
+          inputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "string",
+              internalType: "string",
             },
           ],
           stateMutability: "view",
@@ -1771,10 +1880,10 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 289,
+      deployedOnBlock: 34,
     },
     TuringArena: {
-      address: "0xa15bb66138824a1c7167f5e85b957d04dd34e468",
+      address: "0x0c8e79f3534b00d9a3d4a856b665bf4ebc22f2ba",
       abi: [
         {
           type: "constructor",
@@ -1821,6 +1930,19 @@ const deployedContracts = {
         {
           type: "function",
           name: "MAX_MESSAGES_PER_ROUND",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "MAX_NAME_LENGTH",
           inputs: [],
           outputs: [
             {
@@ -2008,6 +2130,11 @@ const deployedContracts = {
               name: "_isAI",
               type: "bool",
               internalType: "bool",
+            },
+            {
+              name: "_name",
+              type: "string",
+              internalType: "string",
             },
           ],
           outputs: [
@@ -2256,6 +2383,30 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "getPlayerName",
+          inputs: [
+            {
+              name: "_roomId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "_player",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "string",
+              internalType: "string",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
           name: "getRewardInfo",
           inputs: [
             {
@@ -2409,6 +2560,25 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "getRoomPlayerNames",
+          inputs: [
+            {
+              name: "_roomId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "string[]",
+              internalType: "string[]",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
           name: "hasVotedInRound",
           inputs: [
             {
@@ -2449,6 +2619,11 @@ const deployedContracts = {
               name: "_isAI",
               type: "bool",
               internalType: "bool",
+            },
+            {
+              name: "_name",
+              type: "string",
+              internalType: "string",
             },
           ],
           outputs: [],
@@ -2518,6 +2693,49 @@ const deployedContracts = {
               name: "",
               type: "address",
               internalType: "contract IERC20",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "playerActiveRoom",
+          inputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "playerNames",
+          inputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "string",
+              internalType: "string",
             },
           ],
           stateMutability: "view",
@@ -3198,7 +3416,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 289,
+      deployedOnBlock: 34,
     },
   },
 } as const;

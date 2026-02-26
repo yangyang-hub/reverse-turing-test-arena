@@ -57,6 +57,7 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
   const [selectedTier, setSelectedTier] = useState<number>(1);
   const [customMaxPlayers, setCustomMaxPlayers] = useState<string>(String(TIERS[1].defaultMaxPlayers));
   const [customEntryFee, setCustomEntryFee] = useState<string>(String(TIERS[1].defaultFee));
+  const [playerName, setPlayerName] = useState<string>("");
   const [isCreating, setIsCreating] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
@@ -92,7 +93,8 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
   const parsedEntryFee = parseFloat(customEntryFee) || 0;
   const isValidPlayers = parsedMaxPlayers >= 3 && parsedMaxPlayers <= 50;
   const isValidFee = parsedEntryFee >= 1 && parsedEntryFee <= 100;
-  const isFormValid = isValidPlayers && isValidFee;
+  const isValidName = playerName.trim().length >= 1 && playerName.trim().length <= 20;
+  const isFormValid = isValidPlayers && isValidFee && isValidName;
 
   const handleTierSelect = (tierId: number) => {
     setSelectedTier(tierId);
@@ -122,7 +124,7 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
       // Step 2: Create room (auto-joins creator)
       await writeContractAsync({
         functionName: "createRoom",
-        args: [selectedTier, BigInt(parsedMaxPlayers), feeInUnits, false],
+        args: [selectedTier, BigInt(parsedMaxPlayers), feeInUnits, false, playerName.trim()],
       });
 
       onClose();
@@ -244,6 +246,27 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
               }`}
             />
             {!isValidFee && <span className="text-xs text-error">Must be 1-100 USDC</span>}
+          </div>
+        </div>
+
+        {/* Player name input */}
+        <div className="mt-4 flex flex-col gap-1">
+          <label className="text-xs font-bold tracking-widest text-base-content/50">YOUR NAME</label>
+          <input
+            type="text"
+            maxLength={20}
+            value={playerName}
+            onChange={e => setPlayerName(e.target.value)}
+            placeholder="Choose your arena name (1-20 chars)"
+            className={`input input-bordered input-sm w-full bg-base-300/50 font-mono ${
+              playerName.length > 0 && !isValidName ? "input-error" : "border-primary/30"
+            }`}
+          />
+          <div className="flex items-center justify-between">
+            {playerName.length > 0 && !isValidName && (
+              <span className="text-xs text-error">Must be 1-20 characters</span>
+            )}
+            <span className="text-xs text-base-content/30 ml-auto">{playerName.trim().length}/20</span>
           </div>
         </div>
 

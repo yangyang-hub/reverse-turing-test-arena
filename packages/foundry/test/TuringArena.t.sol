@@ -38,7 +38,7 @@ contract TuringArenaTest is Test {
     function test_CreateRoom_Quick() public {
         vm.startPrank(alice);
         usdc.approve(address(arena), QUICK_FEE);
-        uint256 roomId = arena.createRoom(TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
+        uint256 roomId = arena.createRoom(TuringArena.RoomTier.Quick, 10, QUICK_FEE, false, "Alice");
         vm.stopPrank();
         assertEq(roomId, 1);
 
@@ -58,12 +58,15 @@ contract TuringArenaTest is Test {
         assertEq(player.humanityScore, 100);
         assertTrue(player.isAlive);
         assertFalse(player.isAI);
+
+        // Verify name stored
+        assertEq(arena.getPlayerName(roomId, alice), "Alice");
     }
 
     function test_CreateRoom_AsAI() public {
         vm.startPrank(dave);
         usdc.approve(address(arena), QUICK_FEE);
-        uint256 roomId = arena.createRoom(TuringArena.RoomTier.Quick, 10, QUICK_FEE, true);
+        uint256 roomId = arena.createRoom(TuringArena.RoomTier.Quick, 10, QUICK_FEE, true, "DaveBot");
         vm.stopPrank();
 
         TuringArena.Room memory room = arena.getRoomInfo(roomId);
@@ -75,12 +78,10 @@ contract TuringArenaTest is Test {
     }
 
     function test_CreateRoom_AllTiers() public {
-        vm.startPrank(alice);
-        usdc.approve(address(arena), QUICK_FEE + STANDARD_FEE + EPIC_FEE);
-        uint256 id1 = arena.createRoom(TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
-        uint256 id2 = arena.createRoom(TuringArena.RoomTier.Standard, 20, STANDARD_FEE, false);
-        uint256 id3 = arena.createRoom(TuringArena.RoomTier.Epic, 50, EPIC_FEE, false);
-        vm.stopPrank();
+        // Each tier created by a different address (players can only be in one room)
+        uint256 id1 = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
+        uint256 id2 = _createRoom(bob, TuringArena.RoomTier.Standard, 20, STANDARD_FEE, false);
+        uint256 id3 = _createRoom(charlie, TuringArena.RoomTier.Epic, 50, EPIC_FEE, false);
 
         assertEq(arena.getRoomInfo(id1).entryFee, QUICK_FEE);
         assertEq(arena.getRoomInfo(id2).entryFee, STANDARD_FEE);
@@ -136,7 +137,7 @@ contract TuringArenaTest is Test {
         vm.startPrank(extraAI);
         usdc.approve(address(arena), QUICK_FEE);
         vm.expectRevert("AI slots full");
-        arena.joinRoom(roomId, true);
+        arena.joinRoom(roomId, true, "ExtraAI");
         vm.stopPrank();
     }
 
@@ -149,7 +150,7 @@ contract TuringArenaTest is Test {
         vm.startPrank(bob);
         usdc.approve(address(arena), QUICK_FEE);
         vm.expectRevert("AI slots full");
-        arena.joinRoom(roomId, true);
+        arena.joinRoom(roomId, true, "Bot2");
         vm.stopPrank();
     }
 
@@ -163,7 +164,7 @@ contract TuringArenaTest is Test {
         vm.startPrank(charlie);
         usdc.approve(address(arena), QUICK_FEE);
         vm.expectRevert("Human slots full");
-        arena.joinRoom(roomId, false);
+        arena.joinRoom(roomId, false, "Charlie");
         vm.stopPrank();
     }
 
@@ -173,7 +174,7 @@ contract TuringArenaTest is Test {
         vm.startPrank(bob);
         usdc.approve(address(arena), QUICK_FEE / 2);
         vm.expectRevert();
-        arena.joinRoom(roomId, false);
+        arena.joinRoom(roomId, false, "Bob");
         vm.stopPrank();
     }
 
@@ -182,8 +183,8 @@ contract TuringArenaTest is Test {
 
         vm.startPrank(alice);
         usdc.approve(address(arena), QUICK_FEE);
-        vm.expectRevert("Already joined");
-        arena.joinRoom(roomId, false);
+        vm.expectRevert("Already in a room");
+        arena.joinRoom(roomId, false, "Alice2");
         vm.stopPrank();
     }
 
@@ -591,31 +592,31 @@ contract TuringArenaTest is Test {
     function test_CreateRoom_InvalidPlayerCount_TooLow() public {
         vm.prank(alice);
         vm.expectRevert("Invalid player count");
-        arena.createRoom(TuringArena.RoomTier.Quick, 2, QUICK_FEE, false);
+        arena.createRoom(TuringArena.RoomTier.Quick, 2, QUICK_FEE, false, "A");
     }
 
     function test_CreateRoom_InvalidPlayerCount_TooHigh() public {
         vm.prank(alice);
         vm.expectRevert("Invalid player count");
-        arena.createRoom(TuringArena.RoomTier.Quick, 51, QUICK_FEE, false);
+        arena.createRoom(TuringArena.RoomTier.Quick, 51, QUICK_FEE, false, "A");
     }
 
     function test_CreateRoom_InvalidFee_TooLow() public {
         vm.prank(alice);
         vm.expectRevert("Invalid entry fee");
-        arena.createRoom(TuringArena.RoomTier.Quick, 10, 0, false);
+        arena.createRoom(TuringArena.RoomTier.Quick, 10, 0, false, "A");
     }
 
     function test_CreateRoom_InvalidFee_TooHigh() public {
         vm.prank(alice);
         vm.expectRevert("Invalid entry fee");
-        arena.createRoom(TuringArena.RoomTier.Quick, 10, 101e6, false);
+        arena.createRoom(TuringArena.RoomTier.Quick, 10, 101e6, false, "A");
     }
 
     function test_CreateRoom_CustomValues() public {
         vm.startPrank(alice);
         usdc.approve(address(arena), 25e6);
-        uint256 roomId = arena.createRoom(TuringArena.RoomTier.Standard, 15, 25e6, false);
+        uint256 roomId = arena.createRoom(TuringArena.RoomTier.Standard, 15, 25e6, false, "Alice");
         vm.stopPrank();
 
         TuringArena.Room memory room = arena.getRoomInfo(roomId);
@@ -635,7 +636,7 @@ contract TuringArenaTest is Test {
         vm.startPrank(eve);
         usdc.approve(address(arena), QUICK_FEE);
         vm.expectRevert("Game already started");
-        arena.joinRoom(roomId, false);
+        arena.joinRoom(roomId, false, "Eve");
         vm.stopPrank();
     }
 
@@ -804,6 +805,166 @@ contract TuringArenaTest is Test {
         // No extra decay was applied — only vote damage
     }
 
+    // ============ Multi-Room Restriction ============
+
+    function test_JoinRoom_AlreadyInAnotherRoom() public {
+        uint256 room1 = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
+        _approveAndJoin(bob, room1, false);
+
+        // Bob is in room1, tries to join room2 → revert
+        uint256 room2 = _createRoom(charlie, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
+        vm.startPrank(bob);
+        usdc.approve(address(arena), QUICK_FEE);
+        vm.expectRevert("Already in a room");
+        arena.joinRoom(room2, false, "Bob");
+        vm.stopPrank();
+    }
+
+    function test_CreateRoom_AlreadyInRoom() public {
+        uint256 room1 = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
+
+        // Alice is already in room1 (creator), tries to create room2 → revert
+        vm.startPrank(alice);
+        usdc.approve(address(arena), QUICK_FEE);
+        vm.expectRevert("Already in a room");
+        arena.createRoom(TuringArena.RoomTier.Quick, 10, QUICK_FEE, false, "Alice2");
+        vm.stopPrank();
+
+        // Verify playerActiveRoom
+        assertEq(arena.playerActiveRoom(alice), room1);
+    }
+
+    function test_LeaveRoom_ThenJoinAnother() public {
+        uint256 room1 = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
+        _approveAndJoin(bob, room1, false);
+
+        // Bob is in room1, verify activeRoom
+        assertEq(arena.playerActiveRoom(bob), room1);
+
+        // Bob leaves room1
+        vm.prank(bob);
+        arena.leaveRoom(room1);
+        assertEq(arena.playerActiveRoom(bob), 0);
+
+        // Bob can now join room2
+        uint256 room2 = _createRoom(charlie, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
+        _approveAndJoin(bob, room2, false);
+        assertEq(arena.playerActiveRoom(bob), room2);
+    }
+
+    function test_GameEnd_ClearsActiveRoom() public {
+        uint256 roomId = _createAndStartGame();
+
+        // All players should have activeRoom set
+        assertEq(arena.playerActiveRoom(alice), roomId);
+        assertEq(arena.playerActiveRoom(bob), roomId);
+        assertEq(arena.playerActiveRoom(charlie), roomId);
+        assertEq(arena.playerActiveRoom(dave), roomId);
+
+        // Eliminate dave (AI) → humans win → game ends
+        _eliminateTarget(roomId, dave);
+
+        TuringArena.Room memory room = arena.getRoomInfo(roomId);
+        assertTrue(room.isEnded);
+
+        // All players should have activeRoom cleared
+        assertEq(arena.playerActiveRoom(alice), 0);
+        assertEq(arena.playerActiveRoom(bob), 0);
+        assertEq(arena.playerActiveRoom(charlie), 0);
+        assertEq(arena.playerActiveRoom(dave), 0);
+
+        // Alice can now join a new room
+        uint256 room2 = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
+        assertEq(arena.playerActiveRoom(alice), room2);
+    }
+
+    function test_CancelRoom_ClearsActiveRoom() public {
+        uint256 roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
+        _approveAndJoin(bob, roomId, false);
+
+        assertEq(arena.playerActiveRoom(alice), roomId);
+        assertEq(arena.playerActiveRoom(bob), roomId);
+
+        // Creator cancels room
+        vm.prank(alice);
+        arena.leaveRoom(roomId);
+
+        // Both players should have activeRoom cleared
+        assertEq(arena.playerActiveRoom(alice), 0);
+        assertEq(arena.playerActiveRoom(bob), 0);
+    }
+
+    // ============ Player Names ============
+
+    function test_PlayerName_StoredOnJoin() public {
+        uint256 roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
+        _approveAndJoin(bob, roomId, false, "BobTheHuman");
+        _approveAndJoin(dave, roomId, true, "DaveBot");
+
+        assertEq(arena.getPlayerName(roomId, alice), "Creator");
+        assertEq(arena.getPlayerName(roomId, bob), "BobTheHuman");
+        assertEq(arena.getPlayerName(roomId, dave), "DaveBot");
+    }
+
+    function test_PlayerName_TooLong() public {
+        vm.startPrank(alice);
+        usdc.approve(address(arena), QUICK_FEE);
+        vm.expectRevert("Invalid name length");
+        arena.createRoom(TuringArena.RoomTier.Quick, 10, QUICK_FEE, false, "ThisNameIsWayTooLongX");
+        vm.stopPrank();
+    }
+
+    function test_PlayerName_Empty() public {
+        vm.startPrank(alice);
+        usdc.approve(address(arena), QUICK_FEE);
+        vm.expectRevert("Invalid name length");
+        arena.createRoom(TuringArena.RoomTier.Quick, 10, QUICK_FEE, false, "");
+        vm.stopPrank();
+    }
+
+    function test_PlayerName_GetRoomPlayerNames() public {
+        uint256 roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
+        _approveAndJoin(bob, roomId, false, "Bob");
+        _approveAndJoin(dave, roomId, true, "DaveAI");
+
+        string[] memory names = arena.getRoomPlayerNames(roomId);
+        assertEq(names.length, 3);
+        assertEq(names[0], "Creator");
+        assertEq(names[1], "Bob");
+        assertEq(names[2], "DaveAI");
+    }
+
+    function test_PlayerName_ClearedOnLeave() public {
+        uint256 roomId = _createRoom(alice, TuringArena.RoomTier.Quick, 10, QUICK_FEE, false);
+        _approveAndJoin(bob, roomId, false, "Bob");
+
+        assertEq(arena.getPlayerName(roomId, bob), "Bob");
+
+        vm.prank(bob);
+        arena.leaveRoom(roomId);
+
+        // Name cleared after leaving
+        assertEq(bytes(arena.getPlayerName(roomId, bob)).length, 0);
+    }
+
+    function test_PlayerName_PreservedAfterGameEnd() public {
+        uint256 roomId = _createAndFillRoom();
+
+        // Game auto-started, names should be set
+        assertEq(arena.getPlayerName(roomId, alice), "Creator");
+        assertEq(arena.getPlayerName(roomId, dave), "Player");
+
+        // End the game
+        _eliminateTarget(roomId, dave);
+
+        TuringArena.Room memory room = arena.getRoomInfo(roomId);
+        assertTrue(room.isEnded);
+
+        // Names still readable after game ends
+        assertEq(arena.getPlayerName(roomId, alice), "Creator");
+        assertEq(arena.getPlayerName(roomId, dave), "Player");
+    }
+
     // ============ Helpers ============
 
     function _createRoom(
@@ -815,7 +976,7 @@ contract TuringArenaTest is Test {
     ) internal returns (uint256 roomId) {
         vm.startPrank(creator);
         usdc.approve(address(arena), entryFee);
-        roomId = arena.createRoom(tier, maxPlayers, entryFee, isAI);
+        roomId = arena.createRoom(tier, maxPlayers, entryFee, isAI, "Creator");
         vm.stopPrank();
     }
 
@@ -823,7 +984,15 @@ contract TuringArenaTest is Test {
         TuringArena.Room memory room = arena.getRoomInfo(roomId);
         vm.startPrank(player);
         usdc.approve(address(arena), room.entryFee);
-        arena.joinRoom(roomId, isAI);
+        arena.joinRoom(roomId, isAI, "Player");
+        vm.stopPrank();
+    }
+
+    function _approveAndJoin(address player, uint256 roomId, bool isAI, string memory name) internal {
+        TuringArena.Room memory room = arena.getRoomInfo(roomId);
+        vm.startPrank(player);
+        usdc.approve(address(arena), room.entryFee);
+        arena.joinRoom(roomId, isAI, name);
         vm.stopPrank();
     }
 

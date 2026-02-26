@@ -25,6 +25,7 @@ contract TuringArena is ReentrancyGuard {
     uint256 public constant MAX_PLAYERS = 50;
     uint256 public constant MIN_FEE = 1e6; // 1 USDC
     uint256 public constant MAX_FEE = 100e6; // 100 USDC
+    uint256 public constant MAX_NAME_LENGTH = 20;
 
     // ============ Enums ============
 
@@ -104,6 +105,12 @@ contract TuringArena is ReentrancyGuard {
     // Rewards: roomId => player => RewardInfo
     mapping(uint256 => mapping(address => RewardInfo)) public rewards;
 
+    // Track player's active room (0 = not in any room)
+    mapping(address => uint256) public playerActiveRoom;
+
+    // Player names per room: roomId => player => name
+    mapping(uint256 => mapping(address => string)) public playerNames;
+
     uint256 public nextRoomId = 1;
     address public immutable protocolTreasury;
     IERC20 public immutable paymentToken;
@@ -141,12 +148,14 @@ contract TuringArena is ReentrancyGuard {
 
     // ============ Room Management ============
 
-    function createRoom(RoomTier _tier, uint256 _maxPlayers, uint256 _entryFee, bool _isAI)
+    function createRoom(RoomTier _tier, uint256 _maxPlayers, uint256 _entryFee, bool _isAI, string calldata _name)
         external
         returns (uint256 roomId)
     {
         require(_maxPlayers >= MIN_PLAYERS && _maxPlayers <= MAX_PLAYERS, "Invalid player count");
         require(_entryFee >= MIN_FEE && _entryFee <= MAX_FEE, "Invalid entry fee");
+        require(playerActiveRoom[msg.sender] == 0, "Already in a room");
+        require(bytes(_name).length >= 1 && bytes(_name).length <= MAX_NAME_LENGTH, "Invalid name length");
         TierConfig storage config = tierConfigs[_tier];
         roomId = nextRoomId++;
 
@@ -186,17 +195,20 @@ contract TuringArena is ReentrancyGuard {
             successfulVotes: 0
         });
         roomPlayers[roomId].push(msg.sender);
+        playerActiveRoom[msg.sender] = roomId;
+        playerNames[roomId][msg.sender] = _name;
 
         emit RoomCreated(roomId, msg.sender, _tier, _entryFee, _maxPlayers, _isAI);
         emit PlayerJoined(roomId, msg.sender, _isAI);
     }
 
-    function joinRoom(uint256 _roomId, bool _isAI) external {
+    function joinRoom(uint256 _roomId, bool _isAI, string calldata _name) external {
         Room storage room = rooms[_roomId];
         require(room.id != 0, "Room does not exist");
         require(room.phase == GamePhase.Waiting, "Game already started");
-        require(players[_roomId][msg.sender].addr == address(0), "Already joined");
+        require(playerActiveRoom[msg.sender] == 0, "Already in a room");
         require(room.playerCount < room.maxPlayers, "Room is full");
+        require(bytes(_name).length >= 1 && bytes(_name).length <= MAX_NAME_LENGTH, "Invalid name length");
 
         // Enforce 7:3 human:AI ratio — at least 1 AI slot guaranteed
         uint256 aiSlots = room.maxPlayers * 30 / 100;
@@ -233,6 +245,8 @@ contract TuringArena is ReentrancyGuard {
         });
 
         roomPlayers[_roomId].push(msg.sender);
+        playerActiveRoom[msg.sender] = _roomId;
+        playerNames[_roomId][msg.sender] = _name;
         emit PlayerJoined(_roomId, msg.sender, _isAI);
 
         // Auto-start when room is full
@@ -267,6 +281,8 @@ contract TuringArena is ReentrancyGuard {
         }
 
         delete players[_roomId][_player];
+        delete playerNames[_roomId][_player];
+        playerActiveRoom[_player] = 0;
 
         address[] storage playerList = roomPlayers[_roomId];
         for (uint256 i = 0; i < playerList.length; i++) {
@@ -301,6 +317,8 @@ contract TuringArena is ReentrancyGuard {
             if (players[_roomId][player].addr != address(0)) {
                 uint256 refund = room.entryFee;
                 delete players[_roomId][player];
+                delete playerNames[_roomId][player];
+                playerActiveRoom[player] = 0;
                 paymentToken.safeTransfer(player, refund);
                 emit PlayerLeft(_roomId, player, refund);
             }
@@ -611,6 +629,12 @@ contract TuringArena is ReentrancyGuard {
         room.isEnded = true;
         room.phase = GamePhase.Ended;
 
+        // Clear active room for all players so they can join new games
+        address[] storage allPlayers = roomPlayers[_roomId];
+        for (uint256 i = 0; i < allPlayers.length; i++) {
+            playerActiveRoom[allPlayers[i]] = 0;
+        }
+
         _gameStats[_roomId].humansWon = _humansWon;
 
         _determineMVP(_roomId, _humansWon);
@@ -759,5 +783,18 @@ contract TuringArena is ReentrancyGuard {
 
     function getMessageCount(uint256 _roomId, uint256 _round, address _player) external view returns (uint256) {
         return messageCount[_roomId][_round][_player];
+    }
+
+    function getPlayerName(uint256 _roomId, address _player) external view returns (string memory) {
+        return playerNames[_roomId][_player];
+    }
+
+    function getRoomPlayerNames(uint256 _roomId) external view returns (string[] memory) {
+        address[] storage addrs = roomPlayers[_roomId];
+        string[] memory names = new string[](addrs.length);
+        for (uint256 i = 0; i < addrs.length; i++) {
+            names[i] = playerNames[_roomId][addrs[i]];
+        }
+        return names;
     }
 }

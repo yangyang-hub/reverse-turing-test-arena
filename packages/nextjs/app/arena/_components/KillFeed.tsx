@@ -13,7 +13,7 @@ type KillEntry = {
   timestamp: number;
 };
 
-export const KillFeed = ({ roomId }: { roomId: bigint }) => {
+export const KillFeed = ({ roomId, nameMap }: { roomId: bigint; nameMap?: Record<string, string> }) => {
   const [entries, setEntries] = useState<KillEntry[]>([]);
 
   const { data: allPlayers } = useScaffoldReadContract({
@@ -70,9 +70,9 @@ export const KillFeed = ({ roomId }: { roomId: bigint }) => {
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
           >
             <span className="text-gray-500">&#x1F480;</span>{" "}
-            <span className="text-white">{getAliasName(playerAddresses, entry.playerAddr)}</span>{" "}
+            <span className="text-white">{getAliasName(playerAddresses, entry.playerAddr, nameMap)}</span>{" "}
             <span className="text-red-500">ELIMINATED</span> <span className="text-gray-500">by</span>{" "}
-            <span className="text-yellow-400">{getAliasName(playerAddresses, entry.eliminatedByAddr)}</span>
+            <span className="text-yellow-400">{getAliasName(playerAddresses, entry.eliminatedByAddr, nameMap)}</span>
             <div className="text-gray-600 text-[10px] mt-0.5">&mdash; {entry.reason}</div>
           </motion.div>
         ))}

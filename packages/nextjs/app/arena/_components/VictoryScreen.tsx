@@ -14,6 +14,7 @@ export const VictoryScreen = ({
   mvpVotes,
   myRewardAmount,
   myRewardClaimed,
+  nameMap,
   onDismiss,
 }: {
   roomId: bigint;
@@ -22,6 +23,7 @@ export const VictoryScreen = ({
   mvpVotes: number;
   myRewardAmount: bigint;
   myRewardClaimed: boolean;
+  nameMap?: Record<string, string>;
   onDismiss: () => void;
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -39,7 +41,7 @@ export const VictoryScreen = ({
   });
 
   const playerAddresses = (allPlayers as string[]) || [];
-  const mvpAlias = getPlayerAlias(playerAddresses, mvp);
+  const mvpAlias = getPlayerAlias(playerAddresses, mvp, nameMap);
 
   // Particle celebration
   const initParticles = useCallback(() => {

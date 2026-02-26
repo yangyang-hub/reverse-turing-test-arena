@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { readContract } from "@wagmi/core";
 import { AnimatePresence, motion } from "framer-motion";
@@ -12,22 +13,28 @@ import QuickMatchButton from "~~/app/_components/QuickMatchButton";
 import RoomCard from "~~/app/_components/RoomCard";
 import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
-type FilterTab = "all" | "waiting" | "active" | "ended" | "mine";
+type FilterTab = "mine" | "waiting" | "active" | "ended";
 
 const FILTER_TABS: { id: FilterTab; label: string; phaseRange: number[] | null }[] = [
-  { id: "all", label: "All", phaseRange: null },
+  { id: "mine", label: "My Games", phaseRange: null },
   { id: "waiting", label: "Waiting", phaseRange: [0] },
   { id: "active", label: "In Progress", phaseRange: [1] },
   { id: "ended", label: "Completed", phaseRange: [2] },
-  { id: "mine", label: "My Games", phaseRange: null },
 ];
 
 const LobbyPageContent = () => {
-  const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
+  const [activeFilter, setActiveFilter] = useState<FilterTab>("mine");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { address: connectedAddress } = useAccount();
   const searchParams = useSearchParams();
   const isQuickMatch = searchParams.get("quickMatch") === "true";
+
+  const { data: activeRoomId } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "playerActiveRoom",
+    args: [connectedAddress ?? "0x0000000000000000000000000000000000000000"],
+  });
+  const myActiveRoom = activeRoomId ? Number(activeRoomId) : 0;
 
   const { data: roomCount, isLoading: isLoadingCount } = useScaffoldReadContract({
     contractName: "TuringArena",
@@ -80,9 +87,18 @@ const LobbyPageContent = () => {
             ))}
           </div>
 
-          {/* Quick Match + Room count + USDC faucet */}
+          {/* Quick Match / Active Room + Room count + USDC faucet */}
           <div className="flex items-center gap-4">
-            <QuickMatchButton roomIds={roomIds} onNoMatch={() => setIsModalOpen(true)} autoMatch={isQuickMatch} />
+            {myActiveRoom > 0 ? (
+              <Link
+                href={`/arena?roomId=${myActiveRoom}`}
+                className="btn btn-sm border-2 border-accent bg-accent/10 font-mono text-xs tracking-widest text-accent hover:bg-accent/20"
+              >
+                IN ROOM #{myActiveRoom} &rarr;
+              </Link>
+            ) : (
+              <QuickMatchButton roomIds={roomIds} onNoMatch={() => setIsModalOpen(true)} autoMatch={isQuickMatch} />
+            )}
             <UsdcFaucet />
             <div className="hidden text-xs tracking-widest text-base-content/40 md:block">
               {isLoadingCount ? (
@@ -155,16 +171,6 @@ const RoomGrid = ({
 }) => {
   if (roomIds.length === 0) {
     return null;
-  }
-
-  if (filter === "all") {
-    return (
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {roomIds.map(id => (
-          <RoomCard key={id.toString()} roomId={id} />
-        ))}
-      </div>
-    );
   }
 
   return (

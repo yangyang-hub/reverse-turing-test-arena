@@ -58,6 +58,7 @@ export type AutoPlayStatus = {
 // ============ 玩家状态类型 ============
 export type PlayerState = {
   address: string; // 玩家地址
+  name: string; // 玩家名称
   humanityScore: number; // 人性分
   isAlive: boolean; // 是否存活
   isAI: boolean; // 是否为 AI

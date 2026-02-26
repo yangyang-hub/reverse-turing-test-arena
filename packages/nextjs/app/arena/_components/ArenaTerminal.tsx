@@ -47,7 +47,7 @@ function getTimestampColor(content: string): string {
   return "text-gray-600";
 }
 
-export function ArenaTerminal({ roomId }: { roomId: bigint }) {
+export function ArenaTerminal({ roomId, nameMap }: { roomId: bigint; nameMap?: Record<string, string> }) {
   const [inputMessage, setInputMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -246,7 +246,7 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
                     : "text-purple-400"
                 }
               >
-                {getAliasName(playerAddresses, msg.sender)}:
+                {getAliasName(playerAddresses, msg.sender, nameMap)}:
               </span>{" "}
               <span className={getMessageColor(msg.sender, msg.content, connectedAddress)}>{msg.content}</span>
             </motion.div>
@@ -260,7 +260,7 @@ export function ArenaTerminal({ roomId }: { roomId: bigint }) {
       <div className="border-t border-green-900/40 bg-black/60 p-3">
         <div className="flex items-center gap-2">
           <span className="text-green-500 font-mono text-sm shrink-0">
-            {connectedAddress ? getAliasName(playerAddresses, connectedAddress) : "anon"}@arena $
+            {connectedAddress ? getAliasName(playerAddresses, connectedAddress, nameMap) : "anon"}@arena $
           </span>
           <input
             type="text"

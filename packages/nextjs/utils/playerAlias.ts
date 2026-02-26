@@ -114,14 +114,16 @@ type PlayerAlias = {
 
 /**
  * Returns alias info for a player based on their index in the getAllPlayers array.
+ * If nameMap is provided and has an entry for this address, uses the on-chain name.
  * Deterministic: same address in same room always gets the same alias.
  */
-export function getPlayerAlias(players: string[], address: string): PlayerAlias {
+export function getPlayerAlias(players: string[], address: string, nameMap?: Record<string, string>): PlayerAlias {
   const idx = players.findIndex(p => p.toLowerCase() === address.toLowerCase());
   if (idx === -1) {
     return { name: "Unknown", color: "#666666", initial: "?" };
   }
-  const name = ALIASES[idx % ALIASES.length];
+  const chainName = nameMap?.[address.toLowerCase()];
+  const name = chainName || ALIASES[idx % ALIASES.length];
   const color = COLORS[idx % COLORS.length];
   return { name, color, initial: name[0] };
 }
@@ -129,6 +131,6 @@ export function getPlayerAlias(players: string[], address: string): PlayerAlias 
 /**
  * Shorthand — returns just the alias name string.
  */
-export function getAliasName(players: string[], address: string): string {
-  return getPlayerAlias(players, address).name;
+export function getAliasName(players: string[], address: string, nameMap?: Record<string, string>): string {
+  return getPlayerAlias(players, address, nameMap).name;
 }

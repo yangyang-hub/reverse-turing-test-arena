@@ -5,7 +5,7 @@ import { useAccount } from "wagmi";
 import { useScaffoldReadContract, useTargetNetwork } from "~~/hooks/scaffold-eth";
 import { getPlayerAlias } from "~~/utils/playerAlias";
 
-export function PlayerRadar({ roomId }: { roomId: bigint }) {
+export function PlayerRadar({ roomId, nameMap }: { roomId: bigint; nameMap?: Record<string, string> }) {
   const { address: connectedAddress } = useAccount();
   const { targetNetwork } = useTargetNetwork();
 
@@ -66,6 +66,7 @@ export function PlayerRadar({ roomId }: { roomId: bigint }) {
             targetNetwork={targetNetwork}
             playerAddresses={playerAddresses}
             isEnded={isEnded}
+            nameMap={nameMap}
           />
         ))}
       </div>
@@ -98,6 +99,7 @@ function PlayerRadarCard({
   targetNetwork,
   playerAddresses,
   isEnded,
+  nameMap,
 }: {
   roomId: bigint;
   playerAddr: string;
@@ -105,6 +107,7 @@ function PlayerRadarCard({
   targetNetwork: any;
   playerAddresses: string[];
   isEnded: boolean;
+  nameMap?: Record<string, string>;
 }) {
   const { data: playerInfo } = useScaffoldReadContract({
     contractName: "TuringArena",
@@ -129,7 +132,7 @@ function PlayerRadarCard({
   const scoreTextColor =
     humanityScore > 60 ? "text-green-400" : humanityScore > 30 ? "text-yellow-400" : "text-red-400";
 
-  const alias = getPlayerAlias(playerAddresses, playerAddr);
+  const alias = getPlayerAlias(playerAddresses, playerAddr, nameMap);
 
   return (
     <div

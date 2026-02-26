@@ -575,6 +575,10 @@
   overflow: hidden;
 }
 
+.arena-lock-scroll > main {
+  min-height: 0;
+}
+
 /* ============ Hero Image Glow Animation ============ */
 
 @keyframes hero-glow-breathe {

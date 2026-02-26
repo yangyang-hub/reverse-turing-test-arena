@@ -6,7 +6,7 @@ import { useAccount, useBlockNumber } from "wagmi";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { getAliasName, getPlayerAlias } from "~~/utils/playerAlias";
 
-export function VotePanel({ roomId }: { roomId: bigint }) {
+export function VotePanel({ roomId, nameMap }: { roomId: bigint; nameMap?: Record<string, string> }) {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const { address: connectedAddress } = useAccount();
 
@@ -180,6 +180,7 @@ export function VotePanel({ roomId }: { roomId: bigint }) {
                 setSelectedTarget(isSelected ? null : playerAddr);
               }}
               playerAddresses={playerAddresses}
+              nameMap={nameMap}
             />
           );
         })}
@@ -201,7 +202,7 @@ export function VotePanel({ roomId }: { roomId: bigint }) {
           ) : hasVotedThisRound ? (
             "ALREADY VOTED"
           ) : selectedTarget ? (
-            <>VOTE TO ELIMINATE {getAliasName(playerAddresses, selectedTarget)}</>
+            <>VOTE TO ELIMINATE {getAliasName(playerAddresses, selectedTarget, nameMap)}</>
           ) : (
             "SELECT A TARGET"
           )}
@@ -219,6 +220,7 @@ function VotePlayerCard({
   canVote,
   onSelect,
   playerAddresses,
+  nameMap,
 }: {
   roomId: bigint;
   playerAddr: string;
@@ -227,6 +229,7 @@ function VotePlayerCard({
   canVote: boolean;
   onSelect: () => void;
   playerAddresses: string[];
+  nameMap?: Record<string, string>;
 }) {
   const { data: playerInfo } = useScaffoldReadContract({
     contractName: "TuringArena",
@@ -248,7 +251,7 @@ function VotePlayerCard({
 
   const isClickable = canVote && !isMe && isAlive;
 
-  const alias = getPlayerAlias(playerAddresses, playerAddr);
+  const alias = getPlayerAlias(playerAddresses, playerAddr, nameMap);
 
   return (
     <motion.div

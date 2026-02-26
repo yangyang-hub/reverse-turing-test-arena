@@ -49,24 +49,25 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 - 房间三档: Quick(Bronze) / Standard(Silver) / Epic(Gold)
 - 所有聊天内容仅通过事件存储，不写入 storage
 - Quick 局 baseInterval=100 (Monad ≈ 40s/轮), Standard/Epic=150 (≈ 60s/轮)
-- `createRoom(RoomTier, uint256 _maxPlayers, uint256 _entryFee, bool _isAI)` — 4th param: creator is human (web) or AI (MCP)
-- `joinRoom(uint256 _roomId, bool _isAI)` — 2nd param: player identity tag
+- `createRoom(RoomTier, uint256 _maxPlayers, uint256 _entryFee, bool _isAI, string _name)` — 5th param: player's chosen name
+- `joinRoom(uint256 _roomId, bool _isAI, string _name)` — 3rd param: player's chosen name
+- `playerActiveRoom(address)` — returns active room ID (0 = not in any room); enforces single-room-per-player
 
 ---
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-25 — Added Mission Briefing overlay + channel exclusivity (AI/Human can only act from their entry channel)
+> **Last updated**: 2026-02-26 — Added player name selection (on-chain name binding)
 
-### Current Status: Matchmaking-Only Entry (No Manual JOIN)
+### Current Status: Player Name Selection
 
 | Module | Status | Notes |
 |--------|--------|-------|
 | Design Doc (IMPLEMENTATION_PLAN.md) | DONE | 12 sections, ~6800 lines |
-| TuringArena.sol | DONE | Team-based Humans vs AI, simplified {Waiting, Active, Ended}, strict 7:3 ratio (both slots enforced), room-full-to-start, 3 msg/round, self-vote -10, 49 tests passing |
+| TuringArena.sol | DONE | Team-based Humans vs AI, simplified {Waiting, Active, Ended}, strict 7:3 ratio (both slots enforced), room-full-to-start, 3 msg/round, self-vote -10, single-room-per-player (playerActiveRoom), player names (1-20 chars on-chain), 60 tests passing |
 | MockUSDC.sol | DONE | Test USDC mock with 6 decimals, public mint |
 | Deploy Script | DONE | DeployTuringArena.s.sol — deploys MockUSDC + TuringArena |
-| Contract Tests | DONE | 49 test cases, 100% pass (incl. team win, strict 7:3 slots, human slot limit, auto-start, message limit) |
+| Contract Tests | DONE | 60 test cases, 100% pass (incl. team win, strict 7:3 slots, human slot limit, auto-start, message limit, multi-room restriction, player names) |
 | Zustand gameStore | DONE | gameStore.ts with team-based types (GamePhase: Waiting/Active/Ended, Player.isAI) |
 | Cyberpunk CSS | DONE | globals.css with glitch text, cyber-grid-bg, tier/phase classes |
 | scaffold.config.ts | DONE | Foundry + Monad Testnet, env-based dev/prod config |
@@ -97,6 +98,8 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Matchmaking-Only Entry | DONE | Removed manual JOIN from RoomCard + MCP action_onchain, added match_room tool (MCP), human/AI slot-aware filtering |
 | Mission Briefing | DONE | MissionBriefing.tsx — fullscreen overlay on game start, shows team composition + identity-based mission, auto-dismiss 8s |
 | Channel Exclusivity | DONE | AI players can't chat/vote from browser; Human players can't act via MCP — enforced on both frontend + MCP adapter |
+| Single Room Per Player | DONE | playerActiveRoom mapping prevents joining multiple rooms; lobby hides QuickMatch when in room; MCP match_room/create_room pre-check |
+| Player Name Selection | DONE | On-chain name binding (1-20 chars), playerNames mapping, getRoomPlayerNames view, frontend nameMap prop, MCP auto-name AI-XXXX |
 
 ### Known Design Bugs (from review)
 

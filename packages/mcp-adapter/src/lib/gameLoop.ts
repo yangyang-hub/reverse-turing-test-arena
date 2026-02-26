@@ -197,15 +197,20 @@ export class GameLoop {
       }
 
       // ========== 步骤 6: 获取所有玩家状态用于策略 ==========
-      this.log(`📡 RPC: getAllPlayerInfos (${playerAddresses.length} players)`);
-      const playerInfos = await Promise.all(
-        (playerAddresses as string[]).map((addr: string) =>
-          contract.getPlayerInfo(this.config.roomId, addr),
+      this.log(`📡 RPC: getAllPlayerInfos + names (${playerAddresses.length} players)`);
+      const [playerInfos, playerNamesResult] = await Promise.all([
+        Promise.all(
+          (playerAddresses as string[]).map((addr: string) =>
+            contract.getPlayerInfo(this.config.roomId, addr),
+          ),
         ),
-      );
+        contract.getRoomPlayerNames(this.config.roomId),
+      ]);
+      const names = playerNamesResult as string[];
       // 构建玩家状态数组
-      const players: PlayerState[] = playerInfos.map((p: ethers.Result) => ({
+      const players: PlayerState[] = playerInfos.map((p: ethers.Result, idx: number) => ({
         address: p.addr,
+        name: names[idx] || "",
         humanityScore: Number(p.humanityScore),
         isAlive: p.isAlive,
         isAI: p.isAI,

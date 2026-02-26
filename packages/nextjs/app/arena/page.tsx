@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAccount, useBlockNumber } from "wagmi";
@@ -82,6 +82,27 @@ function ArenaContent() {
     functionName: "getPlayerInfo",
     args: [roomId, connectedAddress ?? "0x0000000000000000000000000000000000000000"] as const,
   });
+
+  const { data: playerNames } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getRoomPlayerNames",
+    args: [roomId] as const,
+  });
+
+  // Build nameMap: address (lowercase) → on-chain name
+  const nameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (allPlayers && playerNames) {
+      const addrs = allPlayers as string[];
+      const names = playerNames as string[];
+      for (let i = 0; i < addrs.length && i < names.length; i++) {
+        if (names[i]) {
+          map[addrs[i].toLowerCase()] = names[i];
+        }
+      }
+    }
+    return map;
+  }, [allPlayers, playerNames]);
 
   // Settle state
   const [isSettling, setIsSettling] = useState(false);
@@ -370,18 +391,18 @@ function ArenaContent() {
       {/* Main Arena Grid */}
       <div className="flex-1 grid grid-cols-12 gap-0 min-h-0">
         {/* Left Sidebar - Player Radar */}
-        <div className="col-span-3 border-r border-cyan-900/30 overflow-y-auto">
-          <PlayerRadar roomId={roomId} />
+        <div className="col-span-3 border-r border-cyan-900/30 min-h-0 overflow-hidden">
+          <PlayerRadar roomId={roomId} nameMap={nameMap} />
         </div>
 
         {/* Center - Chat Terminal */}
-        <div className="col-span-6 flex flex-col min-h-0">
-          <ArenaTerminal roomId={roomId} />
+        <div className="col-span-6 flex flex-col min-h-0 overflow-hidden">
+          <ArenaTerminal roomId={roomId} nameMap={nameMap} />
         </div>
 
         {/* Right Sidebar - Vote Panel */}
-        <div className="col-span-3 border-l border-cyan-900/30 overflow-y-auto">
-          <VotePanel roomId={roomId} />
+        <div className="col-span-3 border-l border-cyan-900/30 min-h-0 overflow-hidden">
+          <VotePanel roomId={roomId} nameMap={nameMap} />
         </div>
       </div>
 
@@ -399,6 +420,7 @@ function ArenaContent() {
           mvpVotes={Number((gameStats as any).mvpVotes ?? 0)}
           myRewardAmount={rewardInfo ? BigInt((rewardInfo as any)[0] ?? 0) : 0n}
           myRewardClaimed={rewardInfo ? Boolean((rewardInfo as any)[1]) : false}
+          nameMap={nameMap}
           onDismiss={() => {
             setShowVictory(false);
           }}

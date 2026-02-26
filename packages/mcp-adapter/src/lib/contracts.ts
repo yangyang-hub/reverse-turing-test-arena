@@ -32,14 +32,17 @@ export const ARENA_ABI = [
   "function getEliminationOrder(uint256 roomId) view returns (address[])", // 获取淘汰顺序
   "function allAliveVoted(uint256 roomId) view returns (bool)", // 查询是否所有存活玩家都已投票
   "function getContractBalance() view returns (uint256)", // 获取合约余额
+  "function playerActiveRoom(address player) view returns (uint256)", // 查询玩家当前所在房间
+  "function getPlayerName(uint256 roomId, address player) view returns (string)", // 获取玩家名称
+  "function getRoomPlayerNames(uint256 roomId) view returns (string[])", // 获取房间所有玩家名称
 
   // ===== 写入函数 =====
   "function sendMessage(uint256 roomId, string content)", // 发送聊天消息
   "function castVote(uint256 roomId, address target)", // 投票
-  "function joinRoom(uint256 roomId, bool isAI)", // 加入房间（isAI 标识是否为 AI 玩家）
+  "function joinRoom(uint256 roomId, bool isAI, string name)", // 加入房间（isAI 标识是否为 AI，name 为玩家名称）
   "function settleRound(uint256 roomId)", // 结算当前轮次
   "function startGame(uint256 roomId)", // 开始游戏
-  "function createRoom(uint8 tier, uint256 maxPlayers, uint256 entryFee, bool isAI) returns (uint256 roomId)", // 创建房间（isAI 标识创建者是否为 AI）
+  "function createRoom(uint8 tier, uint256 maxPlayers, uint256 entryFee, bool isAI, string name) returns (uint256 roomId)", // 创建房间（isAI 标识创建者是否为 AI，name 为创建者名称）
   "function leaveRoom(uint256 roomId)", // 离开房间
   "function claimReward(uint256 roomId)", // 领取奖励
 

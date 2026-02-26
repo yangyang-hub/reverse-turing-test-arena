@@ -33,6 +33,7 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
   const [isSearching, setIsSearching] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<MatchFilters>(DEFAULT_FILTERS);
+  const [playerName, setPlayerName] = useState<string>("");
   const panelRef = useRef<HTMLDivElement>(null);
   const autoMatchTriggered = useRef(false);
 
@@ -61,13 +62,20 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
     return () => document.removeEventListener("mousedown", handler);
   }, [showFilters]);
 
-  const runMatch = async (matchFilters: MatchFilters) => {
+  const runMatch = async (matchFilters: MatchFilters, name?: string) => {
     if (!connectedAddress) {
       notification.error("Please connect your wallet first.");
       return;
     }
     if (!arenaContractInfo?.address || !arenaContractInfo.abi) {
       notification.error("Contract data not loaded yet. Please wait and try again.");
+      return;
+    }
+
+    const trimmedName = (name ?? playerName).trim();
+    if (!trimmedName || trimmedName.length < 1 || trimmedName.length > 20) {
+      notification.error("Enter a name (1-20 characters) before matching.");
+      setShowFilters(true);
       return;
     }
 
@@ -109,25 +117,7 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
         const humanSlots = maxPlayers - aiSlots;
         if (Number(roomInfo.humanCount) >= humanSlots) continue;
 
-        // Check if already joined
-        const players = (await readContract(config, {
-          address: arenaContractInfo.address,
-          abi: arenaContractInfo.abi,
-          functionName: "getAllPlayers",
-          args: [roomId],
-        })) as string[];
-
-        const alreadyJoined = players.some(p => p.toLowerCase() === connectedAddress.toLowerCase());
-
-        if (alreadyJoined) {
-          notification.remove(notifId);
-          notification.info(
-            `You're already in Room #${roomId.toString()}. Waiting for players (${playerCount}/${maxPlayers})...`,
-          );
-          return;
-        }
-
-        // Found a joinable room
+        // Found a joinable room — contract enforces single-room limit via playerActiveRoom
         notification.remove(notifId);
         const joinNotifId = notification.loading(
           `Joining Room #${roomId.toString()} (${maxPlayers}p / ${formatUnits(entryFee, 6)} USDC)...`,
@@ -144,7 +134,7 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
 
           await writeArena({
             functionName: "joinRoom",
-            args: [roomId, false],
+            args: [roomId, false, trimmedName],
           });
 
           notification.remove(joinNotifId);
@@ -174,12 +164,12 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
   };
 
   // Auto-match on mount (from landing page ?quickMatch=true)
+  // If no name set, just open the filter panel so user can enter name
   useEffect(() => {
     if (autoMatch && !autoMatchTriggered.current && connectedAddress && roomIds.length > 0 && arenaContractInfo) {
       autoMatchTriggered.current = true;
-      runMatch(DEFAULT_FILTERS);
+      setShowFilters(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoMatch, connectedAddress, roomIds, arenaContractInfo]);
 
   return (
@@ -217,6 +207,24 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
           style={{ boxShadow: "0 4px 24px rgba(0, 255, 65, 0.1)" }}
         >
           <p className="mb-3 font-mono text-xs font-bold tracking-widest text-primary">MATCH FILTERS</p>
+
+          {/* Player name */}
+          <div className="mb-3">
+            <label className="mb-1 block font-mono text-[10px] tracking-widest text-base-content/50">YOUR NAME</label>
+            <input
+              type="text"
+              maxLength={20}
+              value={playerName}
+              onChange={e => setPlayerName(e.target.value)}
+              placeholder="Enter arena name (1-20)"
+              className={`input input-bordered input-xs w-full bg-base-300/50 font-mono text-xs ${
+                playerName.length > 0 && (playerName.trim().length < 1 || playerName.trim().length > 20)
+                  ? "input-error"
+                  : ""
+              }`}
+            />
+            <span className="text-[10px] text-base-content/30">{playerName.trim().length}/20</span>
+          </div>
 
           {/* Player range */}
           <div className="mb-3">
