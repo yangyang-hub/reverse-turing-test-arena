@@ -28,7 +28,7 @@ type OutgoingMessage struct {
 	Address   string       `json:"address,omitempty"`
 	Token     string       `json:"token,omitempty"` // returned in auth_ok for client caching
 	RoomID    int          `json:"roomId,omitempty"`
-	Round     int          `json:"round,omitempty"`
+	Round     int          `json:"round"`
 	Sender    string       `json:"sender,omitempty"`
 	Content   string       `json:"content,omitempty"`
 	CreatedAt *time.Time   `json:"createdAt,omitempty"`
