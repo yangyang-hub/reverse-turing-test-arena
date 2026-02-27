@@ -39,19 +39,23 @@ const PHASE_CLASSES = ["text-secondary", "phase-active", "phase-ended"] as const
 
 type RoomCardProps = {
   roomId: bigint;
+  roomInfo?: any; // Optional: from parent batch fetch
 };
 
-const RoomCard = ({ roomId }: RoomCardProps) => {
+const RoomCard = ({ roomId, roomInfo: propRoomInfo }: RoomCardProps) => {
   const router = useRouter();
   const { address: connectedAddress } = useAccount();
   const [isLeaving, setIsLeaving] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
 
-  const { data: roomInfo, isLoading } = useScaffoldReadContract({
+  // Only fetch if not provided via prop (fallback for standalone usage)
+  const { data: fetchedRoomInfo, isLoading } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getRoomInfo",
     args: [roomId],
+    query: { enabled: !propRoomInfo },
   });
+  const roomInfo = propRoomInfo || fetchedRoomInfo;
 
   const { data: players } = useScaffoldReadContract({
     contractName: "TuringArena",

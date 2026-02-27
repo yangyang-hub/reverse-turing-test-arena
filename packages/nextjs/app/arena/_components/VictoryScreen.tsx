@@ -4,11 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Address } from "@scaffold-ui/components";
 import { motion } from "framer-motion";
 import { formatUnits } from "viem";
-import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { getPlayerAlias } from "~~/utils/playerAlias";
 
 export const VictoryScreen = ({
   roomId,
+  allPlayers: allPlayersProp,
   humansWon,
   mvp,
   mvpVotes,
@@ -18,6 +19,7 @@ export const VictoryScreen = ({
   onDismiss,
 }: {
   roomId: bigint;
+  allPlayers: string[];
   humansWon: boolean;
   mvp: string;
   mvpVotes: number;
@@ -34,13 +36,7 @@ export const VictoryScreen = ({
     contractName: "TuringArena",
   });
 
-  const { data: allPlayers } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getAllPlayers",
-    args: [roomId],
-  });
-
-  const playerAddresses = (allPlayers as string[]) || [];
+  const playerAddresses = allPlayersProp;
   const mvpAlias = getPlayerAlias(playerAddresses, mvp, nameMap);
 
   // Detect emergencyEnd: gameStats not populated (mvp is zero address)

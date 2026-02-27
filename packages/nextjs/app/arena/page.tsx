@@ -54,30 +54,92 @@ function ArenaContent() {
 
   const roomId = rawRoomId ? BigInt(rawRoomId) : undefined;
 
-  const { data: roomInfo, isLoading: roomLoading } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getRoomInfo",
-    args: [roomId] as const,
+  // Contract info for multicall (needed by all batch-read hooks below)
+  const { data: arenaInfo } = useDeployedContractInfo({ contractName: "TuringArena" });
+  const zeroAddr = "0x0000000000000000000000000000000000000000" as const;
+
+  // Core polled multicall: getRoomInfo + currentRound + pendingReveal (3 → 1 multicall per tick)
+  const coreContracts = useMemo(() => {
+    if (!arenaInfo || roomId === undefined) return [];
+    return [
+      {
+        address: arenaInfo.address,
+        abi: arenaInfo.abi,
+        functionName: "getRoomInfo" as const,
+        args: [roomId] as const,
+      },
+      {
+        address: arenaInfo.address,
+        abi: arenaInfo.abi,
+        functionName: "currentRound" as const,
+        args: [roomId] as const,
+      },
+      {
+        address: arenaInfo.address,
+        abi: arenaInfo.abi,
+        functionName: "pendingReveal" as const,
+        args: [roomId] as const,
+      },
+    ];
+  }, [arenaInfo, roomId]);
+
+  const { data: coreData, isLoading: coreLoading } = useReadContracts({
+    contracts: coreContracts,
+    query: { enabled: coreContracts.length > 0, refetchInterval: 10_000 },
   });
 
-  const { data: allPlayers } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getAllPlayers",
-    args: [roomId] as const,
-    watch: false, // Player list doesn't change during active gameplay
+  const roomLoading = !arenaInfo || coreLoading;
+  const roomInfo = coreData?.[0]?.result;
+  const currentRoundData = coreData?.[1]?.result as bigint | undefined;
+  const isPendingReveal = coreData?.[2]?.result as boolean | undefined;
+
+  // Static multicall: getAllPlayers + getRoomPlayerNames (fetched once, no polling)
+  const staticContracts = useMemo(() => {
+    if (!arenaInfo || roomId === undefined) return [];
+    return [
+      {
+        address: arenaInfo.address,
+        abi: arenaInfo.abi,
+        functionName: "getAllPlayers" as const,
+        args: [roomId] as const,
+      },
+      {
+        address: arenaInfo.address,
+        abi: arenaInfo.abi,
+        functionName: "getRoomPlayerNames" as const,
+        args: [roomId] as const,
+      },
+    ];
+  }, [arenaInfo, roomId]);
+
+  const { data: staticData } = useReadContracts({
+    contracts: staticContracts,
+    query: { enabled: staticContracts.length > 0 },
   });
 
-  const { data: currentRoundData } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "currentRound",
-    args: [roomId] as const,
+  const allPlayers = staticData?.[0]?.result as string[] | undefined;
+  const playerNames = staticData?.[1]?.result as string[] | undefined;
+
+  // Vote status multicall: hasVotedInRound (depends on currentRoundData from core)
+  const voteCheckContracts = useMemo(() => {
+    if (!arenaInfo || roomId === undefined || !connectedAddress || !currentRoundData || currentRoundData === 0n)
+      return [];
+    return [
+      {
+        address: arenaInfo.address,
+        abi: arenaInfo.abi,
+        functionName: "hasVotedInRound" as const,
+        args: [roomId, currentRoundData, connectedAddress] as const,
+      },
+    ];
+  }, [arenaInfo, roomId, connectedAddress, currentRoundData]);
+
+  const { data: voteCheckData } = useReadContracts({
+    contracts: voteCheckContracts,
+    query: { enabled: voteCheckContracts.length > 0, refetchInterval: 10_000 },
   });
 
-  const { data: isPendingReveal } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "pendingReveal",
-    args: [roomId] as const,
-  });
+  const hasVotedOnChain = voteCheckData?.[0]?.result as boolean | undefined;
 
   const { data: blockNumber } = useBlockNumber({ watch: true });
 
@@ -92,19 +154,11 @@ function ArenaContent() {
   const { data: rewardInfo } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getRewardInfo",
-    args: [roomId, connectedAddress ?? "0x0000000000000000000000000000000000000000"] as const,
+    args: [roomId, connectedAddress ?? zeroAddr] as const,
     watch: false,
   });
 
-  const { data: playerNames } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getRoomPlayerNames",
-    args: [roomId] as const,
-    watch: false, // Names don't change during active gameplay
-  });
-
   // Batch-fetch all player info via multicall (replaces N individual hooks in children)
-  const { data: arenaInfo } = useDeployedContractInfo({ contractName: "TuringArena" });
   const playerInfoContracts = useMemo(() => {
     if (!allPlayers || !arenaInfo) return [];
     return (allPlayers as string[]).map(addr => ({
@@ -575,6 +629,7 @@ function ArenaContent() {
             roundNum={currentRoundData}
             blockNumber={blockNumber}
             pendingReveal={pendingReveal}
+            hasVotedOnChain={hasVotedOnChain}
           />
         </div>
       </div>
@@ -588,6 +643,7 @@ function ArenaContent() {
       {showVictory && phase === 2 && gameStats && roomId !== undefined && (
         <VictoryScreen
           roomId={roomId}
+          allPlayers={(allPlayers as string[]) || []}
           humansWon={Boolean((gameStats as any).humansWon)}
           mvp={((gameStats as any).mvp as string) ?? ""}
           mvpVotes={Number((gameStats as any).mvpVotes ?? 0)}

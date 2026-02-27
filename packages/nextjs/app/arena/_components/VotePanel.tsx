@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { useAccount } from "wagmi";
 import { useReadContracts } from "wagmi";
 import type { PlayerInfo } from "~~/app/arena/page";
-import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useDeployedContractInfo, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { getAliasName, getPlayerAlias } from "~~/utils/playerAlias";
 
 export function VotePanel({
@@ -17,6 +17,7 @@ export function VotePanel({
   roundNum,
   blockNumber,
   pendingReveal,
+  hasVotedOnChain,
 }: {
   roomId: bigint;
   nameMap?: Record<string, string>;
@@ -26,18 +27,11 @@ export function VotePanel({
   roundNum: bigint | undefined;
   blockNumber: bigint | undefined;
   pendingReveal: boolean;
+  hasVotedOnChain?: boolean;
 }) {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [localVotedRound, setLocalVotedRound] = useState<bigint | null>(null);
   const { address: connectedAddress } = useAccount();
-
-  const zeroAddr = "0x0000000000000000000000000000000000000000" as const;
-  const { data: hasVotedOnChain } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "hasVotedInRound",
-    args: [roomId, roundNum ?? 0n, connectedAddress ?? zeroAddr],
-    query: { enabled: !!roundNum && roundNum > 0n && !!connectedAddress },
-  });
 
   // Optimistic lock: treat as voted if chain confirms OR local vote was cast this round
   const hasVotedThisRound = Boolean(hasVotedOnChain) || (localVotedRound !== null && localVotedRound === roundNum);
