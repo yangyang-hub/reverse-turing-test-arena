@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAccount, useSignMessage } from "wagmi";
+import { clearChatToken, getStoredChatToken, storeChatToken } from "~~/utils/chatToken";
 
 export type ChatMsg = {
   id?: number;
@@ -31,14 +32,27 @@ function getWsUrl(): string {
   return "ws://localhost:43001/ws";
 }
 
+function parseMsgs(data: any[]): ChatMsg[] {
+  return (data || []).map((m: any) => ({
+    id: m.id,
+    roomId: m.roomId,
+    round: m.round,
+    sender: m.sender,
+    content: m.content,
+    createdAt: m.createdAt,
+  }));
+}
+
 /**
- * useChatSocket — connects to the chat-server via native WebSocket.
- * Handles auth (SIWE signature), room join, and real-time message streaming.
+ * useChatSocket — connects to the chat-server for real-time chat.
  *
- * When `enabled` is false (e.g. ended rooms), fetches historical messages
- * via REST API without requiring a wallet signature.
+ * @param roomId - Room to connect to
+ * @param mode   - 'ws': WebSocket with token-based auth (for players in active games)
+ *                 'poll': REST polling (for spectators of active games, no auth)
+ *                 'static': REST fetch once (for ended games, no auth)
+ *                 'off': No connection
  */
-export function useChatSocket(roomId: number | undefined, enabled = true) {
+export function useChatSocket(roomId: number | undefined, mode: "ws" | "poll" | "static" | "off" = "ws") {
   const { address } = useAccount();
   const { signMessageAsync } = useSignMessage({});
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -47,6 +61,7 @@ export function useChatSocket(roomId: number | undefined, enabled = true) {
   const [myIsAI, setMyIsAI] = useState<boolean | undefined>(undefined);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const tokenFailedRef = useRef(false);
 
   // Track per-round message count for the connected user
   useEffect(() => {
@@ -62,9 +77,9 @@ export function useChatSocket(roomId: number | undefined, enabled = true) {
     setMyMessageCount(count);
   }, [messages, address]);
 
-  // REST-only mode: fetch historical messages without auth (for ended rooms)
+  // REST mode: fetch messages without auth (for spectators and ended rooms)
   useEffect(() => {
-    if (!roomId || enabled) return;
+    if (!roomId || mode === "ws" || mode === "off") return;
 
     let cancelled = false;
 
@@ -74,16 +89,7 @@ export function useChatSocket(roomId: number | undefined, enabled = true) {
         if (!res.ok) return;
         const data = await res.json();
         if (cancelled) return;
-        setMessages(
-          (data || []).map((m: any) => ({
-            id: m.id,
-            roomId: m.roomId,
-            round: m.round,
-            sender: m.sender,
-            content: m.content,
-            createdAt: m.createdAt,
-          })),
-        );
+        setMessages(parseMsgs(data));
       } catch {
         // Silently ignore — chat history is non-critical
       }
@@ -91,14 +97,21 @@ export function useChatSocket(roomId: number | undefined, enabled = true) {
 
     fetchMessages();
 
+    // Poll mode: refetch every 5s (for spectators of active games)
+    let interval: ReturnType<typeof setInterval> | undefined;
+    if (mode === "poll") {
+      interval = setInterval(fetchMessages, 5000);
+    }
+
     return () => {
       cancelled = true;
+      if (interval) clearInterval(interval);
     };
-  }, [roomId, enabled]);
+  }, [roomId, mode]);
 
-  // WebSocket mode: live connection with SIWE auth (for active rooms)
+  // WebSocket mode: live connection with token-based auth (for players)
   useEffect(() => {
-    if (!roomId || !address || !enabled) return;
+    if (!roomId || !address || mode !== "ws") return;
 
     let ws: WebSocket;
     let closed = false;
@@ -114,6 +127,14 @@ export function useChatSocket(roomId: number | undefined, enabled = true) {
       wsRef.current = ws;
 
       ws.onopen = async () => {
+        // Try token-based auth first (no wallet signature needed)
+        const stored = getStoredChatToken();
+        if (stored && stored.address === address.toLowerCase() && !tokenFailedRef.current) {
+          ws.send(JSON.stringify({ type: "auth", token: stored.token }));
+          return;
+        }
+
+        // Fallback: SIWE signature (first time or token expired)
         try {
           const message = `Chat login for RTTA at ${Date.now()}`;
           const signature = await signMessageAsync({ message });
@@ -128,20 +149,16 @@ export function useChatSocket(roomId: number | undefined, enabled = true) {
         const data = JSON.parse(event.data);
         switch (data.type) {
           case "auth_ok":
+            tokenFailedRef.current = false;
+            // Store/refresh token from server response
+            if (data.token && data.address) {
+              storeChatToken(data.token, data.address);
+            }
             ws.send(JSON.stringify({ type: "join_room", roomId }));
             setIsConnected(true);
             break;
           case "room_joined":
-            setMessages(
-              (data.messages || []).map((m: any) => ({
-                id: m.id,
-                roomId: m.roomId,
-                round: m.round,
-                sender: m.sender,
-                content: m.content,
-                createdAt: m.createdAt,
-              })),
-            );
+            setMessages(parseMsgs(data.messages));
             if (data.isAI !== undefined && data.isAI !== null) {
               setMyIsAI(Boolean(data.isAI));
             }
@@ -160,7 +177,14 @@ export function useChatSocket(roomId: number | undefined, enabled = true) {
             ]);
             break;
           case "error":
-            console.warn("[ChatSocket] Error:", data.code, data.message);
+            if (data.code === "auth_failed" && !tokenFailedRef.current) {
+              // Token expired — clear and reconnect (will try SIWE fallback)
+              clearChatToken();
+              tokenFailedRef.current = true;
+              ws.close();
+            } else {
+              console.warn("[ChatSocket] Error:", data.code, data.message);
+            }
             break;
           default:
             console.warn("[ChatSocket] Unknown message type:", data.type);
@@ -186,13 +210,14 @@ export function useChatSocket(roomId: number | undefined, enabled = true) {
 
     return () => {
       closed = true;
+      tokenFailedRef.current = false;
       clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
       wsRef.current = null;
       setIsConnected(false);
       setMessages([]);
     };
-  }, [roomId, address, signMessageAsync, enabled]);
+  }, [roomId, address, signMessageAsync, mode]);
 
   const sendMessage = useCallback(
     (content: string) => {

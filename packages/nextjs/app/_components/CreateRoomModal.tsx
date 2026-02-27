@@ -3,10 +3,10 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { waitForTransactionReceipt } from "@wagmi/core";
+import { readContract, waitForTransactionReceipt } from "@wagmi/core";
 import { AnimatePresence, motion } from "framer-motion";
 import { erc20Abi } from "viem";
-import { useConfig, useWriteContract } from "wagmi";
+import { useAccount, useConfig, useWriteContract } from "wagmi";
 import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { useChatAuth } from "~~/hooks/scaffold-eth/useChatAuth";
 import { notification } from "~~/utils/scaffold-eth";
@@ -83,7 +83,9 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
   const [isCreating, setIsCreating] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  const { getJoinAuth } = useChatAuth();
+  const { getJoinAuth, updateRoomId } = useChatAuth();
+
+  const { address: connectedAddress } = useAccount();
 
   const { writeContractAsync } = useScaffoldWriteContract({
     contractName: "TuringArena",
@@ -144,6 +146,23 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
         functionName: "createRoom",
         args: [selectedTier, BigInt(parsedMaxPlayers), feeInUnits, commitment, operatorSig, playerName.trim()],
       });
+
+      // Update the creator's identity record with the real room ID (was stored as 0)
+      if (connectedAddress && arenaContractInfo) {
+        try {
+          const newRoomId = await readContract(config, {
+            address: arenaContractInfo.address,
+            abi: arenaContractInfo.abi,
+            functionName: "playerActiveRoom",
+            args: [connectedAddress],
+          });
+          if (newRoomId && Number(newRoomId) > 0) {
+            await updateRoomId(Number(newRoomId));
+          }
+        } catch (e) {
+          console.warn("[CreateRoom] Failed to update identity room ID:", e);
+        }
+      }
 
       onClose();
       router.push("/lobby");

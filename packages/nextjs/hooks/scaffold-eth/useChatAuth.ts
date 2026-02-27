@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import { useSignMessage } from "wagmi";
+import { useAccount, useSignMessage } from "wagmi";
+import { clearChatToken, getStoredChatToken, storeChatToken } from "~~/utils/chatToken";
 
 const CHAT_SERVER_URL = process.env.NEXT_PUBLIC_CHAT_SERVER_URL || "http://localhost:43001";
 
@@ -14,14 +15,26 @@ type JoinAuthResult = {
 /**
  * useChatAuth — authenticates with the chat-server REST API and provides
  * `getJoinAuth()` to obtain commitment + operator signature for room join.
+ *
+ * Token is persisted in localStorage so page refreshes don't require re-signing.
  */
 export function useChatAuth() {
   const { signMessageAsync } = useSignMessage({});
+  const { address } = useAccount();
   const tokenRef = useRef<string | null>(null);
 
   const authenticate = useCallback(async (): Promise<string> => {
+    // 1. Check in-memory cache
     if (tokenRef.current) return tokenRef.current;
 
+    // 2. Check localStorage (survives page refresh)
+    const stored = getStoredChatToken();
+    if (stored && stored.address === address?.toLowerCase()) {
+      tokenRef.current = stored.token;
+      return stored.token;
+    }
+
+    // 3. Need fresh SIWE signature
     const message = `Chat login for RTTA at ${Date.now()}`;
     const signature = await signMessageAsync({ message });
 
@@ -38,8 +51,9 @@ export function useChatAuth() {
 
     const data = await res.json();
     tokenRef.current = data.token;
+    storeChatToken(data.token, data.address);
     return data.token;
-  }, [signMessageAsync]);
+  }, [signMessageAsync, address]);
 
   const getJoinAuth = useCallback(
     async (roomId: number, isAI: boolean, maxPlayers: number): Promise<JoinAuthResult> => {
@@ -55,9 +69,10 @@ export function useChatAuth() {
       });
 
       if (!res.ok) {
-        // Token expired — retry once
+        // Token expired — clear cache and retry once
         if (res.status === 401) {
           tokenRef.current = null;
+          clearChatToken();
           const newToken = await authenticate();
           const retryRes = await fetch(`${CHAT_SERVER_URL}/api/room-join-auth`, {
             method: "POST",
@@ -82,5 +97,23 @@ export function useChatAuth() {
     [authenticate],
   );
 
-  return { getJoinAuth };
+  const updateRoomId = useCallback(
+    async (newRoomId: number): Promise<void> => {
+      const token = await authenticate();
+      const res = await fetch(`${CHAT_SERVER_URL}/api/room-join-auth/update-room-id`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ newRoomId }),
+      });
+      if (!res.ok) {
+        console.warn("[ChatAuth] Failed to update room ID:", await res.text());
+      }
+    },
+    [authenticate],
+  );
+
+  return { getJoinAuth, updateRoomId };
 }

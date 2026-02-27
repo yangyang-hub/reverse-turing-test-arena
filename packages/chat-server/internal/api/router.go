@@ -52,6 +52,7 @@ func SetupRouter(
 	r.POST("/api/auth", HandleAuth(authSvc))
 	r.GET("/api/health", HandleHealth(hub))
 	r.GET("/api/rooms/:roomId/messages", HandleGetMessages(database))
+	r.GET("/api/players/:address/rooms", HandleGetPlayerRooms(opService))
 
 	// Protected endpoints (require Bearer token)
 	rooms := r.Group("/api/rooms", BearerAuth(authSvc))
@@ -60,8 +61,9 @@ func SetupRouter(
 		rooms.GET("/:roomId/identity", HandleGetPlayerIdentity(opService))
 	}
 
-	// Operator endpoint (require Bearer token)
+	// Operator endpoints (require Bearer token)
 	r.POST("/api/room-join-auth", BearerAuth(authSvc), HandleJoinAuth(opService))
+	r.POST("/api/room-join-auth/update-room-id", BearerAuth(authSvc), HandleUpdateIdentityRoomId(opService))
 
 	return r
 }

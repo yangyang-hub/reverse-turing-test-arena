@@ -61,9 +61,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-27 — MCP One-Click Automation
+> **Last updated**: 2026-02-27 — Lobby O(K) optimization
 
-### Current Status: MCP One-Click Automation
+### Current Status: Lobby Optimization
 
 | Module | Status | Notes |
 |--------|--------|-------|
@@ -76,7 +76,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Cyberpunk CSS | DONE | globals.css with glitch text, cyber-grid-bg, tier/phase classes |
 | scaffold.config.ts | DONE | Foundry + Monad Testnet, env-based dev/prod config |
 | Landing Page | DONE | page.tsx — HeroSection (with RoleSelector dual-path), How It Works, live stats |
-| Lobby Page | DONE | lobby/page.tsx — room browser with filter tabs (All/Waiting/Active/Ended/My Games) |
+| Lobby Page | DONE | lobby/page.tsx — my-rooms via chat-server identity_records (O(K) not O(N)), phase filter tabs, wallet-gated, RoomPhaseWatcher |
 | Lobby Components | DONE | HeroSection.tsx, RoleSelector.tsx, RoomCard.tsx, CreateRoomModal.tsx |
 | Arena Page | DONE | arena/page.tsx with 3-column grid, HUD top bar, Suspense |
 | ArenaTerminal | DONE | Terminal chat UI, WebSocket off-chain messages via useChatSocket, 3/round message limit, discussion topics per round |
@@ -108,6 +108,10 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Commit-Reveal Identity Hiding | DONE | Operator-signed commitment join, identity hidden during gameplay (isAI=false), revealAndEnd by operator, emergencyEnd timeout fallback |
 | RPC Polling Optimization | DONE | Frontend: pollingInterval 10s (prod), useReadContracts multicall, props-based children, useScaffoldWatchContractEvent for KillFeed; MCP: RateLimiter 20/s, parallel playerInfo/events, pollInterval 10s; Chat-server: RoomStatePollMs 15s, parallel GetPlayerInfo |
 | MCP One-Click Automation | DONE | .mcp.json simplified (no cwd/env), SKILL.md rewritten with bootstrap flow (auto-build + auto-config + ask key), public/skill.md synced |
+| Lobby My-Rooms Filter | DONE | Only shows rooms user participates in, "Connect Wallet" gate, RoomPhaseWatcher uses playerActiveRoom (no room scanning), tabs: Waiting/In Game/History |
+| Emergency End UI | DONE | VotePanel + arena HUD show countdown and EMERGENCY END button when operator fails to reveal within REVEAL_TIMEOUT blocks |
+| Fix: revealAndEnd Identity Bug | DONE | Creator's identity record stored with room_id=0 → new /api/room-join-auth/update-room-id endpoint updates to real ID after createRoom tx; fixed in frontend + MCP adapter |
+| Lobby O(K) Optimization | DONE | Lobby queries only player's rooms via chat-server GET /api/players/:address/rooms (identity_records), not O(N) full room scan; FilteredRoomCard no longer calls getAllPlayers; QuickMatch still scans all rooms |
 
 ### Known Design Bugs (from review)
 

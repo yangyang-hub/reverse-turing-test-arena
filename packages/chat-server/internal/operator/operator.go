@@ -140,6 +140,31 @@ func (s *Service) GetRoomIdentities(roomId int) ([]db.IdentityRecord, error) {
 	return records, err
 }
 
+// UpdateIdentityRoomId updates the room_id of a creator's identity record from 0 to the actual room ID.
+// This is needed because createRoom is called with roomId=0 (the real ID isn't known until the tx confirms).
+func (s *Service) UpdateIdentityRoomId(address string, newRoomId int) error {
+	result := s.database.Model(&db.IdentityRecord{}).
+		Where("address = ? AND room_id = 0", strings.ToLower(address)).
+		Update("room_id", newRoomId)
+	if result.Error != nil {
+		return fmt.Errorf("failed to update identity room_id: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("no pending identity record found for address %s", address)
+	}
+	log.Printf("[Operator] Updated identity room_id for %s: 0 → %d", address, newRoomId)
+	return nil
+}
+
+// GetPlayerRooms returns all room IDs where the player has identity records (excluding room_id=0 placeholder).
+func (s *Service) GetPlayerRooms(address string) ([]int, error) {
+	var roomIds []int
+	err := s.database.Model(&db.IdentityRecord{}).
+		Where("address = ? AND room_id > 0", strings.ToLower(address)).
+		Distinct().Pluck("room_id", &roomIds).Error
+	return roomIds, err
+}
+
 // DeleteRoomIdentities removes identity records when a player leaves or room is cancelled.
 func (s *Service) DeletePlayerIdentity(roomId int, addr string) error {
 	return s.database.Where("room_id = ? AND address = ?", roomId, strings.ToLower(addr)).Delete(&db.IdentityRecord{}).Error

@@ -156,9 +156,32 @@ export function VotePanel({
               GAME ENDING - Awaiting operator identity reveal...
             </span>
           </div>
-          <p className="text-gray-500 font-mono text-[10px] mt-1">
-            Voting is locked. Identities will be revealed shortly.
-          </p>
+          {currentBlock > 0 &&
+            lastSettleBlock > 0 &&
+            (() => {
+              const REVEAL_TIMEOUT = 3600;
+              const emergencyBlocks = Math.max(0, lastSettleBlock + REVEAL_TIMEOUT - currentBlock);
+              const canEmergency = currentBlock > lastSettleBlock + REVEAL_TIMEOUT;
+              return canEmergency ? (
+                <button
+                  className="mt-2 w-full px-3 py-1.5 border border-red-500/50 text-red-400 font-mono text-xs hover:bg-red-900/20 hover:border-red-500 transition-colors rounded animate-pulse"
+                  onClick={async () => {
+                    try {
+                      await writeContractAsync({ functionName: "emergencyEnd", args: [roomId] });
+                    } catch (e) {
+                      console.error("Emergency end failed:", e);
+                    }
+                  }}
+                  disabled={isMining}
+                >
+                  {isMining ? <span className="loading loading-spinner loading-xs" /> : "EMERGENCY END GAME"}
+                </button>
+              ) : (
+                <p className="text-gray-500 font-mono text-[10px] mt-1">
+                  Emergency end available in {emergencyBlocks} blocks if operator fails.
+                </p>
+              );
+            })()}
         </div>
       )}
 

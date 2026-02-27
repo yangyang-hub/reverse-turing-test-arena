@@ -165,4 +165,26 @@ export class ChatClient {
 
     return res.json();
   }
+
+  /**
+   * Update the creator's identity record from room_id=0 to the actual room ID.
+   * Called after createRoom tx confirms on-chain.
+   */
+  async updateRoomId(newRoomId: number): Promise<void> {
+    const token = await this.ensureAuth();
+
+    const res = await fetch(`${this.baseUrl}/api/room-join-auth/update-room-id`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ newRoomId }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      console.warn(`[ChatClient] Failed to update room ID (${res.status}): ${body}`);
+    }
+  }
 }

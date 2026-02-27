@@ -15,8 +15,9 @@ import (
 // IncomingMessage represents a message from the client.
 type IncomingMessage struct {
 	Type      string `json:"type"`
-	Message   string `json:"message,omitempty"`   // for auth
-	Signature string `json:"signature,omitempty"` // for auth
+	Message   string `json:"message,omitempty"`   // for auth (SIWE)
+	Signature string `json:"signature,omitempty"` // for auth (SIWE)
+	Token     string `json:"token,omitempty"`     // for auth (token-based, no re-signing)
 	RoomID    int    `json:"roomId,omitempty"`    // for join_room / send_message
 	Content   string `json:"content,omitempty"`   // for send_message
 }
@@ -25,6 +26,7 @@ type IncomingMessage struct {
 type OutgoingMessage struct {
 	Type      string       `json:"type"`
 	Address   string       `json:"address,omitempty"`
+	Token     string       `json:"token,omitempty"` // returned in auth_ok for client caching
 	RoomID    int          `json:"roomId,omitempty"`
 	Round     int          `json:"round,omitempty"`
 	Sender    string       `json:"sender,omitempty"`
@@ -70,12 +72,26 @@ func (h *Handler) HandleMessage(client *Client, msg *IncomingMessage) {
 }
 
 func (h *Handler) handleAuth(client *Client, msg *IncomingMessage) {
+	// Token-based auth: reuse existing session (no re-signing needed)
+	if msg.Token != "" {
+		address, err := h.authSvc.ValidateToken(msg.Token)
+		if err != nil {
+			client.SendJSON(OutgoingMessage{Type: "error", Code: "auth_failed", Message: "Invalid or expired token"})
+			return
+		}
+		client.Address = address
+		client.SendJSON(OutgoingMessage{Type: "auth_ok", Address: address, Token: msg.Token})
+		log.Printf("[WS] Token auth: %s", address)
+		return
+	}
+
+	// Signature-based auth: SIWE (first time)
 	if msg.Message == "" || msg.Signature == "" {
 		client.SendJSON(OutgoingMessage{Type: "error", Code: "auth_failed", Message: "Missing message or signature"})
 		return
 	}
 
-	_, address, err := h.authSvc.Authenticate(msg.Message, msg.Signature)
+	token, address, err := h.authSvc.Authenticate(msg.Message, msg.Signature)
 	if err != nil {
 		log.Printf("[WS] Auth failed: %v", err)
 		client.SendJSON(OutgoingMessage{Type: "error", Code: "auth_failed", Message: "Authentication failed: " + err.Error()})
@@ -83,7 +99,7 @@ func (h *Handler) handleAuth(client *Client, msg *IncomingMessage) {
 	}
 
 	client.Address = address
-	client.SendJSON(OutgoingMessage{Type: "auth_ok", Address: address})
+	client.SendJSON(OutgoingMessage{Type: "auth_ok", Address: address, Token: token})
 	log.Printf("[WS] Authenticated: %s", address)
 }
 

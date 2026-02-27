@@ -1,30 +1,33 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { readContract } from "@wagmi/core";
 import { AnimatePresence, motion } from "framer-motion";
 import type { NextPage } from "next";
 import { formatUnits } from "viem";
-import { useAccount, useConfig } from "wagmi";
+import { useAccount } from "wagmi";
 import CreateRoomModal from "~~/app/_components/CreateRoomModal";
 import QuickMatchButton from "~~/app/_components/QuickMatchButton";
 import RoomCard from "~~/app/_components/RoomCard";
-import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+
+const CHAT_SERVER_URL = process.env.NEXT_PUBLIC_CHAT_SERVER_URL || "http://localhost:43001";
 
 type FilterTab = "waiting" | "active" | "ended";
 
 const FILTER_TABS: { id: FilterTab; label: string; icon: string; phaseRange: number[] }[] = [
   { id: "waiting", label: "Waiting", icon: "⏳", phaseRange: [0] },
-  { id: "active", label: "In Progress", icon: "⚔", phaseRange: [1] },
-  { id: "ended", label: "Completed", icon: "🏆", phaseRange: [2] },
+  { id: "active", label: "In Game", icon: "⚔", phaseRange: [1] },
+  { id: "ended", label: "History", icon: "🏆", phaseRange: [2] },
 ];
 
 const LobbyPageContent = () => {
   const [activeFilter, setActiveFilter] = useState<FilterTab>("waiting");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isNoMatchOpen, setIsNoMatchOpen] = useState(false);
+  const [myRoomIds, setMyRoomIds] = useState<bigint[]>([]);
+  const [isLoadingRooms, setIsLoadingRooms] = useState(false);
   const { address: connectedAddress } = useAccount();
   const searchParams = useSearchParams();
   const isQuickMatch = searchParams.get("quickMatch") === "true";
@@ -36,20 +39,42 @@ const LobbyPageContent = () => {
   });
   const myActiveRoom = activeRoomId ? Number(activeRoomId) : 0;
 
-  const { data: roomCount, isLoading: isLoadingCount } = useScaffoldReadContract({
+  // Fetch room count for QuickMatchButton (needs all room IDs for scanning)
+  const { data: roomCount } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getRoomCount",
   });
-
-  const totalRooms = roomCount !== undefined ? Number(roomCount) : 0;
-
-  const roomIds = useMemo(() => {
+  const allRoomIds = useMemo(() => {
+    const total = roomCount !== undefined ? Number(roomCount) : 0;
     const ids: bigint[] = [];
-    for (let i = 1; i <= totalRooms; i++) {
-      ids.push(BigInt(i));
-    }
+    for (let i = 1; i <= total; i++) ids.push(BigInt(i));
     return ids;
-  }, [totalRooms]);
+  }, [roomCount]);
+
+  // Fetch only rooms this player participated in (from chat-server identity_records)
+  useEffect(() => {
+    if (!connectedAddress) {
+      setMyRoomIds([]);
+      return;
+    }
+    setIsLoadingRooms(true);
+    fetch(`${CHAT_SERVER_URL}/api/players/${connectedAddress}/rooms`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.roomIds) {
+          setMyRoomIds(data.roomIds.map((id: number) => BigInt(id)));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingRooms(false));
+  }, [connectedAddress]);
+
+  // Merge identity_records rooms + active room (fallback if update-room-id hasn't run yet)
+  const mergedRoomIds = useMemo(() => {
+    const set = new Set(myRoomIds.map(id => id.toString()));
+    if (myActiveRoom > 0) set.add(BigInt(myActiveRoom).toString());
+    return Array.from(set).map(s => BigInt(s));
+  }, [myRoomIds, myActiveRoom]);
 
   return (
     <div className="flex min-h-screen flex-col cyber-grid-bg">
@@ -67,7 +92,7 @@ const LobbyPageContent = () => {
           >
             BATTLE LOBBY
           </h1>
-          <p className="text-sm tracking-widest text-secondary/70">Browse rooms. Quick match to fight.</p>
+          <p className="text-sm tracking-widest text-secondary/70">Your rooms. Quick match to fight.</p>
           <div className="flex items-center gap-3 mt-1">
             <div className="divider-line-left h-px w-12 md:w-24" />
             <motion.div
@@ -116,30 +141,32 @@ const LobbyPageContent = () => {
                 IN ROOM #{myActiveRoom} &rarr;
               </Link>
             ) : (
-              <QuickMatchButton roomIds={roomIds} onNoMatch={() => setIsNoMatchOpen(true)} autoMatch={isQuickMatch} />
+              <QuickMatchButton
+                roomIds={allRoomIds}
+                onNoMatch={() => setIsNoMatchOpen(true)}
+                autoMatch={isQuickMatch}
+              />
             )}
             <UsdcFaucet />
-            <div className="hidden text-sm tracking-widest text-base-content/40 md:block">
-              {isLoadingCount ? (
-                <span className="loading loading-dots loading-xs" />
-              ) : (
-                <span>
-                  {totalRooms} ROOM{totalRooms !== 1 ? "S" : ""} FOUND
-                </span>
-              )}
-            </div>
           </div>
         </div>
 
         {/* Room Grid */}
-        {isLoadingCount ? (
+        {!connectedAddress ? (
+          <div className="flex h-64 items-center justify-center">
+            <div className="flex flex-col items-center gap-4">
+              <span className="text-4xl opacity-40">🔗</span>
+              <span className="terminal-text text-sm text-base-content/50">CONNECT WALLET TO VIEW YOUR ROOMS</span>
+            </div>
+          </div>
+        ) : isLoadingRooms ? (
           <div className="flex h-64 items-center justify-center">
             <div className="flex flex-col items-center gap-4">
               <span className="loading loading-ring loading-lg text-primary" />
-              <span className="terminal-text text-sm animate-pulse">SCANNING BLOCKCHAIN...</span>
+              <span className="terminal-text text-sm animate-pulse">LOADING YOUR ROOMS...</span>
             </div>
           </div>
-        ) : totalRooms === 0 ? (
+        ) : mergedRoomIds.length === 0 ? (
           <EmptyState onCreateClick={() => setIsModalOpen(true)} />
         ) : (
           <AnimatePresence mode="wait">
@@ -150,7 +177,7 @@ const LobbyPageContent = () => {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              <RoomGrid roomIds={roomIds} filter={activeFilter} />
+              <RoomGrid roomIds={mergedRoomIds} filter={activeFilter} />
             </motion.div>
           </AnimatePresence>
         )}
@@ -191,7 +218,7 @@ const LobbyPageContent = () => {
       />
 
       {/* Auto-navigate to arena when a joined room becomes Active */}
-      {connectedAddress && roomIds.length > 0 && <RoomPhaseWatcher roomIds={roomIds} />}
+      {connectedAddress && <RoomPhaseWatcher />}
     </div>
   );
 };
@@ -215,10 +242,10 @@ const TabEmptyState = () => (
       />
       <div className="text-center">
         <p className="font-mono text-sm font-bold tracking-[0.15em] uppercase mb-1" style={{ color: "#39d353" }}>
-          No Rooms Here
+          No Rooms Found
         </p>
         <p className="font-mono text-xs tracking-wider text-base-content/40 max-w-xs">
-          No rooms match this filter yet. Create a room or check back later.
+          You have no rooms in this category. Use Quick Match or Create Room to get started.
         </p>
       </div>
     </motion.div>
@@ -291,11 +318,7 @@ const FilteredRoomCard = ({
   }, [phase, isVisible, onVisibility, roomId]);
 
   if (!roomInfo) {
-    return (
-      <div className="glass-panel cyber-border flex h-52 animate-pulse items-center justify-center rounded-lg p-4">
-        <span className="terminal-text text-sm">LOADING...</span>
-      </div>
-    );
+    return null;
   }
 
   if (!isVisible) return null;
@@ -517,64 +540,42 @@ const UsdcFaucet = () => {
 };
 
 /**
- * Polls rooms the connected user has joined. When any room transitions
- * from Waiting (0) to Active (1), auto-navigates to the arena.
+ * Watches the connected user's active room. Only auto-navigates to the arena
+ * when the phase transitions from Waiting (0) to Active (1) — i.e. when the
+ * game just started. If the player is already in an Active game and navigates
+ * back to the lobby, no redirect happens.
  */
-const RoomPhaseWatcher = ({ roomIds }: { roomIds: bigint[] }) => {
+const RoomPhaseWatcher = () => {
   const router = useRouter();
-  const wagmiConfig = useConfig();
   const { address } = useAccount();
-  const { data: arenaInfo } = useDeployedContractInfo({ contractName: "TuringArena" });
+  const prevPhaseRef = useRef<number | null>(null);
+
+  const { data: activeRoomId } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "playerActiveRoom",
+    args: [address ?? "0x0000000000000000000000000000000000000000"],
+  });
+
+  const roomId = activeRoomId ? BigInt(activeRoomId) : 0n;
+
+  const { data: roomInfo } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "getRoomInfo",
+    args: [roomId],
+    query: { enabled: roomId > 0n },
+  });
 
   useEffect(() => {
-    if (!address || !arenaInfo?.address || !arenaInfo.abi || roomIds.length === 0) return;
+    if (!address || roomId === 0n || !roomInfo) return;
+    const phase = Number((roomInfo as unknown as { phase: number }).phase);
+    const prevPhase = prevPhaseRef.current;
+    prevPhaseRef.current = phase;
 
-    let cancelled = false;
-
-    const poll = async () => {
-      try {
-        for (let i = roomIds.length - 1; i >= 0; i--) {
-          if (cancelled) return;
-          const roomId = roomIds[i];
-
-          const roomInfo = (await readContract(wagmiConfig, {
-            address: arenaInfo.address,
-            abi: arenaInfo.abi,
-            functionName: "getRoomInfo",
-            args: [roomId],
-          })) as { phase: number };
-
-          const phase = Number(roomInfo.phase);
-
-          // Only care about Active rooms
-          if (phase !== 1) continue;
-
-          // Check if user is in this room
-          const players = (await readContract(wagmiConfig, {
-            address: arenaInfo.address,
-            abi: arenaInfo.abi,
-            functionName: "getAllPlayers",
-            args: [roomId],
-          })) as string[];
-
-          const isInRoom = players.some(p => p.toLowerCase() === address.toLowerCase());
-          if (isInRoom && !cancelled) {
-            router.push(`/arena?roomId=${roomId.toString()}`);
-            return;
-          }
-        }
-      } catch {
-        // Silently retry on next interval
-      }
-    };
-
-    poll();
-    const interval = setInterval(poll, 10000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [address, arenaInfo, roomIds, wagmiConfig, router]);
+    // Only redirect on Waiting → Active transition (prevPhase was 0, now 1)
+    if (prevPhase === 0 && phase === 1) {
+      router.push(`/arena?roomId=${roomId.toString()}`);
+    }
+  }, [address, roomId, roomInfo, router]);
 
   return null;
 };

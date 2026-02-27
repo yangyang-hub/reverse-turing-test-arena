@@ -168,21 +168,35 @@ function ArenaContent() {
   const pendingReveal = Boolean(isPendingReveal);
 
   // WebSocket chat connection — single instance for the whole arena page
-  // For ended rooms (phase=2), use REST to fetch historical messages (no signature needed)
+  // Players in active game: WebSocket (token-based, no re-signing)
+  // Spectators of active game: REST polling (no auth needed)
+  // Ended game / waiting: REST fetch once (no auth needed)
   const parsedRoomIdForChat = rawRoomId ? Number(rawRoomId) : undefined;
-  const chatEnabled = phase !== 2;
+  const isPlayerInGameForChat =
+    connectedAddress && allPlayers
+      ? (allPlayers as string[]).some(p => p.toLowerCase() === connectedAddress.toLowerCase())
+      : false;
+  const chatMode: "ws" | "poll" | "static" | "off" =
+    phase === 1 && isPlayerInGameForChat
+      ? "ws" // players get real-time WebSocket
+      : phase === 1
+        ? "poll" // spectators of active game get REST polling
+        : phase === 2
+          ? "static" // ended game: fetch once
+          : "off"; // waiting: no chat
   const {
     messages: chatMessages,
     sendMessage,
     isConnected,
     myMessageCount,
     myIsAI: chatMyIsAI,
-  } = useChatSocket(parsedRoomIdForChat, chatEnabled);
+  } = useChatSocket(parsedRoomIdForChat, chatMode);
 
   // Settle state
   const [isSettling, setIsSettling] = useState(false);
   const [showVictory, setShowVictory] = useState(false);
   const [showBriefing, setShowBriefing] = useState(true);
+  const [isEmergencyEnding, setIsEmergencyEnding] = useState(false);
   const prevPhaseRef = useRef(phase);
   useEffect(() => {
     if (phase === 2 && prevPhaseRef.current !== 2 && prevPhaseRef.current !== 0) {
@@ -341,6 +355,27 @@ function ArenaContent() {
     }
   };
 
+  // Emergency end: fallback when operator fails to reveal
+  const REVEAL_TIMEOUT = 3600;
+  const canEmergencyEnd =
+    pendingReveal && currentBlock > 0 && lastSettleBlock > 0 && currentBlock > lastSettleBlock + REVEAL_TIMEOUT;
+  const emergencyBlocksRemaining =
+    pendingReveal && currentBlock > 0 && lastSettleBlock > 0
+      ? Math.max(0, lastSettleBlock + REVEAL_TIMEOUT - currentBlock)
+      : 0;
+
+  const handleEmergencyEnd = async () => {
+    if (!roomId || isEmergencyEnding) return;
+    setIsEmergencyEnding(true);
+    try {
+      await writeArena({ functionName: "emergencyEnd", args: [roomId] });
+    } catch (e: any) {
+      console.error("Emergency end failed:", e);
+    } finally {
+      setIsEmergencyEnding(false);
+    }
+  };
+
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-black text-gray-100">
       {/* HUD Top Bar */}
@@ -407,6 +442,25 @@ function ArenaContent() {
                 <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
                 <span className="text-orange-400 font-mono text-xs">AWAITING REVEAL</span>
               </div>
+              {canEmergencyEnd ? (
+                <>
+                  <div className="h-4 w-px bg-gray-700" />
+                  <button
+                    onClick={handleEmergencyEnd}
+                    disabled={isEmergencyEnding}
+                    className="px-3 py-1 border border-red-500/50 text-red-400 font-mono text-xs hover:bg-red-900/20 hover:border-red-500 transition-colors rounded animate-pulse"
+                  >
+                    {isEmergencyEnding ? <span className="loading loading-spinner loading-xs" /> : "EMERGENCY END"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="h-4 w-px bg-gray-700" />
+                  <span className="text-gray-500 font-mono text-xs">
+                    EMERGENCY IN {emergencyBlocksRemaining} BLOCKS
+                  </span>
+                </>
+              )}
               <div className="h-4 w-px bg-gray-700" />
               <Link
                 href="/lobby"

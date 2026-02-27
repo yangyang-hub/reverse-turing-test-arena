@@ -904,6 +904,15 @@ server.tool(
         }
       }
 
+      // 更新创建者的身份记录，将 room_id 从 0 更新为真实房间 ID
+      if (roomId !== "unknown" && chatClient) {
+        try {
+          await chatClient.updateRoomId(Number(roomId));
+        } catch (e) {
+          console.warn("[create_room] Failed to update identity room ID:", e);
+        }
+      }
+
       return {
         content: [
           {
