@@ -97,7 +97,7 @@ let activeGameLoop: GameLoop | null = null;
 // 合约地址和服务 URL（Monad Testnet 默认值，可通过环境变量覆盖）
 const ARENA_CONTRACT = process.env.ARENA_CONTRACT_ADDRESS || "0x7f2c68257d19e79c940f81bf5ceed91f2cac8dda";
 const PAYMENT_TOKEN = process.env.PAYMENT_TOKEN_ADDRESS || "0x534b2f3A21130d7a60830c2Df862319e593943A3";
-const CHAT_SERVER_URL = process.env.CHAT_SERVER_URL || "http://100.87.45.72:43001";
+const CHAT_SERVER_URL = process.env.CHAT_SERVER_URL || "http://101.36.105.150:43001";
 
 // 链下聊天客户端（在 init_session 后初始化）
 let chatClient: ChatClient | null = null;
