@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useAccount } from "wagmi";
 import type { PlayerInfo } from "~~/app/arena/page";
@@ -305,31 +305,6 @@ function RoundCountdown({
   isExpired: boolean;
   currentInterval: number;
 }) {
-  // Estimate seconds (~1s per block on Anvil/Monad)
-  const secondsLeft = blocksRemaining;
-
-  // Interpolated countdown (smooth second-by-second)
-  const [displaySeconds, setDisplaySeconds] = useState(secondsLeft);
-  const lastBlockSecondsRef = useRef(secondsLeft);
-
-  useEffect(() => {
-    lastBlockSecondsRef.current = secondsLeft;
-    setDisplaySeconds(secondsLeft);
-  }, [secondsLeft]);
-
-  useEffect(() => {
-    if (isExpired || lastBlockSecondsRef.current <= 0) return;
-    const timer = setInterval(() => {
-      setDisplaySeconds(prev => Math.max(0, prev - 1));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [isExpired, secondsLeft]);
-
-  const smoothMinutes = Math.floor(displaySeconds / 60);
-  const smoothSeconds = displaySeconds % 60;
-  const smoothTimeDisplay =
-    smoothMinutes > 0 ? `${smoothMinutes}:${String(smoothSeconds).padStart(2, "0")}` : `${smoothSeconds}s`;
-
   const barColor = isExpired
     ? "bg-orange-500"
     : isUrgent
@@ -366,7 +341,7 @@ function RoundCountdown({
           <span className="text-orange-400 font-mono text-sm font-bold animate-pulse">SETTLING...</span>
         ) : (
           <span className={`font-mono text-lg font-bold tabular-nums ${textColor} ${isUrgent ? "animate-pulse" : ""}`}>
-            {smoothTimeDisplay}
+            {blocksRemaining} <span className="text-xs font-normal">blocks</span>
           </span>
         )}
       </div>
@@ -380,8 +355,10 @@ function RoundCountdown({
       </div>
 
       <div className="flex items-center justify-between mt-1">
-        <span className="text-gray-600 font-mono text-[10px]">{blocksRemaining} blocks</span>
-        <span className="text-gray-600 font-mono text-[10px]">{currentInterval} total</span>
+        <span className="text-gray-600 font-mono text-[10px]">
+          {blocksRemaining} / {currentInterval}
+        </span>
+        <span className="text-gray-600 font-mono text-[10px]">{Math.round(progress * 100)}%</span>
       </div>
     </div>
   );
