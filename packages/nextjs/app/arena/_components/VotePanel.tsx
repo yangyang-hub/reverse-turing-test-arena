@@ -15,6 +15,7 @@ export function VotePanel({
   roomInfo,
   roundNum,
   blockNumber,
+  pendingReveal,
 }: {
   roomId: bigint;
   nameMap?: Record<string, string>;
@@ -23,6 +24,7 @@ export function VotePanel({
   roomInfo: any;
   roundNum: bigint | undefined;
   blockNumber: bigint | undefined;
+  pendingReveal: boolean;
 }) {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [localVotedRound, setLocalVotedRound] = useState<bigint | null>(null);
@@ -77,7 +79,7 @@ export function VotePanel({
     ? allPlayers.some(p => p.toLowerCase() === connectedAddress.toLowerCase())
     : false;
   // Channel exclusivity is enforced server-side — no need to check isAI here
-  const canVote = isGameActive && isMyPlayerAlive && isPlayerInGame && !hasVotedThisRound;
+  const canVote = isGameActive && isMyPlayerAlive && isPlayerInGame && !hasVotedThisRound && !pendingReveal;
 
   const handleVote = async () => {
     if (!selectedTarget || !canVote) return;
@@ -106,7 +108,7 @@ export function VotePanel({
       </div>
 
       {/* Round Countdown */}
-      {isGameActive && currentInterval > 0 && lastSettleBlock > 0 && (
+      {isGameActive && currentInterval > 0 && lastSettleBlock > 0 && !pendingReveal && (
         <RoundCountdown
           blocksRemaining={blocksRemaining}
           progress={progress}
@@ -143,6 +145,20 @@ export function VotePanel({
             <div className="w-2 h-2 rounded-full bg-green-400" />
             <span className="text-green-400 font-mono text-xs">VOTE CAST - Awaiting round settlement</span>
           </div>
+        </div>
+      )}
+
+      {pendingReveal && (
+        <div className="mx-4 mt-3 px-3 py-2 border border-orange-500/50 bg-orange-950/20 rounded">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+            <span className="text-orange-400 font-mono text-xs">
+              GAME ENDING - Awaiting operator identity reveal...
+            </span>
+          </div>
+          <p className="text-gray-500 font-mono text-[10px] mt-1">
+            Voting is locked. Identities will be revealed shortly.
+          </p>
         </div>
       )}
 
