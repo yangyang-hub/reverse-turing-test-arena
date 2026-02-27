@@ -237,7 +237,7 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
           boxShadow: "0 0 12px rgba(57,211,83,0.15)",
           color: "#39d353",
           padding: "6px 14px",
-          fontSize: 12,
+          fontSize: 14,
           fontFamily: "monospace",
           fontWeight: 700,
           letterSpacing: "0.1em",
@@ -263,7 +263,7 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
           </span>
         ) : (
           <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <Image src="/icon-bolt.png" alt="bolt" width={14} height={14} className="inline-block" />
+            <Image src="/icon-bolt.png" alt="bolt" width={18} height={18} className="inline-block" />
             QUICK MATCH
           </span>
         )}

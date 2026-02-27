@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { readContract } from "@wagmi/core";
@@ -13,17 +13,16 @@ import QuickMatchButton from "~~/app/_components/QuickMatchButton";
 import RoomCard from "~~/app/_components/RoomCard";
 import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
-type FilterTab = "mine" | "waiting" | "active" | "ended";
+type FilterTab = "waiting" | "active" | "ended";
 
-const FILTER_TABS: { id: FilterTab; label: string; phaseRange: number[] | null }[] = [
-  { id: "mine", label: "My Games", phaseRange: null },
-  { id: "waiting", label: "Waiting", phaseRange: [0] },
-  { id: "active", label: "In Progress", phaseRange: [1] },
-  { id: "ended", label: "Completed", phaseRange: [2] },
+const FILTER_TABS: { id: FilterTab; label: string; icon: string; phaseRange: number[] }[] = [
+  { id: "waiting", label: "Waiting", icon: "⏳", phaseRange: [0] },
+  { id: "active", label: "In Progress", icon: "⚔", phaseRange: [1] },
+  { id: "ended", label: "Completed", icon: "🏆", phaseRange: [2] },
 ];
 
 const LobbyPageContent = () => {
-  const [activeFilter, setActiveFilter] = useState<FilterTab>("mine");
+  const [activeFilter, setActiveFilter] = useState<FilterTab>("waiting");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isNoMatchOpen, setIsNoMatchOpen] = useState(false);
   const { address: connectedAddress } = useAccount();
@@ -94,13 +93,13 @@ const LobbyPageContent = () => {
             {FILTER_TABS.map(tab => (
               <button
                 key={tab.id}
-                className={`tab font-mono text-xs tracking-widest transition-colors ${
-                  activeFilter === tab.id
-                    ? "tab-active text-primary"
-                    : "text-base-content/50 hover:text-base-content/80"
-                }`}
+                className={`tab tab-lg font-mono text-base md:text-lg tracking-widest transition-colors gap-2 ${activeFilter === tab.id
+                  ? "tab-active text-primary"
+                  : "text-base-content/50 hover:text-base-content/80"
+                  }`}
                 onClick={() => setActiveFilter(tab.id)}
               >
+                <span className="text-lg md:text-xl">{tab.icon}</span>
                 {tab.label.toUpperCase()}
               </button>
             ))}
@@ -111,7 +110,7 @@ const LobbyPageContent = () => {
             {myActiveRoom > 0 ? (
               <Link
                 href={`/arena?roomId=${myActiveRoom}`}
-                className="btn btn-sm border-2 border-accent bg-accent/10 font-mono text-xs tracking-widest text-accent hover:bg-accent/20"
+                className="btn btn-md border-2 border-accent bg-accent/10 font-mono text-sm tracking-widest text-accent hover:bg-accent/20"
               >
                 IN ROOM #{myActiveRoom} &rarr;
               </Link>
@@ -119,7 +118,7 @@ const LobbyPageContent = () => {
               <QuickMatchButton roomIds={roomIds} onNoMatch={() => setIsNoMatchOpen(true)} autoMatch={isQuickMatch} />
             )}
             <UsdcFaucet />
-            <div className="hidden text-xs tracking-widest text-base-content/40 md:block">
+            <div className="hidden text-sm tracking-widest text-base-content/40 md:block">
               {isLoadingCount ? (
                 <span className="loading loading-dots loading-xs" />
               ) : (
@@ -150,7 +149,7 @@ const LobbyPageContent = () => {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              <RoomGrid roomIds={roomIds} filter={activeFilter} connectedAddress={connectedAddress} />
+              <RoomGrid roomIds={roomIds} filter={activeFilter} />
             </motion.div>
           </AnimatePresence>
         )}
@@ -196,25 +195,86 @@ const LobbyPageContent = () => {
   );
 };
 
+const TabEmptyState = () => (
+  <div className="flex w-full flex-col items-center justify-center py-16 px-4">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="flex flex-col items-center gap-5"
+    >
+      <motion.img
+        src="/icon-group.png"
+        alt="No rooms"
+        className="w-28 h-28 md:w-36 md:h-36 opacity-40"
+        animate={{
+          y: [0, -6, 0],
+        }}
+        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <div className="text-center">
+        <p
+          className="font-mono text-sm font-bold tracking-[0.15em] uppercase mb-1"
+          style={{ color: "#39d353" }}
+        >
+          No Rooms Here
+        </p>
+        <p className="font-mono text-xs tracking-wider text-base-content/40 max-w-xs">
+          No rooms match this filter yet. Create a room or check back later.
+        </p>
+      </div>
+    </motion.div>
+  </div>
+);
+
 const RoomGrid = ({
   roomIds,
   filter,
-  connectedAddress,
 }: {
   roomIds: bigint[];
   filter: FilterTab;
-  connectedAddress: string | undefined;
 }) => {
+  const [visibilityMap, setVisibilityMap] = useState<Record<string, boolean>>({});
+
+  // Reset visibility map when filter changes
+  useEffect(() => {
+    setVisibilityMap({});
+  }, [filter]);
+
+  const handleVisibility = useCallback((id: string, isVisible: boolean) => {
+    setVisibilityMap(prev => {
+      if (prev[id] === isVisible) return prev;
+      return { ...prev, [id]: isVisible };
+    });
+  }, []);
+
   if (roomIds.length === 0) {
-    return null;
+    return <TabEmptyState />;
   }
 
+  const reportedCount = Object.keys(visibilityMap).length;
+  const visibleCount = Object.values(visibilityMap).filter(Boolean).length;
+  const allReported = reportedCount >= roomIds.length;
+  const showEmpty = allReported && visibleCount === 0;
+
   return (
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {roomIds.map(id => (
-        <FilteredRoomCard key={id.toString()} roomId={id} filter={filter} connectedAddress={connectedAddress} />
-      ))}
-    </div>
+    <>
+      <div
+        className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        style={showEmpty ? { display: "none" } : undefined}
+      >
+        {roomIds.map(id => (
+          <FilteredRoomCard
+            key={id.toString()}
+            roomId={id}
+            filter={filter}
+            connectedAddress={connectedAddress}
+            onVisibility={handleVisibility}
+          />
+        ))}
+      </div>
+      {showEmpty && <TabEmptyState />}
+    </>
   );
 };
 
@@ -222,10 +282,12 @@ const FilteredRoomCard = ({
   roomId,
   filter,
   connectedAddress,
+  onVisibility,
 }: {
   roomId: bigint;
   filter: FilterTab;
   connectedAddress: string | undefined;
+  onVisibility?: (id: string, visible: boolean) => void;
 }) => {
   const { data: roomInfo } = useScaffoldReadContract({
     contractName: "TuringArena",
@@ -239,6 +301,17 @@ const FilteredRoomCard = ({
     args: [roomId],
   });
 
+  const room = roomInfo ? (roomInfo as unknown as { phase: number }) : null;
+  const phase = room ? Number(room.phase) : null;
+  const filterConfig = FILTER_TABS.find(t => t.id === filter);
+  const isVisible = phase !== null && filterConfig?.phaseRange ? filterConfig.phaseRange.includes(phase) : false;
+
+  useEffect(() => {
+    if (phase !== null && onVisibility) {
+      onVisibility(roomId.toString(), isVisible);
+    }
+  }, [phase, isVisible, onVisibility, roomId]);
+
   if (!roomInfo) {
     return (
       <div className="glass-panel cyber-border flex h-52 animate-pulse items-center justify-center rounded-lg p-4">
@@ -247,22 +320,7 @@ const FilteredRoomCard = ({
     );
   }
 
-  const room = roomInfo as unknown as { phase: number };
-  const phase = Number(room.phase);
-
-  // "My Games" filter: only show rooms where connected address is a player
-  if (filter === "mine") {
-    if (!connectedAddress || !players) return null;
-    const isInRoom = (players as string[]).some(p => p.toLowerCase() === connectedAddress.toLowerCase());
-    if (!isInRoom) return null;
-    return <RoomCard roomId={roomId} />;
-  }
-
-  // Phase-based filters
-  const filterConfig = FILTER_TABS.find(t => t.id === filter);
-  if (filterConfig?.phaseRange && !filterConfig.phaseRange.includes(phase)) {
-    return null;
-  }
+  if (!isVisible) return null;
 
   return <RoomCard roomId={roomId} />;
 };
