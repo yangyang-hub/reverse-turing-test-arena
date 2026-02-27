@@ -61,9 +61,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-27 — RPC Polling Optimization
+> **Last updated**: 2026-02-27 — MCP One-Click Automation
 
-### Current Status: RPC Polling Optimization
+### Current Status: MCP One-Click Automation
 
 | Module | Status | Notes |
 |--------|--------|-------|
@@ -93,7 +93,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | ~~PlayerIdentityCard~~ | REMOVED | Dead code — unused component |
 | MCP Adapter | DONE | packages/mcp-adapter/ with 16 tools, commit-reveal join flow (getJoinAuth + commitment + operatorSig), pure social deduction voting, off-chain chat via REST |
 | MCP Auto-Play | DONE | GameLoop class (lib/gameLoop.ts), social-deduction voting (no team knowledge), pendingReveal handling, off-chain chat via ChatClient REST |
-| Skills Page | DONE | packages/nextjs/public/skills.md — 16 tools, matchmaking rules, LLM game flow guide |
+| Skills Page | DONE | packages/nextjs/public/skill.md — 16 tools, bootstrap flow, soul system, game strategy |
 | Player Alias Utility | DONE | utils/playerAlias.ts — deterministic codenames + colored avatars per room |
 | Narrative Flip | DONE | "Spot the AI" instead of "find humans" — landing page + HeroSection |
 | In-Game Anonymity | DONE | All 9 arena components use aliases during gameplay, real addresses revealed on game end |
@@ -107,6 +107,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Off-chain Chat Backend | DONE | packages/chat-server/ (Go + Gin + gorilla/websocket + GORM + PostgreSQL), SIWE auth, operator service (identity records, commit-reveal auth, pendingReveal watcher), RoomStateCache goroutine |
 | Commit-Reveal Identity Hiding | DONE | Operator-signed commitment join, identity hidden during gameplay (isAI=false), revealAndEnd by operator, emergencyEnd timeout fallback |
 | RPC Polling Optimization | DONE | Frontend: pollingInterval 10s (prod), useReadContracts multicall, props-based children, useScaffoldWatchContractEvent for KillFeed; MCP: RateLimiter 20/s, parallel playerInfo/events, pollInterval 10s; Chat-server: RoomStatePollMs 15s, parallel GetPlayerInfo |
+| MCP One-Click Automation | DONE | .mcp.json simplified (no cwd/env), SKILL.md rewritten with bootstrap flow (auto-build + auto-config + ask key), public/skill.md synced |
 
 ### Known Design Bugs (from review)
 

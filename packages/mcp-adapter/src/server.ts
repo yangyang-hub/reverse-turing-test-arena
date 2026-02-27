@@ -26,8 +26,8 @@ const server = new McpServer({
 });
 
 // 创建 RPC 提供者，用于连接区块链节点
-// 优先使用环境变量中的 RPC URL，否则使用本地 Anvil 节点（端口 8545）
-const provider = new ethers.JsonRpcProvider(process.env.RPC_URL || "http://127.0.0.1:8545");
+// 默认连接 Monad Testnet，可通过 RPC_URL 环境变量覆盖
+const provider = new ethers.JsonRpcProvider(process.env.RPC_URL || "https://testnet-rpc.monad.xyz");
 
 // ============ 日志工具 ============
 // 格式化时间戳
@@ -94,10 +94,10 @@ let playerWallet: ethers.Wallet | null = null;
 // 当前活跃的游戏循环（同一时间只能有一个自动玩游戏循环）
 let activeGameLoop: GameLoop | null = null;
 
-// 从环境变量读取合约地址，如果未设置则为空字符串
-const ARENA_CONTRACT = process.env.ARENA_CONTRACT_ADDRESS || ""; // 竞技场合约地址
-const PAYMENT_TOKEN = process.env.PAYMENT_TOKEN_ADDRESS || ""; // 支付代币（USDC）地址
-const CHAT_SERVER_URL = process.env.CHAT_SERVER_URL || "http://localhost:43001"; // 链下聊天服务 URL
+// 合约地址和服务 URL（Monad Testnet 默认值，可通过环境变量覆盖）
+const ARENA_CONTRACT = process.env.ARENA_CONTRACT_ADDRESS || "0x7f2c68257d19e79c940f81bf5ceed91f2cac8dda";
+const PAYMENT_TOKEN = process.env.PAYMENT_TOKEN_ADDRESS || "0x534b2f3A21130d7a60830c2Df862319e593943A3";
+const CHAT_SERVER_URL = process.env.CHAT_SERVER_URL || "http://100.87.45.72:43001";
 
 // 链下聊天客户端（在 init_session 后初始化）
 let chatClient: ChatClient | null = null;
@@ -1319,9 +1319,21 @@ server.tool(
 // ============ 启动服务器 ============
 // 主函数：创建传输层并连接服务器
 async function main() {
+  // 如果设置了 PLAYER_PRIVATE_KEY 环境变量，自动初始化钱包
+  const envKey = process.env.PLAYER_PRIVATE_KEY;
+  if (envKey) {
+    try {
+      playerWallet = new ethers.Wallet(envKey, provider);
+      chatClient = new ChatClient(CHAT_SERVER_URL, playerWallet);
+      console.error(`[AUTO-INIT] Wallet initialized from PLAYER_PRIVATE_KEY: ${playerWallet.address}`);
+    } catch (error) {
+      console.error(`[AUTO-INIT] Failed to initialize wallet from PLAYER_PRIVATE_KEY: ${error}`);
+    }
+  }
+
   const transport = new StdioServerTransport(); // 创建标准输入输出传输层
   await server.connect(transport); // 连接服务器到传输层
-  console.error("RTTA Arena MCP Server running (16 tools available)..."); // 输出错误日志（MCP 协议要求使用 stderr）
+  console.error("RTTA Arena MCP Server running (16 tools available)...");
 }
 
 // 启动服务器并捕获任何错误

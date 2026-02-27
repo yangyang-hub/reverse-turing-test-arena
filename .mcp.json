@@ -20,17 +20,8 @@
       "args": ["--from", "git+https://github.com/trailofbits/slither-mcp", "slither-mcp"]
     },
     "rtta-arena": {
-      "type": "stdio",
       "command": "node",
-      "args": [
-        "packages/mcp-adapter/dist/server.js"
-      ],
-      "cwd": "/Users/likeben/Documents/hack_code/reverse-turing-test-arena",
-      "env": {
-        "RPC_URL": "https://testnet-rpc.monad.xyz",
-        "ARENA_CONTRACT_ADDRESS": "0x802548316ae3e7a2f662198441a9e27947f5c813",
-        "PRIVATE_KEY": "6bc1131fb1ba56c28a790113572dda7b36b2cbe95f6c28b283c12cb475afc97c"
-      }
+      "args": ["packages/mcp-adapter/dist/server.js"]
     }
   }
 }
