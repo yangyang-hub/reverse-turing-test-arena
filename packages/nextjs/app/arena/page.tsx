@@ -72,6 +72,12 @@ function ArenaContent() {
     args: [roomId] as const,
   });
 
+  const { data: isPendingReveal } = useScaffoldReadContract({
+    contractName: "TuringArena",
+    functionName: "pendingReveal",
+    args: [roomId] as const,
+  });
+
   const { data: blockNumber } = useBlockNumber({ watch: true });
 
   // Game end data
@@ -105,10 +111,20 @@ function ArenaContent() {
     }));
   }, [allPlayers, roomId, arenaInfo]);
 
-  const { data: batchedPlayerInfos } = useReadContracts({
+  const { data: batchedPlayerInfos, refetch: refetchPlayerInfos } = useReadContracts({
     contracts: playerInfoContracts,
-    query: { enabled: playerInfoContracts.length > 0 },
+    query: {
+      enabled: playerInfoContracts.length > 0,
+      refetchInterval: 10_000,
+    },
   });
+
+  // Refetch player info immediately when round advances (settle applies HP damage)
+  useEffect(() => {
+    if (currentRoundData !== undefined && currentRoundData > 0n) {
+      refetchPlayerInfos();
+    }
+  }, [currentRoundData, refetchPlayerInfos]);
 
   // Build playerInfoMap: lowercase address → PlayerInfo
   const playerInfoMap = useMemo<Record<string, PlayerInfo>>(() => {
@@ -149,6 +165,7 @@ function ArenaContent() {
 
   // Derive phase early so we can skip WebSocket for ended rooms
   const phase = typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
+  const pendingReveal = Boolean(isPendingReveal);
 
   // WebSocket chat connection — single instance for the whole arena page
   // For ended rooms (phase=2), use REST to fetch historical messages (no signature needed)
@@ -336,14 +353,16 @@ function ArenaContent() {
           <div className="h-4 w-px bg-gray-700" />
           <div className="flex items-center gap-2">
             <span className="text-gray-500 font-mono text-xs">PHASE</span>
-            <span className={`font-mono text-sm font-bold ${phaseColor}`}>{phaseLabel}</span>
+            <span className={`font-mono text-sm font-bold ${pendingReveal ? "text-orange-400" : phaseColor}`}>
+              {pendingReveal ? "PENDING REVEAL" : phaseLabel}
+            </span>
           </div>
           <div className="h-4 w-px bg-gray-700" />
           <div className="flex items-center gap-2">
             <span className="text-gray-500 font-mono text-xs">ROUND</span>
             <span className="text-white font-mono text-sm font-bold">{currentRound}</span>
           </div>
-          {isGameActive && (
+          {isGameActive && !pendingReveal && (
             <>
               <div className="h-4 w-px bg-gray-700" />
               <div className="flex items-center gap-2">
@@ -372,13 +391,29 @@ function ArenaContent() {
               {(Number(prizePool) / 1e6).toFixed(2)} USDC
             </span>
           </div>
-          {isPlayerInGame && phase !== 2 && (
+          {isPlayerInGame && phase !== 2 && !pendingReveal && (
             <>
               <div className="h-4 w-px bg-gray-700" />
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                 <span className="text-green-400 font-mono text-xs">IN GAME</span>
               </div>
+            </>
+          )}
+          {pendingReveal && phase === 1 && (
+            <>
+              <div className="h-4 w-px bg-gray-700" />
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+                <span className="text-orange-400 font-mono text-xs">AWAITING REVEAL</span>
+              </div>
+              <div className="h-4 w-px bg-gray-700" />
+              <Link
+                href="/lobby"
+                className="px-3 py-1 border border-cyan-500/50 text-cyan-400 font-mono text-xs hover:bg-cyan-500/10 transition-colors rounded"
+              >
+                BACK TO LOBBY
+              </Link>
             </>
           )}
           {phase === 2 && (
@@ -397,7 +432,7 @@ function ArenaContent() {
               </button>
             </>
           )}
-          {canSettle && (
+          {canSettle && !pendingReveal && (
             <>
               <div className="h-4 w-px bg-gray-700" />
               <button
@@ -480,6 +515,7 @@ function ArenaContent() {
             roomInfo={roomInfo}
             roundNum={currentRoundData}
             blockNumber={blockNumber}
+            pendingReveal={pendingReveal}
           />
         </div>
       </div>

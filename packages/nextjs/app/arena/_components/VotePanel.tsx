@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useAccount } from "wagmi";
 import type { PlayerInfo } from "~~/app/arena/page";
@@ -15,6 +15,7 @@ export function VotePanel({
   roomInfo,
   roundNum,
   blockNumber,
+  pendingReveal,
 }: {
   roomId: bigint;
   nameMap?: Record<string, string>;
@@ -23,8 +24,10 @@ export function VotePanel({
   roomInfo: any;
   roundNum: bigint | undefined;
   blockNumber: bigint | undefined;
+  pendingReveal: boolean;
 }) {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
+  const [localVotedRound, setLocalVotedRound] = useState<bigint | null>(null);
   const { address: connectedAddress } = useAccount();
 
   const zeroAddr = "0x0000000000000000000000000000000000000000" as const;
@@ -35,7 +38,15 @@ export function VotePanel({
     query: { enabled: !!roundNum && roundNum > 0n && !!connectedAddress },
   });
 
-  const hasVotedThisRound = Boolean(hasVotedOnChain);
+  // Optimistic lock: treat as voted if chain confirms OR local vote was cast this round
+  const hasVotedThisRound = Boolean(hasVotedOnChain) || (localVotedRound !== null && localVotedRound === roundNum);
+
+  // Reset local lock when round advances
+  useEffect(() => {
+    if (roundNum !== undefined && localVotedRound !== null && roundNum !== localVotedRound) {
+      setLocalVotedRound(null);
+    }
+  }, [roundNum, localVotedRound]);
 
   const { writeContractAsync, isMining } = useScaffoldWriteContract({
     contractName: "TuringArena",
@@ -68,7 +79,7 @@ export function VotePanel({
     ? allPlayers.some(p => p.toLowerCase() === connectedAddress.toLowerCase())
     : false;
   // Channel exclusivity is enforced server-side — no need to check isAI here
-  const canVote = isGameActive && isMyPlayerAlive && isPlayerInGame && !hasVotedThisRound;
+  const canVote = isGameActive && isMyPlayerAlive && isPlayerInGame && !hasVotedThisRound && !pendingReveal;
 
   const handleVote = async () => {
     if (!selectedTarget || !canVote) return;
@@ -78,6 +89,7 @@ export function VotePanel({
         functionName: "castVote",
         args: [roomId, selectedTarget],
       });
+      setLocalVotedRound(roundNum ?? null);
       setSelectedTarget(null);
     } catch (err) {
       console.error("Vote failed:", err);
@@ -96,7 +108,7 @@ export function VotePanel({
       </div>
 
       {/* Round Countdown */}
-      {isGameActive && currentInterval > 0 && lastSettleBlock > 0 && (
+      {isGameActive && currentInterval > 0 && lastSettleBlock > 0 && !pendingReveal && (
         <RoundCountdown
           blocksRemaining={blocksRemaining}
           progress={progress}
@@ -133,6 +145,20 @@ export function VotePanel({
             <div className="w-2 h-2 rounded-full bg-green-400" />
             <span className="text-green-400 font-mono text-xs">VOTE CAST - Awaiting round settlement</span>
           </div>
+        </div>
+      )}
+
+      {pendingReveal && (
+        <div className="mx-4 mt-3 px-3 py-2 border border-orange-500/50 bg-orange-950/20 rounded">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+            <span className="text-orange-400 font-mono text-xs">
+              GAME ENDING - Awaiting operator identity reveal...
+            </span>
+          </div>
+          <p className="text-gray-500 font-mono text-[10px] mt-1">
+            Voting is locked. Identities will be revealed shortly.
+          </p>
         </div>
       )}
 
@@ -295,31 +321,6 @@ function RoundCountdown({
   isExpired: boolean;
   currentInterval: number;
 }) {
-  // Estimate seconds (~1s per block on Anvil/Monad)
-  const secondsLeft = blocksRemaining;
-
-  // Interpolated countdown (smooth second-by-second)
-  const [displaySeconds, setDisplaySeconds] = useState(secondsLeft);
-  const lastBlockSecondsRef = useRef(secondsLeft);
-
-  useEffect(() => {
-    lastBlockSecondsRef.current = secondsLeft;
-    setDisplaySeconds(secondsLeft);
-  }, [secondsLeft]);
-
-  useEffect(() => {
-    if (isExpired || lastBlockSecondsRef.current <= 0) return;
-    const timer = setInterval(() => {
-      setDisplaySeconds(prev => Math.max(0, prev - 1));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [isExpired, secondsLeft]);
-
-  const smoothMinutes = Math.floor(displaySeconds / 60);
-  const smoothSeconds = displaySeconds % 60;
-  const smoothTimeDisplay =
-    smoothMinutes > 0 ? `${smoothMinutes}:${String(smoothSeconds).padStart(2, "0")}` : `${smoothSeconds}s`;
-
   const barColor = isExpired
     ? "bg-orange-500"
     : isUrgent
@@ -356,7 +357,7 @@ function RoundCountdown({
           <span className="text-orange-400 font-mono text-sm font-bold animate-pulse">SETTLING...</span>
         ) : (
           <span className={`font-mono text-lg font-bold tabular-nums ${textColor} ${isUrgent ? "animate-pulse" : ""}`}>
-            {smoothTimeDisplay}
+            {blocksRemaining} <span className="text-xs font-normal">blocks</span>
           </span>
         )}
       </div>
@@ -370,8 +371,10 @@ function RoundCountdown({
       </div>
 
       <div className="flex items-center justify-between mt-1">
-        <span className="text-gray-600 font-mono text-[10px]">{blocksRemaining} blocks</span>
-        <span className="text-gray-600 font-mono text-[10px]">{currentInterval} total</span>
+        <span className="text-gray-600 font-mono text-[10px]">
+          {blocksRemaining} / {currentInterval}
+        </span>
+        <span className="text-gray-600 font-mono text-[10px]">{Math.round(progress * 100)}%</span>
       </div>
     </div>
   );
