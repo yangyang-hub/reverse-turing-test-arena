@@ -25,6 +25,7 @@ const FILTER_TABS: { id: FilterTab; label: string; phaseRange: number[] | null }
 const LobbyPageContent = () => {
   const [activeFilter, setActiveFilter] = useState<FilterTab>("mine");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isNoMatchOpen, setIsNoMatchOpen] = useState(false);
   const { address: connectedAddress } = useAccount();
   const searchParams = useSearchParams();
   const isQuickMatch = searchParams.get("quickMatch") === "true";
@@ -115,7 +116,7 @@ const LobbyPageContent = () => {
                 IN ROOM #{myActiveRoom} &rarr;
               </Link>
             ) : (
-              <QuickMatchButton roomIds={roomIds} onNoMatch={() => setIsModalOpen(true)} autoMatch={isQuickMatch} />
+              <QuickMatchButton roomIds={roomIds} onNoMatch={() => setIsNoMatchOpen(true)} autoMatch={isQuickMatch} />
             )}
             <UsdcFaucet />
             <div className="hidden text-xs tracking-widest text-base-content/40 md:block">
@@ -178,6 +179,16 @@ const LobbyPageContent = () => {
 
       {/* Create Room Modal */}
       <CreateRoomModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+
+      {/* No Match Dialog */}
+      <NoMatchModal
+        isOpen={isNoMatchOpen}
+        onClose={() => setIsNoMatchOpen(false)}
+        onCreateRoom={() => {
+          setIsNoMatchOpen(false);
+          setIsModalOpen(true);
+        }}
+      />
 
       {/* Auto-navigate to arena when a joined room becomes Active */}
       {connectedAddress && roomIds.length > 0 && <RoomPhaseWatcher roomIds={roomIds} />}
@@ -321,6 +332,103 @@ const EmptyState = ({ onCreateClick }: { onCreateClick: () => void }) => (
       </div>
     </div>
   </div>
+);
+
+const NoMatchModal = ({
+  isOpen,
+  onClose,
+  onCreateRoom,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onCreateRoom: () => void;
+}) => (
+  <AnimatePresence>
+    {isOpen && (
+      <>
+        {/* Backdrop */}
+        <motion.div
+          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        />
+        {/* Dialog */}
+        <motion.div
+          className="fixed inset-0 z-[101] flex items-center justify-center p-4"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          transition={{ type: "spring", duration: 0.4, bounce: 0.2 }}
+        >
+          <div
+            className="relative w-full max-w-md overflow-hidden rounded-xl"
+            style={{
+              background: "linear-gradient(180deg, #141014 0%, #0d0d1a 100%)",
+              border: "1px solid rgba(139,105,20,0.4)",
+              boxShadow: "0 0 40px rgba(0,0,0,0.6), 0 0 20px rgba(139,105,20,0.1)",
+            }}
+          >
+            {/* Close button */}
+            <button
+              className="absolute top-3 right-3 z-10 h-7 w-7 flex items-center justify-center rounded-full text-base-content/40 hover:text-base-content/80 hover:bg-base-content/10 transition-colors"
+              onClick={onClose}
+            >
+              ✕
+            </button>
+
+            {/* Image */}
+            <img
+              src="/nomatch.jpg"
+              alt="No match"
+              className="w-full h-40 object-cover object-top"
+              style={{ borderBottom: "1px solid rgba(139,105,20,0.2)" }}
+            />
+
+            {/* Content */}
+            <div className="px-6 py-5 text-center">
+              <h3
+                className="font-mono text-lg font-black tracking-[0.12em] uppercase mb-2"
+                style={{ color: "#C9A84C" }}
+              >
+                No Matching Rooms
+              </h3>
+              <p className="font-mono text-xs tracking-wider text-base-content/50 leading-relaxed mb-6">
+                No rooms match your current filters.
+                <br />
+                You can adjust filters and try again, or create a brand new room.
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  className="btn btn-sm flex-1 font-mono text-xs tracking-widest text-base-content/50 border-base-content/15 bg-transparent hover:bg-base-content/5"
+                  onClick={onClose}
+                >
+                  CLOSE
+                </button>
+                <button
+                  className="group/btn relative flex-1 overflow-hidden font-mono text-xs font-bold tracking-[0.15em] uppercase px-4 py-2 rounded-lg transition-all duration-300 active:scale-95 cursor-pointer bronze-pulse"
+                  style={{
+                    background: "linear-gradient(135deg, #8B6914 0%, #C9A84C 50%, #8B6914 100%)",
+                    color: "#1a1408",
+                    border: "1px solid #C9A84C",
+                  }}
+                  onClick={onCreateRoom}
+                >
+                  <div
+                    className="absolute inset-0 [transform:skew(-20deg)_translateX(-180%)] group-hover/btn:[transform:skew(-20deg)_translateX(180%)] group-hover/btn:duration-700"
+                    style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)" }}
+                  />
+                  <span className="relative z-10">⚔ CREATE ROOM</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </>
+    )}
+  </AnimatePresence>
 );
 
 const UsdcFaucet = () => {
