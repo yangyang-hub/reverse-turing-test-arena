@@ -101,12 +101,14 @@ func (r *ChainReader) GetRoomInfo(ctx context.Context, roomId int) (*RoomInfo, e
 	if err != nil {
 		return nil, err
 	}
-
-	// Anonymous struct → convert via abi.ConvertType
-	var room roomTuple
-	if err := r.abi.Methods["getRoomInfo"].Outputs.Copy(&room, repacked); err != nil {
-		return nil, fmt.Errorf("failed to copy room tuple: %w", err)
+	if len(repacked) == 0 {
+		return nil, fmt.Errorf("empty output from getRoomInfo")
 	}
+
+	// Anonymous struct → convert via abi.ConvertType (not Outputs.Copy which maps per-field)
+	var room roomTuple
+	converted := abi.ConvertType(repacked[0], room)
+	room = converted.(roomTuple)
 
 	return &RoomInfo{
 		Phase:       room.Phase,
@@ -213,11 +215,13 @@ func (r *ChainReader) GetPlayerInfo(ctx context.Context, roomId int, addr string
 	if err != nil {
 		return nil, err
 	}
+	if len(repacked) == 0 {
+		return nil, fmt.Errorf("empty output from getPlayerInfo")
+	}
 
 	var player playerTuple
-	if err := r.abi.Methods["getPlayerInfo"].Outputs.Copy(&player, repacked); err != nil {
-		return nil, fmt.Errorf("failed to copy player tuple: %w", err)
-	}
+	converted := abi.ConvertType(repacked[0], player)
+	player = converted.(playerTuple)
 
 	return &PlayerInfo{
 		Address:       strings.ToLower(player.Addr.Hex()),
