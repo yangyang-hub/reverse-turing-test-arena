@@ -57,6 +57,7 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
     contractName: "TuringArena",
     functionName: "getAllPlayers",
     args: [roomId],
+    watch: false, // Player list rarely changes; refreshed on page visit
   });
 
   const { writeContractAsync: writeArena, isMining } = useScaffoldWriteContract({
@@ -69,6 +70,7 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
     contractName: "TuringArena",
     functionName: "getRewardInfo",
     args: [roomId, connectedAddress ?? "0x0000000000000000000000000000000000000000"] as const,
+    watch: false, // Only relevant for ended games; doesn't change frequently
   });
 
   if (isLoading || !roomInfo) {

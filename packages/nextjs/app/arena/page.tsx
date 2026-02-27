@@ -64,6 +64,7 @@ function ArenaContent() {
     contractName: "TuringArena",
     functionName: "getAllPlayers",
     args: [roomId] as const,
+    watch: false, // Player list doesn't change during active gameplay
   });
 
   const { data: currentRoundData } = useScaffoldReadContract({
@@ -80,23 +81,26 @@ function ArenaContent() {
 
   const { data: blockNumber } = useBlockNumber({ watch: true });
 
-  // Game end data
-  const { data: gameStats } = useScaffoldReadContract({
+  // Game end data — no per-block polling (refetched manually on phase transition)
+  const { data: gameStats, refetch: refetchGameStats } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getGameStats",
     args: [roomId] as const,
+    watch: false,
   });
 
   const { data: rewardInfo } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getRewardInfo",
     args: [roomId, connectedAddress ?? "0x0000000000000000000000000000000000000000"] as const,
+    watch: false,
   });
 
   const { data: playerNames } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getRoomPlayerNames",
     args: [roomId] as const,
+    watch: false, // Names don't change during active gameplay
   });
 
   // Batch-fetch all player info via multicall (replaces N individual hooks in children)
@@ -200,10 +204,11 @@ function ArenaContent() {
   const prevPhaseRef = useRef(phase);
   useEffect(() => {
     if (phase === 2 && prevPhaseRef.current !== 2 && prevPhaseRef.current !== 0) {
-      setShowVictory(true);
+      // Refetch gameStats before showing victory — avoids stale default (humansWon=false)
+      refetchGameStats().then(() => setShowVictory(true));
     }
     prevPhaseRef.current = phase;
-  }, [phase]);
+  }, [phase, refetchGameStats]);
 
   if (!rawRoomId || roomId === undefined) {
     return (
@@ -479,7 +484,7 @@ function ArenaContent() {
               </div>
               <div className="h-4 w-px bg-gray-700" />
               <button
-                onClick={() => setShowVictory(true)}
+                onClick={() => refetchGameStats().then(() => setShowVictory(true))}
                 className="px-3 py-1 border border-yellow-500/50 text-yellow-400 font-mono text-xs hover:bg-yellow-900/20 hover:border-yellow-500 transition-colors rounded"
               >
                 VIEW RESULTS

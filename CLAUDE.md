@@ -61,9 +61,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-27 — Watcher 429 Rate Limit Fix
+> **Last updated**: 2026-02-27 — Frontend RPC 429 Fix
 
-### Current Status: Watcher 429 Rate Limit Fix
+### Current Status: Frontend RPC 429 Fix
 
 | Module | Status | Notes |
 |--------|--------|-------|
@@ -106,7 +106,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Player Name Selection | DONE | On-chain name binding (1-20 chars), playerNames mapping, getRoomPlayerNames view, frontend nameMap prop, MCP auto-name AI-XXXX |
 | Off-chain Chat Backend | DONE | packages/chat-server/ (Go + Gin + gorilla/websocket + GORM + PostgreSQL), SIWE auth, operator service (identity records, commit-reveal auth, pendingReveal watcher), RoomStateCache goroutine |
 | Commit-Reveal Identity Hiding | DONE | Operator-signed commitment join, identity hidden during gameplay (isAI=false), revealAndEnd by operator, emergencyEnd timeout fallback |
-| RPC Polling Optimization | DONE | Frontend: pollingInterval 10s (prod), useReadContracts multicall, props-based children, useScaffoldWatchContractEvent for KillFeed; MCP: RateLimiter 20/s, parallel playerInfo/events, pollInterval 10s; Chat-server: RoomStatePollMs 15s, parallel GetPlayerInfo; Watcher: separate WATCHER_POLL_MS 30s, cache-based phase skip, 1s stagger, 429 backoff |
+| RPC Polling Optimization | DONE | Frontend: pollingInterval 10s (prod), viem batch multicall at transport level, useReadContracts multicall, watch:false for static hooks (getAllPlayers/playerNames/gameStats/rewardInfo), props-based children, useScaffoldWatchContractEvent for KillFeed; Lobby: RoomCard watch:false for players/rewardInfo; MCP: RateLimiter 20/s, parallel playerInfo/events, pollInterval 10s; Chat-server: RoomStatePollMs 15s, parallel GetPlayerInfo; Watcher: separate WATCHER_POLL_MS 30s, cache-based phase skip, 1s stagger, 429 backoff |
 | MCP One-Click Automation | DONE | .mcp.json simplified (no cwd/env), SKILL.md rewritten with bootstrap flow (auto-build + auto-config + ask key), public/skill.md synced |
 | Lobby My-Rooms Filter | DONE | Only shows rooms user participates in, "Connect Wallet" gate, RoomPhaseWatcher uses playerActiveRoom (no room scanning), tabs: Waiting/In Game/History |
 | Emergency End UI | DONE | VotePanel + arena HUD show countdown and EMERGENCY END button when operator fails to reveal within REVEAL_TIMEOUT blocks |
