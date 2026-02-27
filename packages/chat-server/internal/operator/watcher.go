@@ -208,24 +208,71 @@ func (w *Watcher) getRoomAliveStatus(ctx context.Context, roomId int) (uint64, b
 	return room.AliveCount.Uint64(), room.IsActive, nil
 }
 
-// triggerReveal builds the reveal parameters from DB and sends the transaction.
-func (w *Watcher) triggerReveal(ctx context.Context, roomId int) error {
-	records, err := w.service.GetRoomIdentities(roomId)
+// getAllPlayers calls the contract's getAllPlayers(roomId) view function.
+func (w *Watcher) getAllPlayers(ctx context.Context, roomId int) ([]common.Address, error) {
+	data, err := w.abi.Pack("getAllPlayers", big.NewInt(int64(roomId)))
 	if err != nil {
-		return err
-	}
-	if len(records) == 0 {
-		return fmt.Errorf("no identity records found for room %d", roomId)
+		return nil, err
 	}
 
-	players := make([]common.Address, len(records))
-	isAIs := make([]bool, len(records))
-	salts := make([][32]byte, len(records))
+	result, err := w.client.CallContract(ctx, ethereum.CallMsg{
+		To:   &w.contract,
+		Data: data,
+	}, nil)
+	if err != nil {
+		return nil, err
+	}
 
-	for i, rec := range records {
-		players[i] = common.HexToAddress(rec.Address)
-		isAIs[i] = rec.IsAI
-		saltBytes := common.FromHex(rec.Salt)
+	outputs, err := w.abi.Methods["getAllPlayers"].Outputs.Unpack(result)
+	if err != nil {
+		return nil, err
+	}
+	if len(outputs) == 0 {
+		return nil, nil
+	}
+
+	addrs, ok := outputs[0].([]common.Address)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type for getAllPlayers output: %T", outputs[0])
+	}
+	return addrs, nil
+}
+
+// triggerReveal builds the reveal parameters from DB and sends the transaction.
+// It self-heals missing identity records caused by updateRoomId race conditions
+// (e.g., creator's record stuck at room_id=0).
+func (w *Watcher) triggerReveal(ctx context.Context, roomId int) error {
+	// Get on-chain player list (authoritative source)
+	onChainPlayers, err := w.getAllPlayers(ctx, roomId)
+	if err != nil {
+		return fmt.Errorf("failed to get on-chain players: %w", err)
+	}
+	if len(onChainPlayers) == 0 {
+		return fmt.Errorf("no players found on-chain for room %d", roomId)
+	}
+
+	players := make([]common.Address, len(onChainPlayers))
+	isAIs := make([]bool, len(onChainPlayers))
+	salts := make([][32]byte, len(onChainPlayers))
+
+	for i, addr := range onChainPlayers {
+		players[i] = addr
+		addrLower := strings.ToLower(addr.Hex())
+
+		// Look up identity record — try actual roomId first, then room_id=0 (creator race condition)
+		record, err := w.service.FindIdentityRecord(roomId, addrLower)
+		if err != nil {
+			record, err = w.service.FindIdentityRecord(0, addrLower)
+			if err != nil {
+				return fmt.Errorf("no identity record for player %s in room %d: %w", addrLower, roomId, err)
+			}
+			// Auto-fix: update the stale room_id=0 record
+			log.Printf("[Watcher] Auto-fixing identity room_id for %s: 0 → %d", addrLower, roomId)
+			_ = w.service.UpdateIdentityRoomId(addrLower, roomId)
+		}
+
+		isAIs[i] = record.IsAI
+		saltBytes := common.FromHex(record.Salt)
 		copy(salts[i][:], saltBytes)
 	}
 

@@ -134,6 +134,16 @@ func (s *Service) IsPlayerAI(roomId int, addr string) (bool, error) {
 	return record.IsAI, nil
 }
 
+// FindIdentityRecord finds a single identity record for a player in a room.
+func (s *Service) FindIdentityRecord(roomId int, addr string) (*db.IdentityRecord, error) {
+	var record db.IdentityRecord
+	err := s.database.Where("room_id = ? AND address = ?", roomId, strings.ToLower(addr)).First(&record).Error
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
+}
+
 // GetRoomIdentities returns all identity records for a room.
 func (s *Service) GetRoomIdentities(roomId int) ([]db.IdentityRecord, error) {
 	var records []db.IdentityRecord

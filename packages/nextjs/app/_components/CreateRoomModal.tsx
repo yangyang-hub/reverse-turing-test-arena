@@ -142,10 +142,13 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
       });
       await waitForTransactionReceipt(config, { hash: approveHash });
 
-      await writeContractAsync({
+      const createHash = await writeContractAsync({
         functionName: "createRoom",
         args: [selectedTier, BigInt(parsedMaxPlayers), feeInUnits, commitment, operatorSig, playerName.trim()],
       });
+      if (createHash) {
+        await waitForTransactionReceipt(config, { hash: createHash });
+      }
 
       // Update the creator's identity record with the real room ID (was stored as 0)
       if (connectedAddress && arenaContractInfo) {
