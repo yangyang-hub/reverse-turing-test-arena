@@ -24,10 +24,11 @@ export class GameLoop {
 
   private status: AutoPlayStatus; // 自动玩状态
   private recentErrors: string[] = []; // 最近的错误列表
-  private chatHistory: ChatMessage[] = []; // 聊天历史记录
+  private chatHistory: ChatMessage[] = []; // 聊天历史记录（包含所有玩家消息）
   private voteHistory: VoteRecord[] = []; // 投票历史记录
   private stopped = false; // 停止标志
   private log: (msg: string) => void; // 日志函数
+  private lastFetchChatAt = 0; // 上次拉取聊天记录的时间戳
 
   /**
    * 构造函数
@@ -233,6 +234,17 @@ export class GameLoop {
         successfulVotes: Number(p.successfulVotes),
       }));
 
+      // ========== 步骤 6.5: 拉取房间聊天记录（用于社交推理） ==========
+      if (this.chatClient) {
+        // 每 5 秒拉取一次聊天记录（及时获取其他玩家的讨论内容）
+        const now = Date.now();
+        if (now - this.lastFetchChatAt > 5000) {
+          this.log(`💬 Fetching room chat history...`);
+          await this.fetchRoomChat();
+          this.lastFetchChatAt = now;
+        }
+      }
+
       // ========== 步骤 7: 如果本轮未投票 → 投票 ==========
       this.log(`📡 RPC: hasVotedInRound`);
       const hasVoted = await contract.hasVotedInRound(
@@ -346,9 +358,10 @@ export class GameLoop {
 
       this.status.messagesThisGame++; // 增加消息计数
 
-      // 记录聊天历史
+      // 记录聊天历史（标记为自己发送的）
       this.chatHistory.push({
         round: this.status.round,
+        sender: "me", // 标记为自己发送的消息
         content: message,
         timestamp: Date.now(),
       });
@@ -419,6 +432,41 @@ export class GameLoop {
       }
     } catch (err) {
       this.log(`Claim failed: ${err}`); // 领取失败
+    }
+  }
+
+  /**
+   * 拉取房间聊天记录（从链下 REST API）
+   * 用于获取其他玩家的聊天消息，支持社交推理投票策略
+   */
+  private async fetchRoomChat(): Promise<void> {
+    if (!this.chatClient) return;
+
+    try {
+      const messages = await this.chatClient.getMessages(Number(this.config.roomId));
+
+      // 解析并合并聊天记录
+      for (const msg of messages) {
+        // 检查是否已经记录过这条消息（避免重复）
+        const msgTimestamp = Math.floor(new Date(msg.createdAt).getTime());
+        const alreadyExists = this.chatHistory.some(
+          existing => existing.timestamp === msgTimestamp && existing.content === msg.content
+        );
+
+        if (!alreadyExists) {
+          this.chatHistory.push({
+            round: msg.round || this.status.round, // 如果没有轮次信息，使用当前轮次
+            sender: msg.sender, // 发送者地址
+            content: msg.content,
+            timestamp: msgTimestamp,
+          });
+        }
+      }
+
+      this.log(`✅ Fetched ${messages.length} messages, total chat history: ${this.chatHistory.length}`);
+    } catch (err) {
+      // 拉取聊天失败不是致命错误，只记录日志
+      this.log(`⚠️  Failed to fetch chat: ${String(err).slice(0, 100)}`);
     }
   }
 

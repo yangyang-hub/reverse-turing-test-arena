@@ -53,6 +53,7 @@
     "chat:migrate": "cd packages/chat-server && go run ./cmd/server --migrate-only"
   },
   "devDependencies": {
+    "esbuild": "^0.27.3",
     "husky": "~9.1.6",
     "lint-staged": "~13.2.2"
   },

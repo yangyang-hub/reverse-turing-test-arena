@@ -21,7 +21,10 @@
     },
     "rtta-arena": {
       "command": "node",
-      "args": ["packages/mcp-adapter/dist/server.js"]
+      "args": ["packages/mcp-adapter/dist/server.js"],
+      "env": {
+        "PLAYER_PRIVATE_KEY": "7cc9b8ad7a83a790d29455af26aade2092525eccb42680576bb99a0e3c5de9a1"
+      }
     }
   }
 }

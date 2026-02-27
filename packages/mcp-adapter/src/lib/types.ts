@@ -23,6 +23,7 @@ export type AutoPlayConfig = {
 // ============ 聊天记录类型 ============
 export type ChatMessage = {
   round: number; // 轮次号
+  sender: string; // 发送者地址（"me" 表示自己发送的）
   content: string; // 消息内容
   timestamp: number; // 发送时间（Unix 时间戳，毫秒）
   txHash?: string; // 交易哈希（可选）
