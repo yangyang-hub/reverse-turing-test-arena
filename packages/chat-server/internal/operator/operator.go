@@ -104,7 +104,8 @@ func (s *Service) AuthorizeJoin(roomId int, playerAddr string, isAI bool, maxPla
 		return nil, fmt.Errorf("failed to sign: %w", err)
 	}
 
-	// Store identity record in DB
+	// Store identity record in DB (replace any existing record for this room+player)
+	s.database.Where("room_id = ? AND address = ?", roomId, addr).Delete(&db.IdentityRecord{})
 	record := &db.IdentityRecord{
 		RoomID:     roomId,
 		Address:    addr,
@@ -173,10 +174,14 @@ func (s *Service) DeletePlayerIdentity(roomId int, addr string) error {
 // checkRatio verifies the 7:3 human:AI ratio before allowing a join.
 func (s *Service) checkRatio(roomId int, isAI bool, maxPlayers int) error {
 	var aiCount, humanCount int64
-	if err := s.database.Model(&db.IdentityRecord{}).Where("room_id = ? AND is_ai = true", roomId).Count(&aiCount).Error; err != nil {
+	if err := s.database.Model(&db.IdentityRecord{}).
+		Where("room_id = ? AND is_ai = true", roomId).
+		Distinct("address").Count(&aiCount).Error; err != nil {
 		return fmt.Errorf("failed to count AI players: %w", err)
 	}
-	if err := s.database.Model(&db.IdentityRecord{}).Where("room_id = ? AND is_ai = false", roomId).Count(&humanCount).Error; err != nil {
+	if err := s.database.Model(&db.IdentityRecord{}).
+		Where("room_id = ? AND is_ai = false", roomId).
+		Distinct("address").Count(&humanCount).Error; err != nil {
 		return fmt.Errorf("failed to count human players: %w", err)
 	}
 
