@@ -61,12 +61,13 @@ export type PlayerState = {
   name: string; // 玩家名称
   humanityScore: number; // 人性分
   isAlive: boolean; // 是否存活
-  isAI: boolean; // 是否为 AI
+  isAI: boolean; // 是否为 AI（游戏中始终为 false，reveal 后才有真实值）
   actionCount: number; // 行动次数（聊天 + 投票）
   successfulVotes: number; // 成功投票次数（投中淘汰目标的次数）
 };
 
 // ============ 房间状态类型 ============
+// NOTE: humanCount/aiCount removed — commit-reveal hides identity during gameplay
 export type RoomState = {
   id: string; // 房间 ID
   phase: number; // 游戏阶段编号
@@ -76,8 +77,6 @@ export type RoomState = {
   maxPlayers: number; // 最大玩家数
   playerCount: number; // 当前玩家数
   aliveCount: number; // 存活玩家数
-  humanCount: number; // 人类玩家数
-  aiCount: number; // AI 玩家数
   isActive: boolean; // 是否活跃
   isEnded: boolean; // 是否已结束
   currentInterval: number; // 当前结算间隔（区块数）
@@ -96,6 +95,6 @@ export const DEFAULT_CONFIG: Omit<AutoPlayConfig, "roomId"> = {
   chatStrategy: "phase_aware", // 默认使用阶段感知聊天策略
   chatFrequency: 0.3, // 每次 tick 有 30% 概率发送消息
   settleEnabled: true, // 启用自动结算
-  pollIntervalMs: 5000, // 每 5 秒 tick 一次
+  pollIntervalMs: 10000, // 每 10 秒 tick 一次（降低 RPC 压力）
   maxRounds: 100, // 最多玩 100 轮（安全限制）
 };

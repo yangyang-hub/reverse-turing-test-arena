@@ -89,8 +89,6 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
     maxPlayers: number;
     playerCount: number;
     creator: string;
-    humanCount: number;
-    aiCount: number;
   };
 
   const tierIndex = Number(room.tier);
@@ -190,14 +188,6 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
         <div className="flex flex-col">
           <span className="text-xs text-base-content/40">ENTRY FEE</span>
           <span className="font-mono text-sm text-secondary">{formatUnits(entryFee, 6)} USDC</span>
-        </div>
-        <div className="flex flex-col">
-          <span className="text-xs text-base-content/40">HUMANS / AI</span>
-          <span className="font-mono text-sm">
-            <span className="text-green-400">{Number(room.humanCount)}</span>
-            <span className="text-base-content/30"> / </span>
-            <span className="text-red-400">{Number(room.aiCount)}</span>
-          </span>
         </div>
         <div className="flex flex-col">
           <span className="text-xs text-base-content/40">PRIZE POOL</span>

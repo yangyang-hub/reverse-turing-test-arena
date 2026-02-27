@@ -5,6 +5,7 @@ import { readContract, waitForTransactionReceipt } from "@wagmi/core";
 import { erc20Abi, formatUnits } from "viem";
 import { useAccount, useConfig, useWriteContract } from "wagmi";
 import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useChatAuth } from "~~/hooks/scaffold-eth/useChatAuth";
 import { notification } from "~~/utils/scaffold-eth";
 
 type MatchFilters = {
@@ -51,6 +52,8 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
 
   const { writeContractAsync: writeErc20 } = useWriteContract();
 
+  const { getJoinAuth } = useChatAuth();
+
   // Close panel on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -69,6 +72,10 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
     }
     if (!arenaContractInfo?.address || !arenaContractInfo.abi) {
       notification.error("Contract data not loaded yet. Please wait and try again.");
+      return;
+    }
+    if (!paymentTokenAddr) {
+      notification.error("Payment token not loaded yet. Please wait and try again.");
       return;
     }
 
@@ -100,7 +107,6 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
           maxPlayers: bigint;
           playerCount: bigint;
           entryFee: bigint;
-          humanCount: bigint;
         };
 
         const phase = Number(roomInfo.phase);
@@ -112,11 +118,6 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
         if (maxPlayers < matchFilters.minPlayers || maxPlayers > matchFilters.maxPlayers) continue;
         if (entryFee < feeMinWei || entryFee > feeMaxWei) continue;
 
-        // Check human slot availability (web players = human)
-        const aiSlots = Math.max(1, Math.floor((maxPlayers * 30) / 100));
-        const humanSlots = maxPlayers - aiSlots;
-        if (Number(roomInfo.humanCount) >= humanSlots) continue;
-
         // Found a joinable room — contract enforces single-room limit via playerActiveRoom
         notification.remove(notifId);
         const joinNotifId = notification.loading(
@@ -124,6 +125,9 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
         );
 
         try {
+          // Get commitment + operator signature from chat-server
+          const { commitment, operatorSig } = await getJoinAuth(Number(roomId), false, maxPlayers);
+
           const approveHash = await writeErc20({
             address: paymentTokenAddr as `0x${string}`,
             abi: erc20Abi,
@@ -134,7 +138,7 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
 
           await writeArena({
             functionName: "joinRoom",
-            args: [roomId, false, trimmedName],
+            args: [roomId, commitment, operatorSig, trimmedName],
           });
 
           notification.remove(joinNotifId);

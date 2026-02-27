@@ -2,24 +2,23 @@
 
 import { Address } from "@scaffold-ui/components";
 import { useAccount } from "wagmi";
-import { useScaffoldReadContract, useTargetNetwork } from "~~/hooks/scaffold-eth";
+import type { PlayerInfo } from "~~/app/arena/page";
+import { useTargetNetwork } from "~~/hooks/scaffold-eth";
 import { getPlayerAlias } from "~~/utils/playerAlias";
 
-export function PlayerRadar({ roomId, nameMap }: { roomId: bigint; nameMap?: Record<string, string> }) {
+export function PlayerRadar({
+  nameMap,
+  playerInfoMap,
+  allPlayers,
+  roomInfo,
+}: {
+  nameMap?: Record<string, string>;
+  playerInfoMap: Record<string, PlayerInfo>;
+  allPlayers: string[];
+  roomInfo: any;
+}) {
   const { address: connectedAddress } = useAccount();
   const { targetNetwork } = useTargetNetwork();
-
-  const { data: allPlayers, isLoading } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getAllPlayers",
-    args: [roomId],
-  });
-
-  const { data: roomInfo } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getRoomInfo",
-    args: [roomId],
-  });
 
   const aliveCount =
     roomInfo && typeof roomInfo === "object" && "aliveCount" in roomInfo ? Number((roomInfo as any).aliveCount) : 0;
@@ -27,8 +26,6 @@ export function PlayerRadar({ roomId, nameMap }: { roomId: bigint; nameMap?: Rec
     roomInfo && typeof roomInfo === "object" && "playerCount" in roomInfo ? Number((roomInfo as any).playerCount) : 0;
   const phase = roomInfo && typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
   const isEnded = phase === 2;
-
-  const playerAddresses = (allPlayers as string[]) || [];
 
   return (
     <div className="flex flex-col h-full bg-gray-950">
@@ -47,26 +44,20 @@ export function PlayerRadar({ roomId, nameMap }: { roomId: bigint; nameMap?: Rec
 
       {/* Player List */}
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
-        {isLoading && (
-          <div className="text-cyan-400/60 font-mono text-xs text-center py-8 animate-pulse">
-            Scanning for players...
-          </div>
-        )}
-
-        {!isLoading && playerAddresses.length === 0 && (
+        {allPlayers.length === 0 && (
           <div className="text-gray-600 font-mono text-xs text-center py-8">No players detected</div>
         )}
 
-        {playerAddresses.map(playerAddr => (
+        {allPlayers.map(playerAddr => (
           <PlayerRadarCard
             key={playerAddr}
-            roomId={roomId}
             playerAddr={playerAddr}
             isMe={!!connectedAddress && playerAddr.toLowerCase() === connectedAddress.toLowerCase()}
             targetNetwork={targetNetwork}
-            playerAddresses={playerAddresses}
+            playerAddresses={allPlayers}
             isEnded={isEnded}
             nameMap={nameMap}
+            playerInfo={playerInfoMap[playerAddr.toLowerCase()]}
           />
         ))}
       </div>
@@ -93,38 +84,25 @@ export function PlayerRadar({ roomId, nameMap }: { roomId: bigint; nameMap?: Rec
 }
 
 function PlayerRadarCard({
-  roomId,
   playerAddr,
   isMe,
   targetNetwork,
   playerAddresses,
   isEnded,
   nameMap,
+  playerInfo,
 }: {
-  roomId: bigint;
   playerAddr: string;
   isMe: boolean;
   targetNetwork: any;
   playerAddresses: string[];
   isEnded: boolean;
   nameMap?: Record<string, string>;
+  playerInfo?: PlayerInfo;
 }) {
-  const { data: playerInfo } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getPlayerInfo",
-    args: [roomId, playerAddr],
-  });
-
-  const isAlive =
-    playerInfo && typeof playerInfo === "object" && "isAlive" in playerInfo
-      ? Boolean((playerInfo as any).isAlive)
-      : true;
-  const humanityScore =
-    playerInfo && typeof playerInfo === "object" && "humanityScore" in playerInfo
-      ? Number((playerInfo as any).humanityScore)
-      : 100;
-  const isAI =
-    playerInfo && typeof playerInfo === "object" && "isAI" in playerInfo ? Boolean((playerInfo as any).isAI) : false;
+  const isAlive = playerInfo?.isAlive ?? true;
+  const humanityScore = playerInfo?.humanityScore ?? 100;
+  const isAI = playerInfo?.isAI ?? false;
 
   const scoreColor = humanityScore > 60 ? "bg-green-500" : humanityScore > 30 ? "bg-yellow-500" : "bg-red-500";
   const scoreBorderColor =

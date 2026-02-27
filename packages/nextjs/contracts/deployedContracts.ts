@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   10143: {
     TuringArena: {
-      address: "0x802548316ae3e7a2f662198441a9e27947f5c813",
+      address: "0x7f2c68257d19e79c940f81bf5ceed91f2cac8dda",
       abi: [
         {
           type: "constructor",
@@ -19,6 +19,11 @@ const deployedContracts = {
             },
             {
               name: "_paymentToken",
+              type: "address",
+              internalType: "address",
+            },
+            {
+              name: "_operator",
               type: "address",
               internalType: "address",
             },
@@ -41,19 +46,6 @@ const deployedContracts = {
         {
           type: "function",
           name: "MAX_FEE",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "MAX_MESSAGES_PER_ROUND",
           inputs: [],
           outputs: [
             {
@@ -132,6 +124,19 @@ const deployedContracts = {
         {
           type: "function",
           name: "PROTOCOL_SHARE",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "REVEAL_TIMEOUT",
           inputs: [],
           outputs: [
             {
@@ -251,9 +256,14 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "_isAI",
-              type: "bool",
-              internalType: "bool",
+              name: "_commitment",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+            {
+              name: "_operatorSig",
+              type: "bytes",
+              internalType: "bytes",
             },
             {
               name: "_name",
@@ -312,6 +322,19 @@ const deployedContracts = {
             },
           ],
           stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "emergencyEnd",
+          inputs: [
+            {
+              name: "_roomId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
         },
         {
           type: "function",
@@ -396,35 +419,6 @@ const deployedContracts = {
                   internalType: "uint256",
                 },
               ],
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "getMessageCount",
-          inputs: [
-            {
-              name: "_roomId",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "_round",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "_player",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
             },
           ],
           stateMutability: "view",
@@ -653,16 +647,6 @@ const deployedContracts = {
                   internalType: "uint256",
                 },
                 {
-                  name: "humanCount",
-                  type: "uint256",
-                  internalType: "uint256",
-                },
-                {
-                  name: "aiCount",
-                  type: "uint256",
-                  internalType: "uint256",
-                },
-                {
                   name: "lastSettleBlock",
                   type: "uint256",
                   internalType: "uint256",
@@ -732,6 +716,30 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "identityCommitments",
+          inputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
           name: "joinRoom",
           inputs: [
             {
@@ -740,9 +748,14 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "_isAI",
-              type: "bool",
-              internalType: "bool",
+              name: "_commitment",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+            {
+              name: "_operatorSig",
+              type: "bytes",
+              internalType: "bytes",
             },
             {
               name: "_name",
@@ -768,35 +781,6 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "messageCount",
-          inputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
           name: "nextRoomId",
           inputs: [],
           outputs: [
@@ -810,6 +794,19 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "operator",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
           name: "paymentToken",
           inputs: [],
           outputs: [
@@ -817,6 +814,25 @@ const deployedContracts = {
               name: "",
               type: "address",
               internalType: "contract IERC20",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "pendingReveal",
+          inputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "bool",
+              internalType: "bool",
             },
           ],
           stateMutability: "view",
@@ -948,6 +964,34 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "revealAndEnd",
+          inputs: [
+            {
+              name: "_roomId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "_players",
+              type: "address[]",
+              internalType: "address[]",
+            },
+            {
+              name: "_isAIs",
+              type: "bool[]",
+              internalType: "bool[]",
+            },
+            {
+              name: "_salts",
+              type: "bytes32[]",
+              internalType: "bytes32[]",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
           name: "rewards",
           inputs: [
             {
@@ -1076,16 +1120,6 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "humanCount",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "aiCount",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
               name: "lastSettleBlock",
               type: "uint256",
               internalType: "uint256",
@@ -1105,17 +1139,12 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "sendMessage",
+          name: "setOperator",
           inputs: [
             {
-              name: "_roomId",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "_content",
-              type: "string",
-              internalType: "string",
+              name: "_newOperator",
+              type: "address",
+              internalType: "address",
             },
           ],
           outputs: [],
@@ -1167,6 +1196,25 @@ const deployedContracts = {
               name: "rankingSlots",
               type: "uint256",
               internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "usedCommitments",
+          inputs: [
+            {
+              name: "",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "bool",
+              internalType: "bool",
             },
           ],
           stateMutability: "view",
@@ -1244,6 +1292,19 @@ const deployedContracts = {
         },
         {
           type: "event",
+          name: "EmergencyEndTriggered",
+          inputs: [
+            {
+              name: "roomId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
           name: "GameEnded",
           inputs: [
             {
@@ -1288,7 +1349,7 @@ const deployedContracts = {
         },
         {
           type: "event",
-          name: "NewMessage",
+          name: "IdentitiesRevealed",
           inputs: [
             {
               name: "roomId",
@@ -1297,22 +1358,10 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "sender",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "content",
-              type: "string",
+              name: "humansWon",
+              type: "bool",
               indexed: false,
-              internalType: "string",
-            },
-            {
-              name: "timestamp",
-              type: "uint256",
-              indexed: false,
-              internalType: "uint256",
+              internalType: "bool",
             },
           ],
           anonymous: false,
@@ -1369,12 +1418,6 @@ const deployedContracts = {
               type: "address",
               indexed: true,
               internalType: "address",
-            },
-            {
-              name: "isAI",
-              type: "bool",
-              indexed: false,
-              internalType: "bool",
             },
           ],
           anonymous: false,
@@ -1482,12 +1525,6 @@ const deployedContracts = {
               indexed: false,
               internalType: "uint256",
             },
-            {
-              name: "isAI",
-              type: "bool",
-              indexed: false,
-              internalType: "bool",
-            },
           ],
           anonymous: false,
         },
@@ -1524,6 +1561,33 @@ const deployedContracts = {
         },
         {
           type: "error",
+          name: "ECDSAInvalidSignature",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "ECDSAInvalidSignatureLength",
+          inputs: [
+            {
+              name: "length",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+        },
+        {
+          type: "error",
+          name: "ECDSAInvalidSignatureS",
+          inputs: [
+            {
+              name: "s",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+          ],
+        },
+        {
+          type: "error",
           name: "ReentrancyGuardReentrantCall",
           inputs: [],
         },
@@ -1540,7 +1604,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 15314252,
+      deployedOnBlock: 15523057,
     },
   },
   31337: {
@@ -1880,7 +1944,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 25,
+      deployedOnBlock: 34,
     },
     TuringArena: {
       address: "0x0c8e79f3534b00d9a3d4a856b665bf4ebc22f2ba",
@@ -1895,6 +1959,11 @@ const deployedContracts = {
             },
             {
               name: "_paymentToken",
+              type: "address",
+              internalType: "address",
+            },
+            {
+              name: "_operator",
               type: "address",
               internalType: "address",
             },
@@ -1917,19 +1986,6 @@ const deployedContracts = {
         {
           type: "function",
           name: "MAX_FEE",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "MAX_MESSAGES_PER_ROUND",
           inputs: [],
           outputs: [
             {
@@ -2008,6 +2064,19 @@ const deployedContracts = {
         {
           type: "function",
           name: "PROTOCOL_SHARE",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "REVEAL_TIMEOUT",
           inputs: [],
           outputs: [
             {
@@ -2127,9 +2196,14 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "_isAI",
-              type: "bool",
-              internalType: "bool",
+              name: "_commitment",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+            {
+              name: "_operatorSig",
+              type: "bytes",
+              internalType: "bytes",
             },
             {
               name: "_name",
@@ -2188,6 +2262,19 @@ const deployedContracts = {
             },
           ],
           stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "emergencyEnd",
+          inputs: [
+            {
+              name: "_roomId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
         },
         {
           type: "function",
@@ -2272,35 +2359,6 @@ const deployedContracts = {
                   internalType: "uint256",
                 },
               ],
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "getMessageCount",
-          inputs: [
-            {
-              name: "_roomId",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "_round",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "_player",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
             },
           ],
           stateMutability: "view",
@@ -2529,16 +2587,6 @@ const deployedContracts = {
                   internalType: "uint256",
                 },
                 {
-                  name: "humanCount",
-                  type: "uint256",
-                  internalType: "uint256",
-                },
-                {
-                  name: "aiCount",
-                  type: "uint256",
-                  internalType: "uint256",
-                },
-                {
                   name: "lastSettleBlock",
                   type: "uint256",
                   internalType: "uint256",
@@ -2608,6 +2656,30 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "identityCommitments",
+          inputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
           name: "joinRoom",
           inputs: [
             {
@@ -2616,9 +2688,14 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "_isAI",
-              type: "bool",
-              internalType: "bool",
+              name: "_commitment",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+            {
+              name: "_operatorSig",
+              type: "bytes",
+              internalType: "bytes",
             },
             {
               name: "_name",
@@ -2644,35 +2721,6 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "messageCount",
-          inputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
           name: "nextRoomId",
           inputs: [],
           outputs: [
@@ -2686,6 +2734,19 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "operator",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
           name: "paymentToken",
           inputs: [],
           outputs: [
@@ -2693,6 +2754,25 @@ const deployedContracts = {
               name: "",
               type: "address",
               internalType: "contract IERC20",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "pendingReveal",
+          inputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "bool",
+              internalType: "bool",
             },
           ],
           stateMutability: "view",
@@ -2824,6 +2904,34 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "revealAndEnd",
+          inputs: [
+            {
+              name: "_roomId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "_players",
+              type: "address[]",
+              internalType: "address[]",
+            },
+            {
+              name: "_isAIs",
+              type: "bool[]",
+              internalType: "bool[]",
+            },
+            {
+              name: "_salts",
+              type: "bytes32[]",
+              internalType: "bytes32[]",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
           name: "rewards",
           inputs: [
             {
@@ -2952,16 +3060,6 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "humanCount",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "aiCount",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
               name: "lastSettleBlock",
               type: "uint256",
               internalType: "uint256",
@@ -2981,17 +3079,12 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "sendMessage",
+          name: "setOperator",
           inputs: [
             {
-              name: "_roomId",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "_content",
-              type: "string",
-              internalType: "string",
+              name: "_newOperator",
+              type: "address",
+              internalType: "address",
             },
           ],
           outputs: [],
@@ -3043,6 +3136,25 @@ const deployedContracts = {
               name: "rankingSlots",
               type: "uint256",
               internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "usedCommitments",
+          inputs: [
+            {
+              name: "",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "bool",
+              internalType: "bool",
             },
           ],
           stateMutability: "view",
@@ -3120,6 +3232,19 @@ const deployedContracts = {
         },
         {
           type: "event",
+          name: "EmergencyEndTriggered",
+          inputs: [
+            {
+              name: "roomId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
           name: "GameEnded",
           inputs: [
             {
@@ -3164,7 +3289,7 @@ const deployedContracts = {
         },
         {
           type: "event",
-          name: "NewMessage",
+          name: "IdentitiesRevealed",
           inputs: [
             {
               name: "roomId",
@@ -3173,22 +3298,10 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "sender",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "content",
-              type: "string",
+              name: "humansWon",
+              type: "bool",
               indexed: false,
-              internalType: "string",
-            },
-            {
-              name: "timestamp",
-              type: "uint256",
-              indexed: false,
-              internalType: "uint256",
+              internalType: "bool",
             },
           ],
           anonymous: false,
@@ -3245,12 +3358,6 @@ const deployedContracts = {
               type: "address",
               indexed: true,
               internalType: "address",
-            },
-            {
-              name: "isAI",
-              type: "bool",
-              indexed: false,
-              internalType: "bool",
             },
           ],
           anonymous: false,
@@ -3358,12 +3465,6 @@ const deployedContracts = {
               indexed: false,
               internalType: "uint256",
             },
-            {
-              name: "isAI",
-              type: "bool",
-              indexed: false,
-              internalType: "bool",
-            },
           ],
           anonymous: false,
         },
@@ -3400,6 +3501,33 @@ const deployedContracts = {
         },
         {
           type: "error",
+          name: "ECDSAInvalidSignature",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "ECDSAInvalidSignatureLength",
+          inputs: [
+            {
+              name: "length",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+        },
+        {
+          type: "error",
+          name: "ECDSAInvalidSignatureS",
+          inputs: [
+            {
+              name: "s",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+          ],
+        },
+        {
+          type: "error",
           name: "ReentrancyGuardReentrantCall",
           inputs: [],
         },
@@ -3416,7 +3544,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 25,
+      deployedOnBlock: 34,
     },
   },
 } as const;

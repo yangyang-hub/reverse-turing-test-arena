@@ -4,49 +4,43 @@ import type { PlayerState, VoteStrategy } from "./types.js";
 
 /**
  * 根据指定策略选择投票目标
+ *
+ * Commit-reveal 方案下，游戏中无法知道其他玩家的真实身份（isAI 始终为 false）。
+ * 因此投票策略改为纯社交推理 — 从所有存活非自己玩家中选择目标。
+ *
  * @param players - 所有玩家状态列表
  * @param selfAddress - 自己的地址
  * @param strategy - 投票策略
- * @param myIsAI - 自己是否为 AI（默认 true）
  * @returns 投票目标地址，如果没有可选目标则返回 null
  */
 export function pickVoteTarget(
   players: PlayerState[],
   selfAddress: string,
   strategy: VoteStrategy,
-  myIsAI: boolean = true,
 ): string | null {
-  // 策略核心：只投敌方队伍（存活 + 非自己 + 不同队伍）
-  const opponents = players.filter(
+  // 所有存活的非自己玩家都是候选目标（无法区分 team）
+  const candidates = players.filter(
     p => p.isAlive // 必须存活
-      && p.address.toLowerCase() !== selfAddress.toLowerCase() // 不是自己
-      && p.isAI !== myIsAI, // 不同队伍（AI 投人类，人类投 AI）
+      && p.address.toLowerCase() !== selfAddress.toLowerCase(), // 不是自己
   );
 
-  // 回退策略：如果没有敌方存活（即将获胜），随机投任何存活玩家以避免自投惩罚
-  if (opponents.length === 0) {
-    const anyAlive = players.filter(
-      p => p.isAlive && p.address.toLowerCase() !== selfAddress.toLowerCase(),
-    );
-    if (anyAlive.length === 0) return null; // 没有其他存活玩家，返回 null
-    return anyAlive[Math.floor(Math.random() * anyAlive.length)].address; // 随机选择
-  }
+  if (candidates.length === 0) return null; // 没有可选目标
 
   // 根据策略选择目标
   switch (strategy) {
     case "lowest_hp": {
-      // 投票给人性分最低的敌方玩家
-      opponents.sort((a, b) => a.humanityScore - b.humanityScore);
-      return opponents[0].address;
+      // 投票给人性分最低的玩家
+      candidates.sort((a, b) => a.humanityScore - b.humanityScore);
+      return candidates[0].address;
     }
     case "most_active": {
-      // 投票给最活跃的敌方玩家（行动次数最多）
-      opponents.sort((a, b) => b.actionCount - a.actionCount);
-      return opponents[0].address;
+      // 投票给最活跃的玩家（行动次数最多）
+      candidates.sort((a, b) => b.actionCount - a.actionCount);
+      return candidates[0].address;
     }
     case "random_alive": {
-      // 随机投票给一个存活的敌方玩家
-      return opponents[Math.floor(Math.random() * opponents.length)].address;
+      // 随机投票给一个存活玩家
+      return candidates[Math.floor(Math.random() * candidates.length)].address;
     }
   }
 }

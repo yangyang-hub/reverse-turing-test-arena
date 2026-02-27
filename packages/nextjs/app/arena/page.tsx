@@ -3,13 +3,23 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAccount, useBlockNumber } from "wagmi";
+import { useAccount, useBlockNumber, useReadContracts } from "wagmi";
 import { ArenaTerminal } from "~~/app/arena/_components/ArenaTerminal";
 import { MissionBriefing } from "~~/app/arena/_components/MissionBriefing";
 import { PlayerRadar } from "~~/app/arena/_components/PlayerRadar";
 import { VictoryScreen } from "~~/app/arena/_components/VictoryScreen";
 import { VotePanel } from "~~/app/arena/_components/VotePanel";
-import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useChatSocket } from "~~/hooks/scaffold-eth/useChatSocket";
+
+export type PlayerInfo = {
+  addr: string;
+  humanityScore: number;
+  isAlive: boolean;
+  isAI: boolean;
+  actionCount: number;
+  successfulVotes: number;
+};
 
 const PHASE_LABELS: Record<number, string> = {
   0: "WAITING",
@@ -77,17 +87,50 @@ function ArenaContent() {
     args: [roomId, connectedAddress ?? "0x0000000000000000000000000000000000000000"] as const,
   });
 
-  const { data: myPlayerInfo } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getPlayerInfo",
-    args: [roomId, connectedAddress ?? "0x0000000000000000000000000000000000000000"] as const,
-  });
-
   const { data: playerNames } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getRoomPlayerNames",
     args: [roomId] as const,
   });
+
+  // Batch-fetch all player info via multicall (replaces N individual hooks in children)
+  const { data: arenaInfo } = useDeployedContractInfo({ contractName: "TuringArena" });
+  const playerInfoContracts = useMemo(() => {
+    if (!allPlayers || !arenaInfo) return [];
+    return (allPlayers as string[]).map(addr => ({
+      address: arenaInfo.address,
+      abi: arenaInfo.abi,
+      functionName: "getPlayerInfo" as const,
+      args: [roomId, addr] as const,
+    }));
+  }, [allPlayers, roomId, arenaInfo]);
+
+  const { data: batchedPlayerInfos } = useReadContracts({
+    contracts: playerInfoContracts,
+    query: { enabled: playerInfoContracts.length > 0 },
+  });
+
+  // Build playerInfoMap: lowercase address → PlayerInfo
+  const playerInfoMap = useMemo<Record<string, PlayerInfo>>(() => {
+    const map: Record<string, PlayerInfo> = {};
+    if (!batchedPlayerInfos || !allPlayers) return map;
+    const addrs = allPlayers as string[];
+    for (let i = 0; i < addrs.length && i < batchedPlayerInfos.length; i++) {
+      const res = batchedPlayerInfos[i];
+      if (res.status === "success" && res.result) {
+        const r = res.result as any;
+        map[addrs[i].toLowerCase()] = {
+          addr: r.addr ?? addrs[i],
+          humanityScore: Number(r.humanityScore ?? 100),
+          isAlive: Boolean(r.isAlive),
+          isAI: Boolean(r.isAI),
+          actionCount: Number(r.actionCount ?? 0),
+          successfulVotes: Number(r.successfulVotes ?? 0),
+        };
+      }
+    }
+    return map;
+  }, [batchedPlayerInfos, allPlayers]);
 
   // Build nameMap: address (lowercase) → on-chain name
   const nameMap = useMemo(() => {
@@ -103,6 +146,17 @@ function ArenaContent() {
     }
     return map;
   }, [allPlayers, playerNames]);
+
+  // WebSocket chat connection — single instance for the whole arena page
+  // (previously duplicated in ArenaTerminal, causing two WS connections + two SIWE signatures)
+  const parsedRoomIdForChat = rawRoomId ? Number(rawRoomId) : undefined;
+  const {
+    messages: chatMessages,
+    sendMessage,
+    isConnected,
+    myMessageCount,
+    myIsAI: chatMyIsAI,
+  } = useChatSocket(parsedRoomIdForChat);
 
   // Settle state
   const [isSettling, setIsSettling] = useState(false);
@@ -212,10 +266,7 @@ function ArenaContent() {
   const currentInterval =
     typeof roomInfo === "object" && "currentInterval" in roomInfo ? Number((roomInfo as any).currentInterval) : 0;
 
-  const myIsAI =
-    myPlayerInfo && typeof myPlayerInfo === "object" && "isAI" in myPlayerInfo
-      ? Boolean((myPlayerInfo as any).isAI)
-      : false;
+  const myIsAI = chatMyIsAI ?? false;
 
   const phaseLabel = PHASE_LABELS[phase] ?? "UNKNOWN";
   const phaseColor = PHASE_COLORS[phase] ?? "text-gray-400";
@@ -226,7 +277,9 @@ function ArenaContent() {
       : false;
 
   const isCreator = connectedAddress ? creator.toLowerCase() === connectedAddress.toLowerCase() : false;
-  const canStartGame = phase === 0 && isCreator && playerCount >= 3;
+  const maxPlayers =
+    typeof roomInfo === "object" && "maxPlayers" in roomInfo ? Number((roomInfo as any).maxPlayers) : 0;
+  const canStartGame = phase === 0 && isCreator && playerCount === maxPlayers;
 
   // Round timing
   const isGameActive = phase === 1;
@@ -377,11 +430,11 @@ function ArenaContent() {
               </button>
             </>
           )}
-          {phase === 0 && isCreator && playerCount < 3 && (
+          {phase === 0 && isCreator && playerCount < maxPlayers && (
             <>
               <div className="h-4 w-px bg-gray-700" />
               <span className="text-yellow-500/60 font-mono text-xs">
-                NEED {3 - playerCount} MORE PLAYER{3 - playerCount > 1 ? "S" : ""}
+                NEED {maxPlayers - playerCount} MORE PLAYER{maxPlayers - playerCount > 1 ? "S" : ""}
               </span>
             </>
           )}
@@ -392,17 +445,41 @@ function ArenaContent() {
       <div className="flex-1 grid grid-cols-12 gap-0 min-h-0">
         {/* Left Sidebar - Player Radar */}
         <div className="col-span-3 border-r border-cyan-900/30 min-h-0 overflow-hidden">
-          <PlayerRadar roomId={roomId} nameMap={nameMap} />
+          <PlayerRadar
+            nameMap={nameMap}
+            playerInfoMap={playerInfoMap}
+            allPlayers={(allPlayers as string[]) || []}
+            roomInfo={roomInfo}
+          />
         </div>
 
         {/* Center - Chat Terminal */}
         <div className="col-span-6 flex flex-col min-h-0 overflow-hidden">
-          <ArenaTerminal roomId={roomId} nameMap={nameMap} />
+          <ArenaTerminal
+            roomId={roomId}
+            nameMap={nameMap}
+            roomInfo={roomInfo}
+            allPlayers={(allPlayers as string[]) || []}
+            myPlayerInfo={playerInfoMap[connectedAddress?.toLowerCase() ?? ""]}
+            currentRound={currentRound}
+            chatMessages={chatMessages}
+            sendMessage={sendMessage}
+            isConnected={isConnected}
+            myMessageCount={myMessageCount}
+          />
         </div>
 
         {/* Right Sidebar - Vote Panel */}
         <div className="col-span-3 border-l border-cyan-900/30 min-h-0 overflow-hidden">
-          <VotePanel roomId={roomId} nameMap={nameMap} />
+          <VotePanel
+            roomId={roomId}
+            nameMap={nameMap}
+            playerInfoMap={playerInfoMap}
+            allPlayers={(allPlayers as string[]) || []}
+            roomInfo={roomInfo}
+            roundNum={currentRoundData}
+            blockNumber={blockNumber}
+          />
         </div>
       </div>
 

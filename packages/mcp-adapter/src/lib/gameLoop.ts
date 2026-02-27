@@ -3,6 +3,7 @@ import { getArenaContract } from "./contracts.js";
 import { pickVoteTarget, pickChatMessage, randomDelay, sleep } from "./strategies.js";
 import { PHASE_NAMES } from "./types.js";
 import type { AutoPlayConfig, AutoPlayStatus, PlayerState, RoomState, ChatMessage, VoteRecord } from "./types.js";
+import { ChatClient } from "./chatClient.js";
 
 /**
  * GameLoop 类 - 自动玩游戏的后台循环
@@ -17,6 +18,7 @@ export class GameLoop {
   private wallet: ethers.Wallet; // 玩家钱包（用于签名交易）
   private provider: ethers.Provider; // 区块链提供者（用于查询状态）
   private arenaAddress: string; // 竞技场合约地址
+  private chatClient: ChatClient | null; // 链下聊天客户端
   private intervalId: ReturnType<typeof setInterval> | null = null; // 定时器 ID
   private ticking = false; // 防护标志：防止 tick 重叠执行
 
@@ -39,11 +41,13 @@ export class GameLoop {
     wallet: ethers.Wallet,
     arenaAddress: string,
     log?: (msg: string) => void,
+    chatClient?: ChatClient | null,
   ) {
     this.config = config;
     this.wallet = wallet;
     this.provider = wallet.provider!; // 从钱包获取提供者
     this.arenaAddress = arenaAddress;
+    this.chatClient = chatClient ?? null; // 链下聊天客户端（可选）
     // 使用自定义日志函数或默认输出到 stderr
     this.log = log ?? ((msg: string) => process.stderr.write(`[GameLoop] ${msg}\n`));
 
@@ -178,6 +182,17 @@ export class GameLoop {
         return;
       }
 
+      // ========== 步骤 2.5: pendingReveal → 等待 operator reveal ==========
+      try {
+        const isPendingReveal = await contract.pendingReveal(this.config.roomId);
+        if (isPendingReveal) {
+          this.log("⏳ Pending reveal — waiting for operator to reveal identities...");
+          return; // 不投票、不聊天、不结算 — 等待 reveal
+        }
+      } catch {
+        // pendingReveal 查询失败不致命，继续正常流程
+      }
+
       // ========== 步骤 3: 游戏未开始（等待阶段） ==========
       if (room.phase === 0) {
         return; // 什么都不做，等待游戏开始
@@ -227,23 +242,18 @@ export class GameLoop {
       );
       if (!hasVoted) {
         this.log(`🗳️ Not voted yet, attempting to vote...`);
-        await this.tryVote(contract, players, myAddr, myInfo.isAI);
+        await this.tryVote(contract, players, myAddr);
       } else {
         this.log(`✅ Already voted this round`);
       }
 
-      // ========== 步骤 8: 可能发送聊天消息（遵守每轮 3 条限制） ==========
+      // ========== 步骤 8: 可能发送聊天消息 ==========
       if (
         this.config.chatStrategy !== "silent" && // 不是静默模式
-        Math.random() < this.config.chatFrequency / 3 // 根据频率概率决定
+        Math.random() < this.config.chatFrequency // 根据频率概率决定
       ) {
-        // 发送前检查消息数
-        this.log(`📡 RPC: getMessageCount`);
-        const msgCount = await contract.getMessageCount(this.config.roomId, round, myAddr);
-        if (Number(msgCount) < 3) { // 每轮最多 3 条
-          this.log(`💬 Attempting to send chat (${Number(msgCount)}/3 messages sent)...`);
-          await this.tryChat(contract);
-        }
+        this.log(`💬 Attempting to send chat...`);
+        await this.tryChat();
       }
 
       // ========== 步骤 9: 可能结算轮次 ==========
@@ -268,16 +278,14 @@ export class GameLoop {
    * @param contract - 合约实例
    * @param players - 所有玩家状态
    * @param myAddr - 自己的地址
-   * @param myIsAI - 自己是否为 AI
    */
   private async tryVote(
     contract: ethers.Contract,
     players: PlayerState[],
     myAddr: string,
-    myIsAI: boolean,
   ): Promise<void> {
-    // 使用策略选择投票目标
-    const target = pickVoteTarget(players, myAddr, this.config.voteStrategy, myIsAI);
+    // 使用策略选择投票目标（commit-reveal 下无法知道其他玩家身份，纯社交推理）
+    const target = pickVoteTarget(players, myAddr, this.config.voteStrategy);
     if (!target) return; // 没有可选目标
 
     // 模拟人类延迟：投票前等待 1-4 秒
@@ -317,10 +325,14 @@ export class GameLoop {
   }
 
   /**
-   * 尝试发送聊天消息
-   * @param contract - 合约实例
+   * 尝试发送聊天消息（通过链下 REST API）
    */
-  private async tryChat(contract: ethers.Contract): Promise<void> {
+  private async tryChat(): Promise<void> {
+    if (!this.chatClient) {
+      this.log(`⚠️  No chat client configured, skipping chat`);
+      return;
+    }
+
     const message = pickChatMessage(); // 从消息池随机选择
 
     // 模拟人类延迟：发送前等待 0.5-2 秒
@@ -328,11 +340,10 @@ export class GameLoop {
 
     try {
       this.log(`💬  Sending: "${message.slice(0, 50)}${message.length > 50 ? "..." : ""}"`);
-      this.log(`📡 RPC: sendMessage`);
-      const tx = await contract.sendMessage(this.config.roomId, message);
-      this.log(`⏳ Tx submitted: ${tx.hash.slice(0, 10)}..., waiting for confirmation...`);
-      const receipt = await tx.wait(); // 等待交易被打包
-      this.log(`✅ Message sent! Block: ${receipt?.blockNumber}`);
+      this.log(`📡 REST: chatClient.sendMessage`);
+      await this.chatClient.sendMessage(Number(this.config.roomId), message);
+      this.log(`✅ Message sent (off-chain)!`);
+
       this.status.messagesThisGame++; // 增加消息计数
 
       // 记录聊天历史
@@ -340,15 +351,14 @@ export class GameLoop {
         round: this.status.round,
         content: message,
         timestamp: Date.now(),
-        txHash: receipt?.hash,
       });
     } catch (err) {
       const msg = String(err);
-      if (msg.includes("Message limit")) {
+      if (msg.includes("Message limit") || msg.includes("message_limit")) {
         this.log(`⚠️  Chat skipped: message limit reached`);
         return; // 消息限制，非致命错误
       }
-      if (msg.includes("eliminated") || msg.includes("not active")) {
+      if (msg.includes("eliminated") || msg.includes("not active") || msg.includes("player_eliminated") || msg.includes("room_not_active")) {
         this.log(`💀 Eliminated during chat attempt`);
         this.status.isAlive = false; // 已淘汰，更新状态
         return;
@@ -427,8 +437,6 @@ export class GameLoop {
       maxPlayers: Number(info.maxPlayers),
       playerCount: Number(info.playerCount),
       aliveCount: Number(info.aliveCount),
-      humanCount: Number(info.humanCount),
-      aiCount: Number(info.aiCount),
       isActive: info.isActive,
       isEnded: info.isEnded,
       currentInterval: Number(info.currentInterval),

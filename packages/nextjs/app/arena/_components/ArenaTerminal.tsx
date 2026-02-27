@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAccount } from "wagmi";
-import { useScaffoldEventHistory, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import type { PlayerInfo } from "~~/app/arena/page";
+import type { ChatMsg } from "~~/hooks/scaffold-eth/useChatSocket";
 import { getAliasName } from "~~/utils/playerAlias";
 import { getTopicForRound } from "~~/utils/topics";
 
@@ -11,13 +12,12 @@ type TerminalMessage = {
   id: string;
   sender: string;
   content: string;
-  timestamp: bigint;
-  roomId: bigint;
+  createdAt: string;
   type: "chat" | "system";
 };
 
-function formatTime(timestamp: bigint): string {
-  const date = new Date(Number(timestamp) * 1000);
+function formatTime(createdAt: string): string {
+  const date = new Date(createdAt);
   const h = date.getHours().toString().padStart(2, "0");
   const m = date.getMinutes().toString().padStart(2, "0");
   const s = date.getSeconds().toString().padStart(2, "0");
@@ -47,7 +47,29 @@ function getTimestampColor(content: string): string {
   return "text-gray-600";
 }
 
-export function ArenaTerminal({ roomId, nameMap }: { roomId: bigint; nameMap?: Record<string, string> }) {
+export function ArenaTerminal({
+  roomId,
+  nameMap,
+  roomInfo,
+  allPlayers,
+  myPlayerInfo,
+  currentRound,
+  chatMessages,
+  sendMessage,
+  isConnected,
+  myMessageCount,
+}: {
+  roomId: bigint;
+  nameMap?: Record<string, string>;
+  roomInfo: any;
+  allPlayers: string[];
+  myPlayerInfo?: PlayerInfo;
+  currentRound: number;
+  chatMessages: ChatMsg[];
+  sendMessage: (content: string) => void;
+  isConnected: boolean;
+  myMessageCount: number;
+}) {
   const [inputMessage, setInputMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -55,88 +77,25 @@ export function ArenaTerminal({ roomId, nameMap }: { roomId: bigint; nameMap?: R
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const { address: connectedAddress } = useAccount();
 
-  const { data: roomInfo } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getRoomInfo",
-    args: [roomId],
-  });
-
-  const { data: allPlayers } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getAllPlayers",
-    args: [roomId],
-  });
-
-  const playerAddresses = (allPlayers as string[]) || [];
-
-  const zeroAddr = "0x0000000000000000000000000000000000000000" as const;
-  const { data: myPlayerInfo } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getPlayerInfo",
-    args: [roomId, connectedAddress ?? zeroAddr],
-  });
-
-  const isGameActive =
-    roomInfo && typeof roomInfo === "object" && "isActive" in roomInfo ? Boolean((roomInfo as any).isActive) : false;
-  const isMyPlayerAlive =
-    myPlayerInfo && typeof myPlayerInfo === "object" && "isAlive" in myPlayerInfo
-      ? Boolean((myPlayerInfo as any).isAlive)
-      : false;
-  const isMyPlayerAI =
-    myPlayerInfo && typeof myPlayerInfo === "object" && "isAI" in myPlayerInfo
-      ? Boolean((myPlayerInfo as any).isAI)
-      : false;
-  const canSend = isGameActive && isMyPlayerAlive && !isMyPlayerAI;
-  const startBlock =
-    roomInfo && typeof roomInfo === "object" && "startBlock" in roomInfo ? BigInt((roomInfo as any).startBlock) : 0n;
+  const phase = roomInfo && typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
+  const isGameActive = phase === 1;
+  const isMyPlayerAlive = myPlayerInfo?.isAlive ?? false;
+  // Channel exclusivity is enforced server-side — no need to check isAI here
+  const canSend = isGameActive && isMyPlayerAlive;
 
   // Message limit per round
-  const { data: currentRoundData } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "currentRound",
-    args: [roomId],
-  });
-  const currentRound = currentRoundData !== undefined ? Number(currentRoundData) : 0;
-
-  const { data: myMessageCount } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getMessageCount",
-    args: [roomId, BigInt(currentRound), connectedAddress ?? zeroAddr],
-  });
-  const messagesUsed = myMessageCount !== undefined ? Number(myMessageCount) : 0;
   const MAX_MESSAGES = 3;
-  const messagesRemaining = MAX_MESSAGES - messagesUsed;
+  const messagesRemaining = MAX_MESSAGES - myMessageCount;
   const canSendMessage = canSend && messagesRemaining > 0;
 
-  const { data: messageEvents, isLoading: eventsLoading } = useScaffoldEventHistory({
-    contractName: "TuringArena",
-    eventName: "NewMessage",
-    fromBlock: startBlock || 0n,
-    watch: true,
-  });
-
-  const { writeContractAsync, isMining } = useScaffoldWriteContract({
-    contractName: "TuringArena",
-  });
-
-  const filteredMessages: TerminalMessage[] = (messageEvents || [])
-    .filter(event => {
-      const args = event.args as any;
-      if (!args) return false;
-      return BigInt(args.roomId) === roomId;
-    })
-    .map((event, idx) => {
-      const args = event.args as any;
-      return {
-        id: `${event.transactionHash}-${event.logIndex}-${idx}`,
-        sender: args.sender as string,
-        content: args.content as string,
-        timestamp: BigInt(args.timestamp),
-        roomId: BigInt(args.roomId),
-        type: (args.content as string).startsWith("[") ? ("system" as const) : ("chat" as const),
-      };
-    })
-    .sort((a, b) => Number(a.timestamp - b.timestamp));
+  // Transform chat messages to terminal format
+  const filteredMessages: TerminalMessage[] = chatMessages.map((msg, idx) => ({
+    id: `chat-${msg.id || idx}`,
+    sender: msg.sender,
+    content: msg.content,
+    createdAt: msg.createdAt,
+    type: msg.content.startsWith("[") ? ("system" as const) : ("chat" as const),
+  }));
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
@@ -151,17 +110,14 @@ export function ArenaTerminal({ roomId, nameMap }: { roomId: bigint; nameMap?: R
   }, [filteredMessages.length, shouldAutoScroll]);
 
   const handleSend = async () => {
-    if (!inputMessage.trim() || isSending || isMining || !canSendMessage) return;
+    if (!inputMessage.trim() || isSending || !canSendMessage || !isConnected) return;
 
     const message = inputMessage.trim();
     setInputMessage("");
     setIsSending(true);
 
     try {
-      await writeContractAsync({
-        functionName: "sendMessage",
-        args: [roomId, message],
-      });
+      sendMessage(message);
     } catch (err) {
       console.error("Failed to send message:", err);
       setInputMessage(message);
@@ -192,7 +148,11 @@ export function ArenaTerminal({ roomId, nameMap }: { roomId: bigint; nameMap?: R
           </div>
           <div className="flex items-center gap-2">
             <span className="text-gray-600 font-mono text-xs">{filteredMessages.length} msgs</span>
-            {eventsLoading && <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />}
+            {isConnected ? (
+              <div className="w-2 h-2 rounded-full bg-green-400" title="WebSocket connected" />
+            ) : (
+              <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse" title="Reconnecting..." />
+            )}
           </div>
         </div>
         {/* Discussion topic */}
@@ -217,12 +177,12 @@ export function ArenaTerminal({ roomId, nameMap }: { roomId: bigint; nameMap?: R
             {"//  REVERSE TURING TEST ARENA - ROOM #"}
             {roomId.toString()}
           </div>
-          <div>{"//  All messages are stored on-chain via events"}</div>
+          <div>{"//  Chat powered by WebSocket (off-chain)"}</div>
           <div>{"//  Trust no one. Spot the AI."}</div>
           <div>{"// ============================================"}</div>
         </div>
 
-        {filteredMessages.length === 0 && !eventsLoading && (
+        {filteredMessages.length === 0 && (
           <div className="text-gray-600 font-mono text-sm text-center py-8">
             <div className="mb-2">No messages yet.</div>
             <div className="text-xs">Be the first to speak... if you dare.</div>
@@ -238,7 +198,7 @@ export function ArenaTerminal({ roomId, nameMap }: { roomId: bigint; nameMap?: R
               transition={{ duration: 0.2 }}
               className="font-mono text-sm leading-relaxed group"
             >
-              <span className={getTimestampColor(msg.content)}>[{formatTime(msg.timestamp)}]</span>{" "}
+              <span className={getTimestampColor(msg.content)}>[{formatTime(msg.createdAt)}]</span>{" "}
               <span
                 className={
                   connectedAddress && msg.sender.toLowerCase() === connectedAddress.toLowerCase()
@@ -246,7 +206,7 @@ export function ArenaTerminal({ roomId, nameMap }: { roomId: bigint; nameMap?: R
                     : "text-purple-400"
                 }
               >
-                {getAliasName(playerAddresses, msg.sender, nameMap)}:
+                {getAliasName(allPlayers, msg.sender, nameMap)}:
               </span>{" "}
               <span className={getMessageColor(msg.sender, msg.content, connectedAddress)}>{msg.content}</span>
             </motion.div>
@@ -260,7 +220,7 @@ export function ArenaTerminal({ roomId, nameMap }: { roomId: bigint; nameMap?: R
       <div className="border-t border-green-900/40 bg-black/60 p-3">
         <div className="flex items-center gap-2">
           <span className="text-green-500 font-mono text-sm shrink-0">
-            {connectedAddress ? getAliasName(playerAddresses, connectedAddress, nameMap) : "anon"}@arena $
+            {connectedAddress ? getAliasName(allPlayers, connectedAddress, nameMap) : "anon"}@arena $
           </span>
           <input
             type="text"
@@ -268,26 +228,24 @@ export function ArenaTerminal({ roomId, nameMap }: { roomId: bigint; nameMap?: R
             onChange={e => setInputMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              isMyPlayerAI
-                ? "AI agent — use MCP to play"
-                : !canSend
-                  ? "Spectator mode"
-                  : !canSendMessage
-                    ? "Message limit reached (3/round)"
-                    : isSending || isMining
-                      ? "Transmitting to chain..."
-                      : "Type your message..."
+              !canSend
+                ? "Spectator mode"
+                : !canSendMessage
+                  ? "Message limit reached (3/round)"
+                  : !isConnected
+                    ? "Connecting to chat..."
+                    : "Type your message..."
             }
-            disabled={isSending || isMining || !canSendMessage}
+            disabled={isSending || !canSendMessage || !isConnected}
             className="flex-1 bg-transparent border-none outline-none text-green-400 font-mono text-sm placeholder-gray-700 caret-green-400 disabled:opacity-50"
             maxLength={280}
           />
           <button
             onClick={handleSend}
-            disabled={!inputMessage.trim() || isSending || isMining || !canSendMessage}
+            disabled={!inputMessage.trim() || isSending || !canSendMessage || !isConnected}
             className="px-3 py-1 border border-green-700/50 text-green-400 font-mono text-xs hover:bg-green-900/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            {isSending || isMining ? <span className="animate-pulse">TX...</span> : "SEND"}
+            {isSending ? <span className="animate-pulse">...</span> : "SEND"}
           </button>
         </div>
         <div className="flex items-center justify-between mt-1">
@@ -297,12 +255,10 @@ export function ArenaTerminal({ roomId, nameMap }: { roomId: bigint; nameMap?: R
               <span
                 className={`font-mono text-xs ${messagesRemaining <= 0 ? "text-red-500" : messagesRemaining === 1 ? "text-yellow-500" : "text-gray-600"}`}
               >
-                {messagesUsed}/{MAX_MESSAGES} msgs
+                {myMessageCount}/{MAX_MESSAGES} msgs
               </span>
             )}
-            {(isSending || isMining) && (
-              <span className="text-yellow-600 font-mono text-xs animate-pulse">Broadcasting to network...</span>
-            )}
+            {!isConnected && <span className="text-yellow-600 font-mono text-xs animate-pulse">Reconnecting...</span>}
           </div>
         </div>
       </div>

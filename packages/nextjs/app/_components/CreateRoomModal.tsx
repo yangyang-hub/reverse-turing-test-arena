@@ -6,6 +6,7 @@ import { waitForTransactionReceipt } from "@wagmi/core";
 import { erc20Abi } from "viem";
 import { useConfig, useWriteContract } from "wagmi";
 import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useChatAuth } from "~~/hooks/scaffold-eth/useChatAuth";
 import { notification } from "~~/utils/scaffold-eth";
 
 const TIERS = [
@@ -61,6 +62,8 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
   const [isCreating, setIsCreating] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
+  const { getJoinAuth } = useChatAuth();
+
   const { writeContractAsync } = useScaffoldWriteContract({
     contractName: "TuringArena",
     disableSimulate: true,
@@ -112,7 +115,10 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
     try {
       const feeInUnits = BigInt(Math.round(parsedEntryFee * 1e6));
 
-      // Step 1: Approve USDC spend (createRoom auto-joins, so needs approval)
+      // Step 1: Get commitment + operator signature from chat-server
+      const { commitment, operatorSig } = await getJoinAuth(0, false, parsedMaxPlayers);
+
+      // Step 2: Approve USDC spend (createRoom auto-joins, so needs approval)
       const approveHash = await writeErc20({
         address: paymentTokenAddr as `0x${string}`,
         abi: erc20Abi,
@@ -121,10 +127,10 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
       });
       await waitForTransactionReceipt(config, { hash: approveHash });
 
-      // Step 2: Create room (auto-joins creator)
+      // Step 3: Create room with commitment
       await writeContractAsync({
         functionName: "createRoom",
-        args: [selectedTier, BigInt(parsedMaxPlayers), feeInUnits, false, playerName.trim()],
+        args: [selectedTier, BigInt(parsedMaxPlayers), feeInUnits, commitment, operatorSig, playerName.trim()],
       });
 
       onClose();

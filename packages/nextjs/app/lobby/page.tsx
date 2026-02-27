@@ -425,7 +425,7 @@ const RoomPhaseWatcher = ({ roomIds }: { roomIds: bigint[] }) => {
     };
 
     poll();
-    const interval = setInterval(poll, 3000);
+    const interval = setInterval(poll, 10000);
     return () => {
       cancelled = true;
       clearInterval(interval);

@@ -4,11 +4,16 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /// @title TuringArena - On-chain Reverse Turing Test: Humans vs AI
 /// @notice Players (humans & AI agents) chat, vote, and eliminate each other in team-based social deduction rounds
+/// @dev Uses commit-reveal for identity hiding: isAI is hidden during gameplay, revealed at game end by operator
 contract TuringArena is ReentrancyGuard {
     using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
+    using MessageHashUtils for bytes32;
 
     // ============ Constants ============
 
@@ -19,13 +24,13 @@ contract TuringArena is ReentrancyGuard {
     uint256 public constant BASIS_POINTS = 10000;
 
     uint256 public constant VOTE_DAMAGE = 10;
-    uint256 public constant MAX_MESSAGES_PER_ROUND = 3;
 
     uint256 public constant MIN_PLAYERS = 3; // minimum: 2 humans + 1 AI
     uint256 public constant MAX_PLAYERS = 50;
     uint256 public constant MIN_FEE = 1e6; // 1 USDC
     uint256 public constant MAX_FEE = 100e6; // 100 USDC
     uint256 public constant MAX_NAME_LENGTH = 20;
+    uint256 public constant REVEAL_TIMEOUT = 3600; // ~1h on Monad
 
     // ============ Enums ============
 
@@ -43,7 +48,7 @@ contract TuringArena is ReentrancyGuard {
         address addr;
         int256 humanityScore; // starts at 100, only decreases
         bool isAlive;
-        bool isAI; // true for AI agents, false for humans
+        bool isAI; // true for AI agents, false for humans — hidden during gameplay, set by revealAndEnd
         uint256 joinBlock;
         uint256 eliminationBlock;
         uint256 eliminationRank; // 1 = first eliminated
@@ -66,8 +71,6 @@ contract TuringArena is ReentrancyGuard {
         uint256 playerCount;
         uint256 aliveCount;
         uint256 eliminatedCount;
-        uint256 humanCount;
-        uint256 aiCount;
         uint256 lastSettleBlock;
         bool isActive;
         bool isEnded;
@@ -99,9 +102,6 @@ contract TuringArena is ReentrancyGuard {
     mapping(uint256 => mapping(uint256 => mapping(address => uint256))) public voteBlock;
     mapping(uint256 => uint256) public currentRound;
 
-    // Message counter: roomId => round => player => count
-    mapping(uint256 => mapping(uint256 => mapping(address => uint256))) public messageCount;
-
     // Rewards: roomId => player => RewardInfo
     mapping(uint256 => mapping(address => RewardInfo)) public rewards;
 
@@ -111,19 +111,21 @@ contract TuringArena is ReentrancyGuard {
     // Player names per room: roomId => player => name
     mapping(uint256 => mapping(address => string)) public playerNames;
 
+    // Commit-reveal identity hiding
+    address public operator;
+    mapping(uint256 => mapping(address => bytes32)) public identityCommitments;
+    mapping(bytes32 => bool) public usedCommitments; // anti-replay
+    mapping(uint256 => bool) public pendingReveal;
+
     uint256 public nextRoomId = 1;
     address public immutable protocolTreasury;
     IERC20 public immutable paymentToken;
 
     // ============ Events ============
 
-    event RoomCreated(
-        uint256 indexed roomId, address indexed creator, RoomTier tier, uint256 entryFee, uint256 maxPlayers,
-        bool isAI
-    );
-    event PlayerJoined(uint256 indexed roomId, address indexed player, bool isAI);
+    event RoomCreated(uint256 indexed roomId, address indexed creator, RoomTier tier, uint256 entryFee, uint256 maxPlayers);
+    event PlayerJoined(uint256 indexed roomId, address indexed player);
     event GameStarted(uint256 indexed roomId, uint256 playerCount);
-    event NewMessage(uint256 indexed roomId, address indexed sender, string content, uint256 timestamp);
     event VoteCast(uint256 indexed roomId, address indexed voter, address indexed target, uint256 round);
     event PlayerEliminated(
         uint256 indexed roomId, address indexed player, address eliminatedBy, string reason, int256 finalScore
@@ -132,14 +134,18 @@ contract TuringArena is ReentrancyGuard {
     event RewardClaimed(uint256 indexed roomId, address indexed player, uint256 amount);
     event PlayerLeft(uint256 indexed roomId, address indexed player, uint256 refund);
     event RoomCancelled(uint256 indexed roomId, address indexed creator);
+    event IdentitiesRevealed(uint256 indexed roomId, bool humansWon);
+    event EmergencyEndTriggered(uint256 indexed roomId);
 
     // ============ Constructor ============
 
-    constructor(address _treasury, address _paymentToken) {
+    constructor(address _treasury, address _paymentToken, address _operator) {
         require(_treasury != address(0), "Invalid treasury");
         require(_paymentToken != address(0), "Invalid payment token");
+        require(_operator != address(0), "Invalid operator");
         protocolTreasury = _treasury;
         paymentToken = IERC20(_paymentToken);
+        operator = _operator;
 
         tierConfigs[RoomTier.Quick] = TierConfig({ baseInterval: 300, rankingSlots: 3 });
         tierConfigs[RoomTier.Standard] = TierConfig({ baseInterval: 300, rankingSlots: 5 });
@@ -148,14 +154,25 @@ contract TuringArena is ReentrancyGuard {
 
     // ============ Room Management ============
 
-    function createRoom(RoomTier _tier, uint256 _maxPlayers, uint256 _entryFee, bool _isAI, string calldata _name)
-        external
-        returns (uint256 roomId)
-    {
+    function createRoom(
+        RoomTier _tier,
+        uint256 _maxPlayers,
+        uint256 _entryFee,
+        bytes32 _commitment,
+        bytes calldata _operatorSig,
+        string calldata _name
+    ) external returns (uint256 roomId) {
         require(_maxPlayers >= MIN_PLAYERS && _maxPlayers <= MAX_PLAYERS, "Invalid player count");
         require(_entryFee >= MIN_FEE && _entryFee <= MAX_FEE, "Invalid entry fee");
         require(playerActiveRoom[msg.sender] == 0, "Already in a room");
         require(bytes(_name).length >= 1 && bytes(_name).length <= MAX_NAME_LENGTH, "Invalid name length");
+        require(_commitment != bytes32(0), "Invalid commitment");
+        require(!usedCommitments[_commitment], "Commitment already used");
+        require(
+            _verifyOperator(keccak256(abi.encodePacked(msg.sender, _commitment, "create")), _operatorSig),
+            "Invalid operator signature"
+        );
+
         TierConfig storage config = tierConfigs[_tier];
         roomId = nextRoomId++;
 
@@ -173,8 +190,6 @@ contract TuringArena is ReentrancyGuard {
             playerCount: 1,
             aliveCount: 1,
             eliminatedCount: 0,
-            humanCount: _isAI ? 0 : 1,
-            aiCount: _isAI ? 1 : 0,
             lastSettleBlock: 0,
             isActive: false,
             isEnded: false
@@ -186,7 +201,7 @@ contract TuringArena is ReentrancyGuard {
             addr: msg.sender,
             humanityScore: 100,
             isAlive: true,
-            isAI: _isAI,
+            isAI: false, // hidden during gameplay
             joinBlock: block.number,
             eliminationBlock: 0,
             eliminationRank: 0,
@@ -197,45 +212,42 @@ contract TuringArena is ReentrancyGuard {
         roomPlayers[roomId].push(msg.sender);
         playerActiveRoom[msg.sender] = roomId;
         playerNames[roomId][msg.sender] = _name;
+        identityCommitments[roomId][msg.sender] = _commitment;
+        usedCommitments[_commitment] = true;
 
-        emit RoomCreated(roomId, msg.sender, _tier, _entryFee, _maxPlayers, _isAI);
-        emit PlayerJoined(roomId, msg.sender, _isAI);
+        emit RoomCreated(roomId, msg.sender, _tier, _entryFee, _maxPlayers);
+        emit PlayerJoined(roomId, msg.sender);
     }
 
-    function joinRoom(uint256 _roomId, bool _isAI, string calldata _name) external {
+    function joinRoom(uint256 _roomId, bytes32 _commitment, bytes calldata _operatorSig, string calldata _name)
+        external
+    {
         Room storage room = rooms[_roomId];
         require(room.id != 0, "Room does not exist");
         require(room.phase == GamePhase.Waiting, "Game already started");
         require(playerActiveRoom[msg.sender] == 0, "Already in a room");
         require(room.playerCount < room.maxPlayers, "Room is full");
         require(bytes(_name).length >= 1 && bytes(_name).length <= MAX_NAME_LENGTH, "Invalid name length");
-
-        // Enforce 7:3 human:AI ratio — at least 1 AI slot guaranteed
-        uint256 aiSlots = room.maxPlayers * 30 / 100;
-        if (aiSlots == 0) aiSlots = 1; // min 1 AI for team game
-        uint256 humanSlots = room.maxPlayers - aiSlots;
-        if (_isAI) {
-            require(room.aiCount < aiSlots, "AI slots full");
-        } else {
-            require(room.humanCount < humanSlots, "Human slots full");
-        }
+        require(_commitment != bytes32(0), "Invalid commitment");
+        require(!usedCommitments[_commitment], "Commitment already used");
+        require(
+            _verifyOperator(
+                keccak256(abi.encodePacked(msg.sender, _commitment, "join", _roomId)), _operatorSig
+            ),
+            "Invalid operator signature"
+        );
 
         paymentToken.safeTransferFrom(msg.sender, address(this), room.entryFee);
         room.prizePool += room.entryFee;
 
         room.playerCount++;
         room.aliveCount++;
-        if (_isAI) {
-            room.aiCount++;
-        } else {
-            room.humanCount++;
-        }
 
         players[_roomId][msg.sender] = Player({
             addr: msg.sender,
             humanityScore: 100,
             isAlive: true,
-            isAI: _isAI,
+            isAI: false, // hidden during gameplay
             joinBlock: block.number,
             eliminationBlock: 0,
             eliminationRank: 0,
@@ -247,7 +259,10 @@ contract TuringArena is ReentrancyGuard {
         roomPlayers[_roomId].push(msg.sender);
         playerActiveRoom[msg.sender] = _roomId;
         playerNames[_roomId][msg.sender] = _name;
-        emit PlayerJoined(_roomId, msg.sender, _isAI);
+        identityCommitments[_roomId][msg.sender] = _commitment;
+        usedCommitments[_commitment] = true;
+
+        emit PlayerJoined(_roomId, msg.sender);
 
         // Auto-start when room is full
         if (room.playerCount == room.maxPlayers) {
@@ -270,18 +285,11 @@ contract TuringArena is ReentrancyGuard {
 
     function _removePlayer(uint256 _roomId, address _player) internal {
         Room storage room = rooms[_roomId];
-        Player storage p = players[_roomId][_player];
         uint256 refund = room.entryFee;
-
-        // Update human/AI counts
-        if (p.isAI) {
-            room.aiCount--;
-        } else {
-            room.humanCount--;
-        }
 
         delete players[_roomId][_player];
         delete playerNames[_roomId][_player];
+        delete identityCommitments[_roomId][_player];
         playerActiveRoom[_player] = 0;
 
         address[] storage playerList = roomPlayers[_roomId];
@@ -314,14 +322,13 @@ contract TuringArena is ReentrancyGuard {
 
         for (uint256 i = 0; i < playerList.length; i++) {
             address player = playerList[i];
-            if (players[_roomId][player].addr != address(0)) {
-                uint256 refund = room.entryFee;
-                delete players[_roomId][player];
-                delete playerNames[_roomId][player];
-                playerActiveRoom[player] = 0;
-                paymentToken.safeTransfer(player, refund);
-                emit PlayerLeft(_roomId, player, refund);
-            }
+            uint256 refund = room.entryFee;
+            delete players[_roomId][player];
+            delete playerNames[_roomId][player];
+            delete identityCommitments[_roomId][player];
+            playerActiveRoom[player] = 0;
+            paymentToken.safeTransfer(player, refund);
+            emit PlayerLeft(_roomId, player, refund);
         }
 
         delete roomPlayers[_roomId];
@@ -330,8 +337,6 @@ contract TuringArena is ReentrancyGuard {
         room.isEnded = true;
         room.playerCount = 0;
         room.aliveCount = 0;
-        room.humanCount = 0;
-        room.aiCount = 0;
         room.prizePool = 0;
 
         emit RoomCancelled(_roomId, room.creator);
@@ -360,26 +365,10 @@ contract TuringArena is ReentrancyGuard {
 
     // ============ Core Interaction ============
 
-    function sendMessage(uint256 _roomId, string calldata _content) external {
-        require(rooms[_roomId].isActive && !rooms[_roomId].isEnded, "Game not active");
-        require(players[_roomId][msg.sender].isAlive, "You are eliminated");
-        require(bytes(_content).length <= 280, "Message too long");
-        require(bytes(_content).length > 0, "Empty message");
-
-        uint256 round = currentRound[_roomId];
-        require(messageCount[_roomId][round][msg.sender] < MAX_MESSAGES_PER_ROUND, "Message limit reached");
-        messageCount[_roomId][round][msg.sender]++;
-
-        Player storage player = players[_roomId][msg.sender];
-        player.lastActionBlock = block.number;
-        player.actionCount++;
-
-        emit NewMessage(_roomId, msg.sender, _content, block.timestamp);
-    }
-
     function castVote(uint256 _roomId, address _target) external nonReentrant {
         Room storage room = rooms[_roomId];
         require(room.isActive && !room.isEnded, "Game not active");
+        require(!pendingReveal[_roomId], "Pending reveal");
         require(players[_roomId][msg.sender].isAlive, "You are eliminated");
         require(players[_roomId][_target].isAlive, "Target already eliminated");
         require(_target != msg.sender, "Cannot vote for yourself");
@@ -404,6 +393,7 @@ contract TuringArena is ReentrancyGuard {
     function settleRound(uint256 _roomId) external nonReentrant {
         Room storage room = rooms[_roomId];
         require(room.isActive && !room.isEnded, "Game not active");
+        require(!pendingReveal[_roomId], "Pending reveal");
         require(block.number >= room.lastSettleBlock + room.currentInterval, "Round not ended yet");
         _settleRound(_roomId);
     }
@@ -487,31 +477,9 @@ contract TuringArena is ReentrancyGuard {
         currentRound[_roomId]++;
         room.lastSettleBlock = block.number;
 
-        // Step 6: Team win check
-        if (room.isActive) {
-            uint256 aliveHumans = 0;
-            uint256 aliveAIs = 0;
-            for (uint256 i = 0; i < allPlayers.length; i++) {
-                Player storage p = players[_roomId][allPlayers[i]];
-                if (p.isAlive) {
-                    if (p.isAI) {
-                        aliveAIs++;
-                    } else {
-                        aliveHumans++;
-                    }
-                }
-            }
-
-            if (aliveHumans == 0 && aliveAIs > 0) {
-                // All humans eliminated — AIs win
-                _endGame(_roomId, false);
-            } else if (aliveAIs == 0 && aliveHumans > 0) {
-                // All AIs eliminated — Humans win
-                _endGame(_roomId, true);
-            } else if (room.aliveCount <= 2) {
-                // 2-player endgame: HP comparison
-                _resolveFinalTwo(_roomId);
-            }
+        // Step 6: If alive count <= 2, pause for operator reveal
+        if (room.isActive && room.aliveCount <= 2) {
+            pendingReveal[_roomId] = true;
         }
     }
 
@@ -533,6 +501,7 @@ contract TuringArena is ReentrancyGuard {
     }
 
     /// @dev When 2 players remain, compare HP. Higher HP wins. Tie → AI wins.
+    /// Called by revealAndEnd after identities are known.
     function _resolveFinalTwo(uint256 _roomId) internal {
         address[] storage all = roomPlayers[_roomId];
         address alive1;
@@ -547,6 +516,9 @@ contract TuringArena is ReentrancyGuard {
                 }
             }
         }
+
+        // Guard: need exactly 2 alive players for this resolution
+        if (alive1 == address(0) || alive2 == address(0)) return;
 
         Player storage p1 = players[_roomId][alive1];
         Player storage p2 = players[_roomId][alive2];
@@ -567,11 +539,6 @@ contract TuringArena is ReentrancyGuard {
             }
         }
         _markEliminated(_roomId, loser, address(0), "final_two");
-
-        // Determine winning team based on the survivor
-        address winner = (loser == alive1) ? alive2 : alive1;
-        bool humansWon = !players[_roomId][winner].isAI;
-        _endGame(_roomId, humansWon);
     }
 
     function _findEarliestVoter(uint256 _roomId, uint256 _round, address[] storage _allPlayers)
@@ -617,6 +584,130 @@ contract TuringArena is ReentrancyGuard {
             }
         }
         return rooms[_roomId].aliveCount > 0;
+    }
+
+    // ============ Reveal & End Game ============
+
+    /// @notice Operator reveals all identities and ends the game with team-based outcome
+    function revealAndEnd(
+        uint256 _roomId,
+        address[] calldata _players,
+        bool[] calldata _isAIs,
+        bytes32[] calldata _salts
+    ) external {
+        require(msg.sender == operator, "Only operator");
+        require(rooms[_roomId].isActive || pendingReveal[_roomId], "Not active/pending");
+        require(!rooms[_roomId].isEnded, "Already ended");
+        require(_players.length == _isAIs.length && _isAIs.length == _salts.length, "Array length mismatch");
+
+        address[] storage allPlayers = roomPlayers[_roomId];
+        require(_players.length == allPlayers.length, "Must reveal all players");
+
+        // Verify commitments and set isAI
+        for (uint256 i = 0; i < _players.length; i++) {
+            bytes32 commitment = identityCommitments[_roomId][_players[i]];
+            require(commitment != bytes32(0), "No commitment for player");
+            bytes32 computed = keccak256(abi.encodePacked(_isAIs[i], _salts[i]));
+            require(computed == commitment, "Commitment mismatch");
+            players[_roomId][_players[i]].isAI = _isAIs[i];
+        }
+
+        // Count alive humans and AIs
+        uint256 aliveHumans = 0;
+        uint256 aliveAIs = 0;
+        for (uint256 i = 0; i < allPlayers.length; i++) {
+            Player storage p = players[_roomId][allPlayers[i]];
+            if (p.isAlive) {
+                if (p.isAI) {
+                    aliveAIs++;
+                } else {
+                    aliveHumans++;
+                }
+            }
+        }
+
+        // Resolve final two if exactly 2 alive
+        if (rooms[_roomId].aliveCount == 2) {
+            _resolveFinalTwo(_roomId);
+            // Recount after resolution
+            aliveHumans = 0;
+            aliveAIs = 0;
+            for (uint256 i = 0; i < allPlayers.length; i++) {
+                Player storage p = players[_roomId][allPlayers[i]];
+                if (p.isAlive) {
+                    if (p.isAI) {
+                        aliveAIs++;
+                    } else {
+                        aliveHumans++;
+                    }
+                }
+            }
+        }
+
+        // Determine winner
+        bool humansWon;
+        if (aliveHumans == 0 && aliveAIs > 0) {
+            humansWon = false; // AIs win
+        } else if (aliveAIs == 0 && aliveHumans > 0) {
+            humansWon = true; // Humans win
+        } else if (aliveHumans > 0 && aliveAIs > 0) {
+            // Both teams still have survivors — humans win if they have more alive
+            humansWon = aliveHumans >= aliveAIs;
+        } else {
+            // Both teams eliminated (shouldn't happen normally)
+            humansWon = false;
+        }
+
+        pendingReveal[_roomId] = false;
+        _endGame(_roomId, humansWon);
+
+        emit IdentitiesRevealed(_roomId, humansWon);
+    }
+
+    /// @notice Emergency end when operator fails to reveal within timeout
+    function emergencyEnd(uint256 _roomId) external {
+        require(pendingReveal[_roomId], "Not pending reveal");
+        require(!rooms[_roomId].isEnded, "Already ended");
+        require(block.number > rooms[_roomId].lastSettleBlock + REVEAL_TIMEOUT, "Reveal timeout not reached");
+
+        Room storage room = rooms[_roomId];
+        pendingReveal[_roomId] = false;
+
+        room.isActive = false;
+        room.isEnded = true;
+        room.phase = GamePhase.Ended;
+
+        // Clear active room for all players
+        address[] storage allPlayers = roomPlayers[_roomId];
+        for (uint256 i = 0; i < allPlayers.length; i++) {
+            playerActiveRoom[allPlayers[i]] = 0;
+        }
+
+        // Emergency: split prize equally among alive players (no team bonus)
+        uint256 totalPrize = room.prizePool;
+        uint256 protocolAmount = (totalPrize * PROTOCOL_SHARE) / BASIS_POINTS;
+        uint256 remainingPool = totalPrize - protocolAmount;
+
+        if (protocolAmount > 0) {
+            rewards[_roomId][protocolTreasury].amount += protocolAmount;
+        }
+
+        uint256 aliveCount = 0;
+        for (uint256 i = 0; i < allPlayers.length; i++) {
+            if (players[_roomId][allPlayers[i]].isAlive) {
+                aliveCount++;
+            }
+        }
+        if (aliveCount > 0) {
+            uint256 perPlayer = remainingPool / aliveCount;
+            for (uint256 i = 0; i < allPlayers.length; i++) {
+                if (players[_roomId][allPlayers[i]].isAlive) {
+                    rewards[_roomId][allPlayers[i]].amount += perPlayer;
+                }
+            }
+        }
+
+        emit EmergencyEndTriggered(_roomId);
     }
 
     // ============ End Game & Rewards ============
@@ -736,6 +827,12 @@ contract TuringArena is ReentrancyGuard {
 
     // ============ Admin ============
 
+    function setOperator(address _newOperator) external {
+        require(msg.sender == protocolTreasury, "Only treasury");
+        require(_newOperator != address(0), "Invalid operator");
+        operator = _newOperator;
+    }
+
     function withdrawUnclaimed(uint256 _amount) external {
         require(msg.sender == protocolTreasury, "Only treasury");
         require(_amount <= paymentToken.balanceOf(address(this)), "Insufficient balance");
@@ -781,10 +878,6 @@ contract TuringArena is ReentrancyGuard {
         return paymentToken.balanceOf(address(this));
     }
 
-    function getMessageCount(uint256 _roomId, uint256 _round, address _player) external view returns (uint256) {
-        return messageCount[_roomId][_round][_player];
-    }
-
     function getPlayerName(uint256 _roomId, address _player) external view returns (string memory) {
         return playerNames[_roomId][_player];
     }
@@ -796,5 +889,11 @@ contract TuringArena is ReentrancyGuard {
             names[i] = playerNames[_roomId][addrs[i]];
         }
         return names;
+    }
+
+    // ============ Internal: Operator Verification ============
+
+    function _verifyOperator(bytes32 _hash, bytes calldata _sig) internal view returns (bool) {
+        return _hash.toEthSignedMessageHash().recover(_sig) == operator;
     }
 }

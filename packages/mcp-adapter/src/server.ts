@@ -14,6 +14,8 @@ import { GameLoop } from "./lib/gameLoop.js";
 import { DEFAULT_CONFIG, PHASE_NAMES } from "./lib/types.js";
 // 导入自动玩配置的类型定义
 import type { AutoPlayConfig, VoteStrategy, ChatStrategy } from "./lib/types.js";
+// 导入链下聊天客户端
+import { ChatClient } from "./lib/chatClient.js";
 
 // ============ 全局变量初始化 ============
 
@@ -72,14 +74,18 @@ class RateLimiter {
     const timeSinceLastCall = now - this.lastCall;
     if (timeSinceLastCall < this.minInterval) {
       const waitTime = this.minInterval - timeSinceLastCall;
+      // Update lastCall BEFORE sleeping to prevent concurrent callers
+      // from computing the same short wait time
+      this.lastCall = now + waitTime;
       await sleep(waitTime);
+    } else {
+      this.lastCall = now;
     }
-    this.lastCall = Date.now();
   }
 }
 
-// 为测试网RPC创建速率限制器（40 req/s，留点余量）
-const rpcRateLimiter = new RateLimiter(40);
+// 为测试网RPC创建速率限制器（20 req/s，给其他客户端留配额）
+const rpcRateLimiter = new RateLimiter(20);
 
 // 玩家钱包变量（通过 init_session 工具初始化）
 // 使用 null 表示钱包尚未初始化
@@ -91,6 +97,10 @@ let activeGameLoop: GameLoop | null = null;
 // 从环境变量读取合约地址，如果未设置则为空字符串
 const ARENA_CONTRACT = process.env.ARENA_CONTRACT_ADDRESS || ""; // 竞技场合约地址
 const PAYMENT_TOKEN = process.env.PAYMENT_TOKEN_ADDRESS || ""; // 支付代币（USDC）地址
+const CHAT_SERVER_URL = process.env.CHAT_SERVER_URL || "http://localhost:43001"; // 链下聊天服务 URL
+
+// 链下聊天客户端（在 init_session 后初始化）
+let chatClient: ChatClient | null = null;
 
 // ============ 工具 1: 获取竞技场状态 ============
 server.tool(
@@ -165,25 +175,28 @@ server.tool(
         return allEvents;
       };
 
-      // 分批查询三种事件（减少并行度，避免速率限制）
-      // 先并行查询2个
-      const [chatEvents, voteEvents] = await Promise.all([
-        // 查询聊天消息事件
-        queryEventsInBatches(contract.filters.NewMessage(roomId), fromBlock, currentBlock, "NewMessage"),
-        // 查询投票事件
+      // 并行查询事件（两组事件同时查询，总时间减半）
+      // 只查询投票和淘汰事件（聊天已移至链下）
+      const [voteEvents, elimEvents] = await Promise.all([
         queryEventsInBatches(contract.filters.VoteCast(roomId), fromBlock, currentBlock, "VoteCast"),
+        queryEventsInBatches(contract.filters.PlayerEliminated(roomId), fromBlock, currentBlock, "PlayerEliminated"),
       ]);
-      // 再查询第3个
-      const elimEvents = await queryEventsInBatches(contract.filters.PlayerEliminated(roomId), fromBlock, currentBlock, "PlayerEliminated");
 
-      // 处理聊天消息事件，提取发送者、内容、时间戳
-      const chatHistory = chatEvents
-        .filter((e): e is ethers.EventLog => "args" in e) // 过滤出有效的事件日志
-        .map(e => ({
-          sender: e.args[1], // 发送者地址（args[0] 是 roomId）
-          content: e.args[2], // 消息内容
-          timestamp: Number(e.args[3]), // 消息时间戳
-        }));
+      // 获取聊天记录（从链下 REST API）
+      let chatHistory: { sender: string; content: string; timestamp: number }[] = [];
+      if (chatClient) {
+        try {
+          const chatMessages = await chatClient.getMessages(Number(roomId));
+          chatHistory = chatMessages.map((m: any) => ({
+            sender: m.sender,
+            content: m.content,
+            timestamp: Math.floor(new Date(m.createdAt).getTime() / 1000),
+          }));
+        } catch (chatErr) {
+          logError(toolName, "chatClient.getMessages", chatErr);
+          // Fallback: return empty chat if chat server unavailable
+        }
+      }
 
       // 从事件中提取当前轮次的投票记录
       const currentRound = Number(round); // 当前轮次号
@@ -205,18 +218,22 @@ server.tool(
           finalScore: Number(e.args[4]), // 最终人性分
         }));
 
-      // 获取每个玩家的详细信息 + 名称
-      logRpcCall(toolName, "getPlayerInfo + getRoomPlayerNames", { playerCount: playerAddresses.length });
-      const playerInfos = [];
-      for (const addr of playerAddresses as string[]) {
-        await rpcRateLimiter.wait(); // 速率限制
-        const info = await contract.getPlayerInfo(roomId, addr);
-        playerInfos.push(info);
-      }
-      await rpcRateLimiter.wait();
-      const playerNames = await contract.getRoomPlayerNames(roomId);
+      // 并行获取每个玩家的详细信息 + 名称（替代顺序循环）
+      logRpcCall(toolName, "getPlayerInfo (parallel) + getRoomPlayerNames", { playerCount: playerAddresses.length });
+      const [playerInfos, playerNames] = await Promise.all([
+        Promise.all(
+          (playerAddresses as string[]).map(async (addr: string) => {
+            await rpcRateLimiter.wait();
+            return contract.getPlayerInfo(roomId, addr);
+          })
+        ),
+        (async () => {
+          await rpcRateLimiter.wait();
+          return contract.getRoomPlayerNames(roomId);
+        })(),
+      ]);
       const names = playerNames as string[];
-      logRpcResponse(toolName, "getPlayerInfo + names", true, { playerCount: playerInfos.length });
+      logRpcResponse(toolName, "getPlayerInfo (parallel) + names", true, { playerCount: playerInfos.length });
 
       // 格式化玩家信息，提取关键字段
       const formattedPlayers = playerInfos.map((p: ethers.Result, idx: number) => ({
@@ -224,6 +241,7 @@ server.tool(
         name: names[idx] || "", // 玩家名称
         humanityScore: Number(p.humanityScore), // 人性分
         isAlive: p.isAlive, // 是否存活
+        // NOTE: isAI 在游戏中始终为 false（commit-reveal 隐藏身份），仅 reveal 后有真实值
         isAI: p.isAI, // 是否为 AI
         actionCount: Number(p.actionCount), // 行动次数
         successfulVotes: Number(p.successfulVotes), // 成功投票次数（投中淘汰目标的次数）
@@ -258,8 +276,7 @@ server.tool(
                   maxPlayers: Number(roomInfo.maxPlayers), // 最大玩家数
                   playerCount: Number(roomInfo.playerCount), // 当前玩家数
                   aliveCount: Number(roomInfo.aliveCount), // 存活玩家数
-                  humanCount: Number(roomInfo.humanCount), // 人类玩家数
-                  aiCount: Number(roomInfo.aiCount), // AI 玩家数
+                  // NOTE: humanCount/aiCount removed — commit-reveal hides identity
                   currentRound: currentRound, // 当前轮次
                   isActive: roomInfo.isActive, // 是否活跃
                   isEnded: roomInfo.isEnded, // 是否已结束
@@ -316,32 +333,58 @@ server.tool(
       const contract = new ethers.Contract(ARENA_CONTRACT, ARENA_ABI, playerWallet);
 
       // 强制执行渠道独占：MCP 只能为 AI 玩家执行操作
-      logRpcCall(toolName, "getPlayerInfo", { roomId, address: playerWallet.address });
-      const playerInfo = await contract.getPlayerInfo(roomId, playerWallet.address);
-      if (!playerInfo.isAI) {
-        logError(toolName, "Channel exclusivity failed - player is Human", null);
-        return {
-          content: [{ type: "text" as const, text: "Error: You joined this room as a Human (via browser). MCP actions are disabled — use the web UI to play." }],
-          isError: true,
-        };
+      // NOTE: 合约中 isAI 在游戏中始终为 false（commit-reveal），
+      // 所以通过 chat-server identity API 验证身份
+      if (chatClient) {
+        try {
+          const identityRes = await fetch(`${CHAT_SERVER_URL}/api/rooms/${roomId}/identity/${playerWallet.address}`, {
+            headers: { Authorization: `Bearer ${await chatClient["ensureAuth"]()}` },
+          });
+          if (identityRes.ok) {
+            const identity = await identityRes.json();
+            if (!identity.isAI) {
+              logError(toolName, "Channel exclusivity failed - player is Human (from chat-server)", null);
+              return {
+                content: [{ type: "text" as const, text: "Error: You joined this room as a Human (via browser). MCP actions are disabled — use the web UI to play." }],
+                isError: true,
+              };
+            }
+          }
+          // If identity check fails, fall through — allow action (operator might not have identity record yet)
+        } catch (identityErr) {
+          logError(toolName, "Identity check failed (continuing)", identityErr);
+          // Non-fatal: if chat-server is down, allow the action
+        }
       }
 
       let tx: ethers.TransactionResponse; // 交易响应对象
 
       // 根据操作类型执行相应的合约函数
       switch (type) {
-        case "CHAT": // 聊天操作
+        case "CHAT": // 聊天操作 — 走链下 REST API
           if (!content) throw new Error("Content required for CHAT action");
           if (content.length > 280) throw new Error("Message too long (max 280 chars)");
-          logRpcCall(toolName, "sendMessage", { roomId, content: content.slice(0, 50) + "..." });
-          tx = await contract.sendMessage(roomId, content); // 调用合约发送消息
-          break;
+          if (!chatClient) throw new Error("Chat client not initialized. Use init_session first.");
+          logRpcCall(toolName, "chatClient.sendMessage", { roomId, content: content.slice(0, 50) + "..." });
+          await chatClient.sendMessage(Number(roomId), content);
+          logSuccess(toolName, `CHAT sent via REST`);
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Message sent successfully (off-chain)!`,
+              },
+            ],
+          };
 
         case "VOTE": // 投票操作
           if (!target) throw new Error("Target address required for VOTE action");
           logRpcCall(toolName, "castVote", { roomId, target });
           tx = await contract.castVote(roomId, target); // 调用合约投票
           break;
+
+        default:
+          throw new Error(`Unknown action type: ${type}. Use CHAT or VOTE.`);
       }
 
       logRpcCall(toolName, "tx.wait", { hash: tx.hash });
@@ -432,6 +475,8 @@ server.tool(
     try {
       // 使用私钥创建钱包实例，并连接到 RPC 提供者
       playerWallet = new ethers.Wallet(privateKey, provider);
+      // 初始化链下聊天客户端
+      chatClient = new ChatClient(CHAT_SERVER_URL, playerWallet);
       // 查询钱包的 ETH 余额
       const balance = await provider.getBalance(playerWallet.address);
 
@@ -682,7 +727,7 @@ server.tool(
     settleEnabled: z.boolean().optional()
       .describe("是否在满足条件时调用 settleRound（默认 true）"),
     pollIntervalMs: z.number().min(1000).max(60000).optional()
-      .describe("轮询间隔，单位毫秒（默认 5000）"),
+      .describe("轮询间隔，单位毫秒（默认 10000）"),
   },
   async ({ roomId, voteStrategy, chatStrategy, chatFrequency, settleEnabled, pollIntervalMs }) => {
     // 检查钱包是否已初始化
@@ -710,7 +755,7 @@ server.tool(
     };
 
     // 创建新的游戏循环实例并启动
-    activeGameLoop = new GameLoop(config, playerWallet, ARENA_CONTRACT);
+    activeGameLoop = new GameLoop(config, playerWallet, ARENA_CONTRACT, undefined, chatClient);
     activeGameLoop.start(); // 启动后台循环
 
     return {
@@ -829,8 +874,17 @@ server.tool(
       // 生成玩家名称（使用提供的名称或默认 AI-XXXX）
       const playerName = name || `AI-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
-      // 调用合约的 createRoom 函数创建房间（MCP = AI，所以第 4 个参数为 true）
-      const tx = await contract.createRoom(Number(tier), maxPlayers, feeWei, true, playerName);
+      // 通过 chat-server 获取 commitment + operator 签名（commit-reveal 身份隐藏）
+      if (!chatClient) {
+        return {
+          content: [{ type: "text" as const, text: "Error: Chat client not initialized. Use init_session first." }],
+          isError: true,
+        };
+      }
+      const joinAuth = await chatClient.getJoinAuth(0, true, maxPlayers); // roomId=0 for create
+
+      // 调用合约的 createRoom 函数创建房间（使用 commitment 隐藏身份）
+      const tx = await contract.createRoom(Number(tier), maxPlayers, feeWei, joinAuth.commitment, joinAuth.operatorSig, playerName);
       const receipt = await tx.wait(); // 等待交易被打包并获取收据
 
       // 从 RoomCreated 事件中提取房间 ID
@@ -1184,6 +1238,7 @@ server.tool(
 
       // 从最新到最旧扫描房间
       for (let i = total; i >= 1; i--) {
+        await rpcRateLimiter.wait(); // 速率限制：每次房间查询前等待
         const roomId = i.toString();
         const roomInfo = await contract.getRoomInfo(roomId);
 
@@ -1192,7 +1247,6 @@ server.tool(
         const playerCount = Number(roomInfo.playerCount); // 当前玩家数
         const maxP = Number(roomInfo.maxPlayers); // 最大玩家数
         const entryFee = roomInfo.entryFee; // 入场费
-        const aiCount = Number(roomInfo.aiCount); // AI 玩家数
         const roomTier = Number(roomInfo.tier); // 房间等级
 
         // 阶段必须是等待（0）且未满员
@@ -1207,10 +1261,17 @@ server.tool(
         // 等级过滤器（如果指定）
         if (tier !== undefined && roomTier !== Number(tier)) continue;
 
-        // 检查 AI 插槽可用性（MCP = AI）
-        // AI 插槽数为最大玩家数的 30%（最少 1 个）
-        const aiSlots = Math.max(1, Math.floor(maxP * 30 / 100));
-        if (aiCount >= aiSlots) continue; // AI 插槽已满
+        // NOTE: AI 插槽由 chat-server operator 管理（commit-reveal 方案）
+        // 如果 operator 拒绝签名，getJoinAuth 会抛错，无需本地检查
+
+        // 通过 chat-server operator 获取 commitment + 签名授权
+        if (!chatClient) {
+          return {
+            content: [{ type: "text" as const, text: "Error: Chat server not configured (CHAT_SERVER_URL required for commit-reveal join)." }],
+            isError: true,
+          };
+        }
+        const joinAuth = await chatClient.getJoinAuth(Number(roomId), true, maxP);
 
         // 批准 USDC 并加入房间 — 合约通过 playerActiveRoom 强制单房间限制
         const tokenAddr = PAYMENT_TOKEN || (await contract.paymentToken()); // 获取代币地址
@@ -1224,8 +1285,8 @@ server.tool(
         // 生成玩家名称（使用提供的名称或默认 AI-XXXX）
         const playerName = name || `AI-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
-        // 调用合约的 joinRoom 函数加入房间（MCP = AI，所以第 2 个参数为 true）
-        const tx = await contract.joinRoom(roomId, true, playerName);
+        // 调用合约的 joinRoom 函数（commit-reveal: commitment + operatorSig 替代 bool isAI）
+        const tx = await contract.joinRoom(roomId, joinAuth.commitment, joinAuth.operatorSig, playerName);
         await tx.wait(); // 等待交易被打包
 
         return {

@@ -42,53 +42,57 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 - Game phases: Waiting → Active → Ended (simplified from 5-phase system)
 - 人性分 (humanityScore) 只减不加，初始 100
 - 每轮强制投票，未投票自投 -10 分 (VOTE_DAMAGE)，投票扣目标 -10 分
-- 每轮最多 3 条消息 (MAX_MESSAGES_PER_ROUND)
+- 每轮最多 3 条消息 (enforced by chat-server, not contract)
 - 房间满员自动开始游戏 (auto-start)
 - Team win: 所有 AI 被淘汰 → 人类胜; 所有人类被淘汰 → AI 胜; 剩余 2 人 → HP 比较 (平局 AI 胜)
 - 奖励分配: 70% 获胜队伍, 10% MVP, 10% 存活, 10% 协议
 - 房间三档: Quick(Bronze) / Standard(Silver) / Epic(Gold)
-- 所有聊天内容仅通过事件存储，不写入 storage
+- 所有聊天内容通过链下 chat-server 处理 (WebSocket + PostgreSQL)，不再写入链上
 - Quick 局 baseInterval=100 (Monad ≈ 40s/轮), Standard/Epic=150 (≈ 60s/轮)
-- `createRoom(RoomTier, uint256 _maxPlayers, uint256 _entryFee, bool _isAI, string _name)` — 5th param: player's chosen name
-- `joinRoom(uint256 _roomId, bool _isAI, string _name)` — 3rd param: player's chosen name
+- `createRoom(RoomTier, uint256 _maxPlayers, uint256 _entryFee, bytes32 _commitment, bytes _operatorSig, string _name)` — commitment-based join (identity hidden)
+- `joinRoom(uint256 _roomId, bytes32 _commitment, bytes _operatorSig, string _name)` — commitment-based join
 - `playerActiveRoom(address)` — returns active room ID (0 = not in any room); enforces single-room-per-player
+- Commit-reveal identity hiding: `isAI` hidden during gameplay (always false), revealed by operator via `revealAndEnd` after game
+- Chat-server operator manages 7:3 human:AI ratio off-chain, signs authorization for room join
+- `pendingReveal` state: game pauses when aliveCount <= 2, operator calls `revealAndEnd`
+- `emergencyEnd`: timeout fallback if operator fails to reveal
 
 ---
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-26 — Added player name selection (on-chain name binding)
+> **Last updated**: 2026-02-27 — RPC Polling Optimization
 
-### Current Status: Player Name Selection
+### Current Status: RPC Polling Optimization
 
 | Module | Status | Notes |
 |--------|--------|-------|
 | Design Doc (IMPLEMENTATION_PLAN.md) | DONE | 12 sections, ~6800 lines |
-| TuringArena.sol | DONE | Team-based Humans vs AI, simplified {Waiting, Active, Ended}, strict 7:3 ratio (both slots enforced), room-full-to-start, 3 msg/round, self-vote -10, single-room-per-player (playerActiveRoom), player names (1-20 chars on-chain), 60 tests passing |
+| TuringArena.sol | DONE | Commit-reveal identity hiding, operator signature auth, pendingReveal + revealAndEnd + emergencyEnd, humanCount/aiCount removed from Room struct, 55+ tests passing |
 | MockUSDC.sol | DONE | Test USDC mock with 6 decimals, public mint |
-| Deploy Script | DONE | DeployTuringArena.s.sol — deploys MockUSDC + TuringArena |
-| Contract Tests | DONE | 60 test cases, 100% pass (incl. team win, strict 7:3 slots, human slot limit, auto-start, message limit, multi-room restriction, player names) |
-| Zustand gameStore | DONE | gameStore.ts with team-based types (GamePhase: Waiting/Active/Ended, Player.isAI) |
+| Deploy Script | DONE | DeployTuringArena.s.sol — deploys MockUSDC + TuringArena (constructor takes operator addr) |
+| Contract Tests | DONE | Rewritten with commitment-based helpers, operator signature, reveal tests |
+| ~~Zustand gameStore~~ | REMOVED | Dead code — was never used by any component |
 | Cyberpunk CSS | DONE | globals.css with glitch text, cyber-grid-bg, tier/phase classes |
 | scaffold.config.ts | DONE | Foundry + Monad Testnet, env-based dev/prod config |
 | Landing Page | DONE | page.tsx — HeroSection (with RoleSelector dual-path), How It Works, live stats |
 | Lobby Page | DONE | lobby/page.tsx — room browser with filter tabs (All/Waiting/Active/Ended/My Games) |
 | Lobby Components | DONE | HeroSection.tsx, RoleSelector.tsx, RoomCard.tsx, CreateRoomModal.tsx |
 | Arena Page | DONE | arena/page.tsx with 3-column grid, HUD top bar, Suspense |
-| ArenaTerminal | DONE | Terminal chat UI, on-chain messages, 3/round message limit, discussion topics per round |
+| ArenaTerminal | DONE | Terminal chat UI, WebSocket off-chain messages via useChatSocket, 3/round message limit, discussion topics per round |
 | VotePanel | DONE | Vote target selection, humanity score bars, castVote flow |
 | PlayerRadar | DONE | Player list with AI/Human badges, HP bars, alive/dead status |
-| GameHUD | DONE | Sticky top bar with phase/alive/humanity/round |
-| GameCountdown | DONE | 3-2-1-FIGHT fullscreen countdown with framer-motion |
-| PhaseTransition | DONE | Phase change fullscreen wipe animation |
+| ~~GameHUD~~ | REMOVED | Dead code — unused component |
+| ~~GameCountdown~~ | REMOVED | Dead code — unused component |
+| ~~PhaseTransition~~ | REMOVED | Dead code — unused component |
 | VictoryScreen | DONE | Team-based display (HUMANS WIN / AIs WIN), MVP section, claim button |
 | KillFeed | DONE | Fixed sidebar elimination notifications |
 | ChatMessage | DONE | 5 message types with styled rendering |
-| VotingGraph | DONE | Canvas ring-layout network visualization |
-| DataStream | DONE | Real-time blockchain tx stream (NewMessage, VoteCast) |
-| PlayerIdentityCard | DONE | Modal with SVG humanity gauge, stats, vote button |
-| MCP Adapter | DONE | packages/mcp-adapter/ with 16 tools, match_room replaces JOIN, team-based (MCP=AI, Web=Human), auto-play game loop |
-| MCP Auto-Play | DONE | GameLoop class (lib/gameLoop.ts), team-aware voting, chat pool, 3 msg/round limit |
+| ~~VotingGraph~~ | REMOVED | Dead code — unused component |
+| ~~DataStream~~ | REMOVED | Dead code — unused component (chat moved off-chain, only VoteCast remained) |
+| ~~PlayerIdentityCard~~ | REMOVED | Dead code — unused component |
+| MCP Adapter | DONE | packages/mcp-adapter/ with 16 tools, commit-reveal join flow (getJoinAuth + commitment + operatorSig), pure social deduction voting, off-chain chat via REST |
+| MCP Auto-Play | DONE | GameLoop class (lib/gameLoop.ts), social-deduction voting (no team knowledge), pendingReveal handling, off-chain chat via ChatClient REST |
 | Skills Page | DONE | packages/nextjs/public/skills.md — 16 tools, matchmaking rules, LLM game flow guide |
 | Player Alias Utility | DONE | utils/playerAlias.ts — deterministic codenames + colored avatars per room |
 | Narrative Flip | DONE | "Spot the AI" instead of "find humans" — landing page + HeroSection |
@@ -100,6 +104,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Channel Exclusivity | DONE | AI players can't chat/vote from browser; Human players can't act via MCP — enforced on both frontend + MCP adapter |
 | Single Room Per Player | DONE | playerActiveRoom mapping prevents joining multiple rooms; lobby hides QuickMatch when in room; MCP match_room/create_room pre-check |
 | Player Name Selection | DONE | On-chain name binding (1-20 chars), playerNames mapping, getRoomPlayerNames view, frontend nameMap prop, MCP auto-name AI-XXXX |
+| Off-chain Chat Backend | DONE | packages/chat-server/ (Go + Gin + gorilla/websocket + GORM + PostgreSQL), SIWE auth, operator service (identity records, commit-reveal auth, pendingReveal watcher), RoomStateCache goroutine |
+| Commit-Reveal Identity Hiding | DONE | Operator-signed commitment join, identity hidden during gameplay (isAI=false), revealAndEnd by operator, emergencyEnd timeout fallback |
+| RPC Polling Optimization | DONE | Frontend: pollingInterval 10s (prod), useReadContracts multicall, props-based children, useScaffoldWatchContractEvent for KillFeed; MCP: RateLimiter 20/s, parallel playerInfo/events, pollInterval 10s; Chat-server: RoomStatePollMs 15s, parallel GetPlayerInfo |
 
 ### Known Design Bugs (from review)
 
@@ -113,7 +120,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 6. ~~**P1 — 缺少 claimReward 函数**~~ (implemented in contract)
 7. ~~**P1 — halfwayBlock 不准确**: 未考虑 phase acceleration~~ (no longer applicable — multi-phase removed)
 8. ~~**P1 — _updateEntropy 从未调用**: EntropyEngine was dropped~~ (no longer applicable — removed)
-9. **P2 — 投票透明**: 无 commit-reveal 机制 (future enhancement)
+9. ~~**P2 — 投票透明**: 无 commit-reveal 机制~~ (identity commit-reveal implemented; vote commit-reveal is future enhancement)
 10. **P2 — 无 Sybil 防护**: 无准入机制 (future enhancement)
 11. ~~**P2 — 无房间取消/退款**: createRoom 后无法退出~~ (implemented: leaveRoom + _cancelRoom with full USDC refund)
 12. **P2 — withdrawUnclaimed 无时间限制**: Treasury 可随时提取任意金额，包括未领取的玩家奖励 (future enhancement)

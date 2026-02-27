@@ -35,8 +35,11 @@ contract DeployTuringArena is ScaffoldETHDeploy {
             }
         }
 
-        // Deploy TuringArena with deployer as treasury
-        TuringArena arena = new TuringArena(deployer, usdcAddress);
+        // Deploy TuringArena with deployer as treasury and operator
+        // Local dev: deployer acts as operator
+        // Production: use chat-server's operator key (set via OPERATOR_ADDRESS env or setOperator later)
+        address operatorAddress = vm.envOr("OPERATOR_ADDRESS", deployer);
+        TuringArena arena = new TuringArena(deployer, usdcAddress, operatorAddress);
 
         // Suppress unused variable warnings
         arena;
