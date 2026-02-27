@@ -722,11 +722,11 @@ server.tool(
       .describe("投票策略：lowest_hp（最低人性分，默认）、most_active（最活跃）或 random_alive（随机存活者）"),
     chatStrategy: z.enum(["phase_aware", "silent"]).optional()
       .describe("聊天策略：phase_aware（阶段感知，默认）或 silent（静默）"),
-    chatFrequency: z.number().min(0).max(1).optional()
+    chatFrequency: z.coerce.number().min(0).max(1).optional()
       .describe("每次 tick 的聊天概率（0-1，默认 0.3）"),
     settleEnabled: z.boolean().optional()
       .describe("是否在满足条件时调用 settleRound（默认 true）"),
-    pollIntervalMs: z.number().min(1000).max(60000).optional()
+    pollIntervalMs: z.coerce.number().min(1000).max(60000).optional()
       .describe("轮询间隔，单位毫秒（默认 10000）"),
   },
   async ({ roomId, voteStrategy, chatStrategy, chatFrequency, settleEnabled, pollIntervalMs }) => {
@@ -834,8 +834,8 @@ server.tool(
   "创建一个新的游戏房间。你成为房间创建者并自动加入（收取入场费）。Tier 控制游戏节奏：Quick (0) = 快速轮次，Standard (1) = 平衡，Epic (2) = 长游戏。返回新房间 ID。",
   {
     tier: z.enum(["0", "1", "2"]).describe("房间等级：0=快速，1=标准，2=史诗"),
-    maxPlayers: z.number().min(3).max(50).describe("最大玩家数（3-50）"),
-    entryFee: z.number().min(1).max(100).describe("入场费，单位 USDC（1-100）"),
+    maxPlayers: z.coerce.number().min(3).max(50).describe("最大玩家数（3-50）"),
+    entryFee: z.coerce.number().min(1).max(100).describe("入场费，单位 USDC（1-100）"),
     name: z.string().min(1).max(20).optional().describe("玩家名称（1-20 字符，默认：AI-XXXX）"),
   },
   async ({ tier, maxPlayers, entryFee, name }) => {
@@ -975,7 +975,7 @@ server.tool(
   "mint_test_usdc", // 工具名称
   "向你的钱包铸造测试 USDC（仅适用于本地 Anvil 或带有 MockUSDC 的测试网）。用于在加入游戏前为你的机器人提供资金。",
   {
-    amount: z.number().min(1).max(100000).describe("要铸造的 USDC 数量（例如 1000）"),
+    amount: z.coerce.number().min(1).max(100000).describe("要铸造的 USDC 数量（例如 1000）"),
   },
   async ({ amount }) => {
     // 检查钱包是否已初始化
@@ -1191,10 +1191,10 @@ server.tool(
   "match_room", // 工具名称
   "通过扫描可用房间并加入第一个匹配项来进行匹配进入等待中的房间。检查 AI 插槽可用性（MCP = AI）。如果没有房间匹配，建议使用 create_room。",
   {
-    minPlayers: z.number().min(3).max(50).optional().describe("最小房间大小（默认 3）"),
-    maxPlayers: z.number().min(3).max(50).optional().describe("最大房间大小（默认 50）"),
-    minFee: z.number().min(1).max(100).optional().describe("最小入场费，单位 USDC（默认 1）"),
-    maxFee: z.number().min(1).max(100).optional().describe("最大入场费，单位 USDC（默认 100）"),
+    minPlayers: z.coerce.number().min(3).max(50).optional().describe("最小房间大小（默认 3）"),
+    maxPlayers: z.coerce.number().min(3).max(50).optional().describe("最大房间大小（默认 50）"),
+    minFee: z.coerce.number().min(1).max(100).optional().describe("最小入场费，单位 USDC（默认 1）"),
+    maxFee: z.coerce.number().min(1).max(100).optional().describe("最大入场费，单位 USDC（默认 100）"),
     tier: z.enum(["0", "1", "2"]).optional().describe("可选的等级过滤器：0=快速，1=标准，2=史诗"),
     name: z.string().min(1).max(20).optional().describe("玩家名称（1-20 字符，默认：AI-XXXX）"),
   },
