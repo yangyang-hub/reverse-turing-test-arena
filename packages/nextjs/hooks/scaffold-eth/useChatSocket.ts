@@ -12,6 +12,8 @@ export type ChatMsg = {
   createdAt: string;
 };
 
+const CHAT_SERVER_URL = process.env.NEXT_PUBLIC_CHAT_SERVER_URL || "http://localhost:43001";
+
 // Env var takes precedence; otherwise auto-detect ws/wss from page protocol
 function getWsUrl(): string {
   if (process.env.NEXT_PUBLIC_CHAT_SERVER_WS_URL) {
@@ -32,8 +34,11 @@ function getWsUrl(): string {
 /**
  * useChatSocket — connects to the chat-server via native WebSocket.
  * Handles auth (SIWE signature), room join, and real-time message streaming.
+ *
+ * When `enabled` is false (e.g. ended rooms), fetches historical messages
+ * via REST API without requiring a wallet signature.
  */
-export function useChatSocket(roomId: number | undefined) {
+export function useChatSocket(roomId: number | undefined, enabled = true) {
   const { address } = useAccount();
   const { signMessageAsync } = useSignMessage({});
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -57,8 +62,43 @@ export function useChatSocket(roomId: number | undefined) {
     setMyMessageCount(count);
   }, [messages, address]);
 
+  // REST-only mode: fetch historical messages without auth (for ended rooms)
   useEffect(() => {
-    if (!roomId || !address) return;
+    if (!roomId || enabled) return;
+
+    let cancelled = false;
+
+    async function fetchMessages() {
+      try {
+        const res = await fetch(`${CHAT_SERVER_URL}/api/rooms/${roomId}/messages`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setMessages(
+          (data || []).map((m: any) => ({
+            id: m.id,
+            roomId: m.roomId,
+            round: m.round,
+            sender: m.sender,
+            content: m.content,
+            createdAt: m.createdAt,
+          })),
+        );
+      } catch {
+        // Silently ignore — chat history is non-critical
+      }
+    }
+
+    fetchMessages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId, enabled]);
+
+  // WebSocket mode: live connection with SIWE auth (for active rooms)
+  useEffect(() => {
+    if (!roomId || !address || !enabled) return;
 
     let ws: WebSocket;
     let closed = false;
@@ -152,7 +192,7 @@ export function useChatSocket(roomId: number | undefined) {
       setIsConnected(false);
       setMessages([]);
     };
-  }, [roomId, address, signMessageAsync]);
+  }, [roomId, address, signMessageAsync, enabled]);
 
   const sendMessage = useCallback(
     (content: string) => {

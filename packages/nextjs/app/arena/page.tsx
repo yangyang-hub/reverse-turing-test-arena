@@ -147,24 +147,25 @@ function ArenaContent() {
     return map;
   }, [allPlayers, playerNames]);
 
+  // Derive phase early so we can skip WebSocket for ended rooms
+  const phase = typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
+
   // WebSocket chat connection — single instance for the whole arena page
-  // (previously duplicated in ArenaTerminal, causing two WS connections + two SIWE signatures)
+  // For ended rooms (phase=2), use REST to fetch historical messages (no signature needed)
   const parsedRoomIdForChat = rawRoomId ? Number(rawRoomId) : undefined;
+  const chatEnabled = phase !== 2;
   const {
     messages: chatMessages,
     sendMessage,
     isConnected,
     myMessageCount,
     myIsAI: chatMyIsAI,
-  } = useChatSocket(parsedRoomIdForChat);
+  } = useChatSocket(parsedRoomIdForChat, chatEnabled);
 
   // Settle state
   const [isSettling, setIsSettling] = useState(false);
   const [showVictory, setShowVictory] = useState(false);
   const [showBriefing, setShowBriefing] = useState(true);
-
-  // Auto-show VictoryScreen only when phase transitions to Ended live (not on page load)
-  const phase = typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
   const prevPhaseRef = useRef(phase);
   useEffect(() => {
     if (phase === 2 && prevPhaseRef.current !== 2 && prevPhaseRef.current !== 0) {
