@@ -105,9 +105,12 @@ function ArenaContent() {
     }));
   }, [allPlayers, roomId, arenaInfo]);
 
-  const { data: batchedPlayerInfos } = useReadContracts({
+  const { data: batchedPlayerInfos, refetch: refetchPlayerInfos } = useReadContracts({
     contracts: playerInfoContracts,
-    query: { enabled: playerInfoContracts.length > 0 },
+    query: {
+      enabled: playerInfoContracts.length > 0,
+      refetchInterval: 10_000,
+    },
   });
 
   // Build playerInfoMap: lowercase address → PlayerInfo
@@ -480,6 +483,7 @@ function ArenaContent() {
             roomInfo={roomInfo}
             roundNum={currentRoundData}
             blockNumber={blockNumber}
+            onVoteSuccess={() => refetchPlayerInfos()}
           />
         </div>
       </div>
