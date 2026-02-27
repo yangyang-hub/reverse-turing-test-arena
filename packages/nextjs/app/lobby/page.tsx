@@ -268,7 +268,6 @@ const RoomGrid = ({
             key={id.toString()}
             roomId={id}
             filter={filter}
-            connectedAddress={connectedAddress}
             onVisibility={handleVisibility}
           />
         ))}
