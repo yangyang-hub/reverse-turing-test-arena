@@ -23,10 +23,13 @@ type Watcher struct {
 	contract common.Address
 	abi      abi.ABI
 	pollMs   int
-	// Track rooms that have been revealed (to skip them)
+	// Track rooms that have been revealed or permanently failed (to skip them)
 	mu            sync.Mutex
 	revealedRooms map[int]bool
+	failCount     map[int]int // room → consecutive failure count
 }
+
+const maxRevealRetries = 3 // stop retrying after this many consecutive failures
 
 // NewWatcher creates a reveal watcher.
 func NewWatcher(service *Service, rpcURL, contractAddr string, abiJSON string, pollMs int) (*Watcher, error) {
@@ -47,6 +50,7 @@ func NewWatcher(service *Service, rpcURL, contractAddr string, abiJSON string, p
 		abi:           parsed,
 		pollMs:        pollMs,
 		revealedRooms: make(map[int]bool),
+		failCount:     make(map[int]int),
 	}, nil
 }
 
@@ -82,8 +86,11 @@ func (w *Watcher) checkActiveRooms(ctx context.Context) {
 	defer w.mu.Unlock()
 
 	for _, roomId := range roomIds {
-		// Skip rooms already revealed
+		// Skip rooms already revealed or permanently failed
 		if w.revealedRooms[roomId] {
+			continue
+		}
+		if w.failCount[roomId] >= maxRevealRetries {
 			continue
 		}
 
@@ -108,11 +115,17 @@ func (w *Watcher) checkActiveRooms(ctx context.Context) {
 		}
 
 		if shouldReveal {
-			log.Printf("[Watcher] Room %d is pending reveal, triggering revealAndEnd", roomId)
+			log.Printf("[Watcher] Room %d is pending reveal, triggering revealAndEnd (attempt %d/%d)", roomId, w.failCount[roomId]+1, maxRevealRetries)
 			if err := w.triggerReveal(ctx, roomId); err != nil {
-				log.Printf("[Watcher] Failed to reveal room %d: %v", roomId, err)
+				w.failCount[roomId]++
+				if w.failCount[roomId] >= maxRevealRetries {
+					log.Printf("[Watcher] Room %d: giving up after %d failed attempts: %v (emergencyEnd available as fallback)", roomId, maxRevealRetries, err)
+				} else {
+					log.Printf("[Watcher] Failed to reveal room %d: %v", roomId, err)
+				}
 			} else {
 				w.revealedRooms[roomId] = true
+				delete(w.failCount, roomId)
 			}
 		}
 	}
@@ -274,6 +287,16 @@ func (w *Watcher) triggerReveal(ctx context.Context, roomId int) error {
 		isAIs[i] = record.IsAI
 		saltBytes := common.FromHex(record.Salt)
 		copy(salts[i][:], saltBytes)
+
+		// Diagnostic: verify commitment matches on-chain before sending tx
+		computed := computeCommitment(record.IsAI, salts[i])
+		onChainCommitment, err := w.getOnChainCommitment(ctx, roomId, addr)
+		if err != nil {
+			log.Printf("[Watcher] Warning: could not read on-chain commitment for %s: %v", addrLower, err)
+		} else if computed != onChainCommitment {
+			return fmt.Errorf("commitment mismatch for %s: DB salt produces %x but on-chain is %x (identity record may be stale)",
+				addrLower, computed, onChainCommitment)
+		}
 	}
 
 	// Encode the revealAndEnd call
@@ -351,4 +374,34 @@ func (w *Watcher) sendTx(ctx context.Context, data []byte) (common.Hash, error) 
 	}
 
 	return signedTx.Hash(), nil
+}
+
+// getOnChainCommitment reads identityCommitments(roomId, player) from the contract.
+func (w *Watcher) getOnChainCommitment(ctx context.Context, roomId int, player common.Address) ([32]byte, error) {
+	data, err := w.abi.Pack("identityCommitments", big.NewInt(int64(roomId)), player)
+	if err != nil {
+		return [32]byte{}, err
+	}
+
+	result, err := w.client.CallContract(ctx, ethereum.CallMsg{
+		To:   &w.contract,
+		Data: data,
+	}, nil)
+	if err != nil {
+		return [32]byte{}, err
+	}
+
+	outputs, err := w.abi.Methods["identityCommitments"].Outputs.Unpack(result)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	if len(outputs) == 0 {
+		return [32]byte{}, fmt.Errorf("no output")
+	}
+
+	val, ok := outputs[0].([32]byte)
+	if !ok {
+		return [32]byte{}, fmt.Errorf("unexpected type: %T", outputs[0])
+	}
+	return val, nil
 }

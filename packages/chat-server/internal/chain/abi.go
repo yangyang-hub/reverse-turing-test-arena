@@ -101,5 +101,15 @@ const ArenaABI = `[
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "uint256", "name": "", "type": "uint256"},
+      {"internalType": "address", "name": "", "type": "address"}
+    ],
+    "name": "identityCommitments",
+    "outputs": [{"internalType": "bytes32", "name": "", "type": "bytes32"}],
+    "stateMutability": "view",
+    "type": "function"
   }
 ]`
