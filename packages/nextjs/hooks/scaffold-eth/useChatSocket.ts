@@ -12,7 +12,22 @@ export type ChatMsg = {
   createdAt: string;
 };
 
-const WS_URL = process.env.NEXT_PUBLIC_CHAT_SERVER_WS_URL || "ws://localhost:43001/ws";
+// Env var takes precedence; otherwise auto-detect ws/wss from page protocol
+function getWsUrl(): string {
+  if (process.env.NEXT_PUBLIC_CHAT_SERVER_WS_URL) {
+    return process.env.NEXT_PUBLIC_CHAT_SERVER_WS_URL;
+  }
+  // Derive from REST URL if available (http→ws, https→wss)
+  const restUrl = process.env.NEXT_PUBLIC_CHAT_SERVER_URL;
+  if (restUrl) {
+    return restUrl.replace(/^http/, "ws") + "/ws";
+  }
+  // Fallback: match page protocol
+  if (typeof window !== "undefined" && window.location.protocol === "https:") {
+    return "wss://localhost:43001/ws";
+  }
+  return "ws://localhost:43001/ws";
+}
 
 /**
  * useChatSocket — connects to the chat-server via native WebSocket.
@@ -49,7 +64,13 @@ export function useChatSocket(roomId: number | undefined) {
     let closed = false;
 
     const connect = () => {
-      ws = new WebSocket(WS_URL);
+      try {
+        ws = new WebSocket(getWsUrl());
+      } catch (err) {
+        // SecurityError: mixed content (HTTPS page + ws:// endpoint)
+        console.warn("[ChatSocket] Failed to connect:", err);
+        return;
+      }
       wsRef.current = ws;
 
       ws.onopen = async () => {
