@@ -92,7 +92,22 @@ func (w *Watcher) checkActiveRooms(ctx context.Context) {
 			log.Printf("[Watcher] Failed to check pendingReveal for room %d: %v", roomId, err)
 			continue
 		}
-		if pending {
+
+		// Also check aliveCount <= 2 as a fallback (in case pendingReveal wasn't set)
+		shouldReveal := pending
+		if !shouldReveal {
+			aliveCount, isActive, err := w.getRoomAliveStatus(ctx, roomId)
+			if err != nil {
+				log.Printf("[Watcher] Failed to check room status for room %d: %v", roomId, err)
+				continue
+			}
+			if isActive && aliveCount <= 2 {
+				log.Printf("[Watcher] Room %d: pendingReveal=false but aliveCount=%d, forcing reveal", roomId, aliveCount)
+				shouldReveal = true
+			}
+		}
+
+		if shouldReveal {
 			log.Printf("[Watcher] Room %d is pending reveal, triggering revealAndEnd", roomId)
 			if err := w.triggerReveal(ctx, roomId); err != nil {
 				log.Printf("[Watcher] Failed to reveal room %d: %v", roomId, err)
@@ -138,6 +153,59 @@ func (w *Watcher) isPendingReveal(ctx context.Context, roomId int) (bool, error)
 		return false, fmt.Errorf("unexpected type for pendingReveal output: %T", outputs[0])
 	}
 	return val, nil
+}
+
+// getRoomAliveStatus calls getRoomInfo to check aliveCount and isActive.
+func (w *Watcher) getRoomAliveStatus(ctx context.Context, roomId int) (uint64, bool, error) {
+	data, err := w.abi.Pack("getRoomInfo", big.NewInt(int64(roomId)))
+	if err != nil {
+		return 0, false, err
+	}
+
+	result, err := w.client.CallContract(ctx, ethereum.CallMsg{
+		To:   &w.contract,
+		Data: data,
+	}, nil)
+	if err != nil {
+		return 0, false, err
+	}
+
+	if len(result) == 0 {
+		return 0, false, fmt.Errorf("empty result from getRoomInfo")
+	}
+
+	type roomTuple struct {
+		Id              *big.Int
+		Creator         common.Address
+		Tier            uint8
+		Phase           uint8
+		EntryFee        *big.Int
+		PrizePool       *big.Int
+		StartBlock      *big.Int
+		BaseInterval    *big.Int
+		CurrentInterval *big.Int
+		MaxPlayers      *big.Int
+		PlayerCount     *big.Int
+		AliveCount      *big.Int
+		EliminatedCount *big.Int
+		LastSettleBlock  *big.Int
+		IsActive        bool
+		IsEnded         bool
+	}
+
+	repacked, err := w.abi.Methods["getRoomInfo"].Outputs.Unpack(result)
+	if err != nil {
+		return 0, false, err
+	}
+	if len(repacked) == 0 {
+		return 0, false, fmt.Errorf("empty output from getRoomInfo")
+	}
+
+	var room roomTuple
+	converted := abi.ConvertType(repacked[0], room)
+	room = converted.(roomTuple)
+
+	return room.AliveCount.Uint64(), room.IsActive, nil
 }
 
 // triggerReveal builds the reveal parameters from DB and sends the transaction.
