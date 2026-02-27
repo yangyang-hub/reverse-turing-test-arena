@@ -31,12 +31,11 @@ func BearerAuth(authSvc *auth.Service) gin.HandlerFunc {
 }
 
 // CORSMiddleware returns a CORS config for the given origin.
-func CORSMiddleware(origin string) gin.HandlerFunc {
+func CORSMiddleware(_ string) gin.HandlerFunc {
 	return cors.New(cors.Config{
-		AllowOrigins:     strings.Split(origin, ","),
+		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
 	})
 }
