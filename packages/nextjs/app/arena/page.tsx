@@ -113,6 +113,13 @@ function ArenaContent() {
     },
   });
 
+  // Refetch player info immediately when round advances (settle applies HP damage)
+  useEffect(() => {
+    if (currentRoundData !== undefined && currentRoundData > 0n) {
+      refetchPlayerInfos();
+    }
+  }, [currentRoundData, refetchPlayerInfos]);
+
   // Build playerInfoMap: lowercase address → PlayerInfo
   const playerInfoMap = useMemo<Record<string, PlayerInfo>>(() => {
     const map: Record<string, PlayerInfo> = {};
@@ -483,7 +490,6 @@ function ArenaContent() {
             roomInfo={roomInfo}
             roundNum={currentRoundData}
             blockNumber={blockNumber}
-            onVoteSuccess={() => refetchPlayerInfos()}
           />
         </div>
       </div>

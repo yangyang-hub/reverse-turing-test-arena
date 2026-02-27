@@ -15,7 +15,6 @@ export function VotePanel({
   roomInfo,
   roundNum,
   blockNumber,
-  onVoteSuccess,
 }: {
   roomId: bigint;
   nameMap?: Record<string, string>;
@@ -24,7 +23,6 @@ export function VotePanel({
   roomInfo: any;
   roundNum: bigint | undefined;
   blockNumber: bigint | undefined;
-  onVoteSuccess?: () => void;
 }) {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [localVotedRound, setLocalVotedRound] = useState<bigint | null>(null);
@@ -91,7 +89,6 @@ export function VotePanel({
       });
       setLocalVotedRound(roundNum ?? null);
       setSelectedTarget(null);
-      onVoteSuccess?.();
     } catch (err) {
       console.error("Vote failed:", err);
     }
