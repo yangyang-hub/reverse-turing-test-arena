@@ -56,12 +56,30 @@ const LobbyPageContent = () => {
       {/* Lobby Header */}
       <div className="relative w-full overflow-hidden py-6 md:py-8">
         <div className="relative z-10 flex flex-col items-center gap-2 px-4">
-          <h1 className="text-2xl font-black tracking-wider text-primary md:text-3xl neon-text">BATTLE LOBBY</h1>
+          <h1
+            className="text-2xl font-black tracking-[0.15em] md:text-3xl"
+            style={{
+              background: "linear-gradient(90deg, #39d353 0%, #00e5ff 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+            }}
+          >
+            BATTLE LOBBY
+          </h1>
           <p className="text-sm tracking-widest text-secondary/70">Browse rooms. Quick match to fight.</p>
           <div className="flex items-center gap-3 mt-1">
-            <div className="h-px w-12 bg-gradient-to-r from-transparent to-primary md:w-24" />
-            <div className="h-1.5 w-1.5 rotate-45 border border-primary bg-transparent" />
-            <div className="h-px w-12 bg-gradient-to-l from-transparent to-primary md:w-24" />
+            <div className="divider-line-left h-px w-12 md:w-24" />
+            <motion.div
+              className="h-1.5 w-1.5 rotate-45 border"
+              animate={{
+                scale: [1, 1.6, 1],
+                borderColor: ["#39d353", "#00e5ff", "#39d353"],
+                boxShadow: ["0 0 0px rgba(57,211,83,0)", "0 0 6px rgba(0,229,255,0.8)", "0 0 0px rgba(57,211,83,0)"],
+              }}
+              transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <div className="divider-line-right h-px w-12 md:w-24" />
           </div>
         </div>
       </div>
@@ -77,7 +95,7 @@ const LobbyPageContent = () => {
                 key={tab.id}
                 className={`tab font-mono text-xs tracking-widest transition-colors ${
                   activeFilter === tab.id
-                    ? "tab-active text-primary neon-text"
+                    ? "tab-active text-primary"
                     : "text-base-content/50 hover:text-base-content/80"
                 }`}
                 onClick={() => setActiveFilter(tab.id)}
@@ -139,16 +157,23 @@ const LobbyPageContent = () => {
 
       {/* Floating create button */}
       <motion.button
-        className="btn btn-circle btn-lg fixed bottom-8 right-8 z-50 border-2 border-primary bg-base-100 text-2xl font-bold text-primary shadow-lg"
+        className="fixed bottom-8 right-8 z-50 font-mono font-bold tracking-widest text-sm flex items-center gap-2 px-5 py-3"
         style={{
-          boxShadow: "0 0 20px rgba(0, 255, 65, 0.3), 0 0 40px rgba(0, 255, 65, 0.1)",
+          clipPath: "polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))",
+          background: "rgba(13,13,26,0.95)",
+          border: "1px solid rgba(57,211,83,0.6)",
+          color: "#39d353",
         }}
         onClick={() => setIsModalOpen(true)}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.95 }}
+        whileHover={{
+          backgroundColor: "rgba(57,211,83,0.08)",
+          borderColor: "rgba(57,211,83,1)",
+        }}
+        whileTap={{ scale: 0.97 }}
         title="Create Room"
       >
-        +
+        <span style={{ fontSize: "18px", lineHeight: 1 }}>✦</span>
+        CREATE ROOM
       </motion.button>
 
       {/* Create Room Modal */}
@@ -232,15 +257,69 @@ const FilteredRoomCard = ({
 };
 
 const EmptyState = ({ onCreateClick }: { onCreateClick: () => void }) => (
-  <div className="flex h-64 flex-col items-center justify-center gap-6">
-    <div className="flex flex-col items-center gap-2">
-      <span className="text-4xl">&#x25C8;</span>
-      <p className="terminal-text text-center text-sm">NO ACTIVE ROOMS DETECTED</p>
-      <p className="text-center text-xs tracking-wider text-base-content/40">Deploy the first battle room to begin.</p>
+  <div className="flex w-full flex-col items-center justify-center px-4 py-8">
+    {/* Card container — bronze border matching the art */}
+    <div
+      className="relative mx-auto w-full max-w-3xl overflow-hidden rounded-2xl"
+      style={{
+        border: "2px solid #8B6914",
+        boxShadow: "0 0 30px rgba(139,105,20,0.15), 0 4px 20px rgba(0,0,0,0.5)",
+      }}
+    >
+      {/* Image — full brightness, the star of the show */}
+      <img src="/nomatch.jpg" alt="No matching rooms found" className="w-full object-cover block" />
+
+      {/* Bottom action bar — warm bronze gradient */}
+      <div
+        className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-5 sm:px-8"
+        style={{
+          background: "linear-gradient(180deg, #1a1408 0%, #0d0d1a 100%)",
+          borderTop: "1px solid rgba(139,105,20,0.3)",
+        }}
+      >
+        {/* Left text */}
+        <div className="text-center sm:text-left">
+          <p className="font-mono text-xs font-bold tracking-[0.2em] uppercase" style={{ color: "#C9A84C" }}>
+            ◆ Awaiting Challengers
+          </p>
+          <p className="font-mono text-[11px] tracking-wider text-base-content/40 mt-0.5">
+            Deploy the first battle room to begin the showdown.
+          </p>
+        </div>
+
+        {/* CTA button — bronze / steampunk metallic style */}
+        <button
+          className="group/btn relative overflow-hidden font-mono text-sm font-black tracking-[0.15em] uppercase px-7 py-3 rounded-lg transition-all duration-300 active:scale-95 shrink-0 cursor-pointer bronze-pulse"
+          style={{
+            background: "linear-gradient(135deg, #8B6914 0%, #C9A84C 50%, #8B6914 100%)",
+            color: "#1a1408",
+            boxShadow:
+              "0 0 12px rgba(201,168,76,0.3), inset 0 1px 0 rgba(255,255,255,0.2), inset 0 -1px 0 rgba(0,0,0,0.3)",
+            border: "1px solid #C9A84C",
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLButtonElement).style.boxShadow =
+              "0 0 24px rgba(201,168,76,0.5), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -1px 0 rgba(0,0,0,0.3)";
+            (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)";
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLButtonElement).style.boxShadow =
+              "0 0 12px rgba(201,168,76,0.3), inset 0 1px 0 rgba(255,255,255,0.2), inset 0 -1px 0 rgba(0,0,0,0.3)";
+            (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
+          }}
+          onClick={onCreateClick}
+        >
+          {/* Shimmer sweep */}
+          <div
+            className="absolute inset-0 [transform:skew(-20deg)_translateX(-180%)] group-hover/btn:[transform:skew(-20deg)_translateX(180%)] group-hover/btn:duration-700"
+            style={{
+              background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)",
+            }}
+          />
+          <span className="relative z-10">⚔ CREATE FIRST ROOM</span>
+        </button>
+      </div>
     </div>
-    <button className="btn btn-outline btn-primary btn-sm font-bold tracking-widest" onClick={onCreateClick}>
-      CREATE FIRST ROOM
-    </button>
   </div>
 );
 
