@@ -25,6 +25,7 @@ export function VotePanel({
   blockNumber: bigint | undefined;
 }) {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
+  const [localVotedRound, setLocalVotedRound] = useState<bigint | null>(null);
   const { address: connectedAddress } = useAccount();
 
   const zeroAddr = "0x0000000000000000000000000000000000000000" as const;
@@ -35,7 +36,15 @@ export function VotePanel({
     query: { enabled: !!roundNum && roundNum > 0n && !!connectedAddress },
   });
 
-  const hasVotedThisRound = Boolean(hasVotedOnChain);
+  // Optimistic lock: treat as voted if chain confirms OR local vote was cast this round
+  const hasVotedThisRound = Boolean(hasVotedOnChain) || (localVotedRound !== null && localVotedRound === roundNum);
+
+  // Reset local lock when round advances
+  useEffect(() => {
+    if (roundNum !== undefined && localVotedRound !== null && roundNum !== localVotedRound) {
+      setLocalVotedRound(null);
+    }
+  }, [roundNum, localVotedRound]);
 
   const { writeContractAsync, isMining } = useScaffoldWriteContract({
     contractName: "TuringArena",
@@ -78,6 +87,7 @@ export function VotePanel({
         functionName: "castVote",
         args: [roomId, selectedTarget],
       });
+      setLocalVotedRound(roundNum ?? null);
       setSelectedTarget(null);
     } catch (err) {
       console.error("Vote failed:", err);
