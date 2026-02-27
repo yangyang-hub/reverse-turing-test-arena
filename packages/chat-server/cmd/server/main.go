@@ -78,7 +78,7 @@ func main() {
 		}
 
 		// Start the reveal watcher
-		watcher, err := operator.NewWatcher(opService, cfg.RpcURL, cfg.ArenaContractAddress, chain.ArenaABI, cfg.RoomStatePollMs)
+		watcher, err := operator.NewWatcher(opService, cfg.RpcURL, cfg.ArenaContractAddress, chain.ArenaABI, cfg.WatcherPollMs, cache)
 		if err != nil {
 			log.Printf("[Watcher] Failed to init watcher: %v (reveal monitoring disabled)", err)
 		} else {
