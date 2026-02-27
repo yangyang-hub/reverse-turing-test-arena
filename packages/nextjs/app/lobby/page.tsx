@@ -93,10 +93,11 @@ const LobbyPageContent = () => {
             {FILTER_TABS.map(tab => (
               <button
                 key={tab.id}
-                className={`tab tab-lg font-mono text-base md:text-lg tracking-widest transition-colors gap-2 ${activeFilter === tab.id
-                  ? "tab-active text-primary"
-                  : "text-base-content/50 hover:text-base-content/80"
-                  }`}
+                className={`tab tab-lg font-mono text-base md:text-lg tracking-widest transition-colors gap-2 ${
+                  activeFilter === tab.id
+                    ? "tab-active text-primary"
+                    : "text-base-content/50 hover:text-base-content/80"
+                }`}
                 onClick={() => setActiveFilter(tab.id)}
               >
                 <span className="text-lg md:text-xl">{tab.icon}</span>
@@ -213,10 +214,7 @@ const TabEmptyState = () => (
         transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
       />
       <div className="text-center">
-        <p
-          className="font-mono text-sm font-bold tracking-[0.15em] uppercase mb-1"
-          style={{ color: "#39d353" }}
-        >
+        <p className="font-mono text-sm font-bold tracking-[0.15em] uppercase mb-1" style={{ color: "#39d353" }}>
           No Rooms Here
         </p>
         <p className="font-mono text-xs tracking-wider text-base-content/40 max-w-xs">
@@ -227,13 +225,7 @@ const TabEmptyState = () => (
   </div>
 );
 
-const RoomGrid = ({
-  roomIds,
-  filter,
-}: {
-  roomIds: bigint[];
-  filter: FilterTab;
-}) => {
+const RoomGrid = ({ roomIds, filter }: { roomIds: bigint[]; filter: FilterTab }) => {
   const [visibilityMap, setVisibilityMap] = useState<Record<string, boolean>>({});
 
   // Reset visibility map when filter changes
@@ -264,12 +256,7 @@ const RoomGrid = ({
         style={showEmpty ? { display: "none" } : undefined}
       >
         {roomIds.map(id => (
-          <FilteredRoomCard
-            key={id.toString()}
-            roomId={id}
-            filter={filter}
-            onVisibility={handleVisibility}
-          />
+          <FilteredRoomCard key={id.toString()} roomId={id} filter={filter} onVisibility={handleVisibility} />
         ))}
       </div>
       {showEmpty && <TabEmptyState />}
@@ -280,23 +267,15 @@ const RoomGrid = ({
 const FilteredRoomCard = ({
   roomId,
   filter,
-  connectedAddress,
   onVisibility,
 }: {
   roomId: bigint;
   filter: FilterTab;
-  connectedAddress: string | undefined;
   onVisibility?: (id: string, visible: boolean) => void;
 }) => {
   const { data: roomInfo } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getRoomInfo",
-    args: [roomId],
-  });
-
-  const { data: players } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getAllPlayers",
     args: [roomId],
   });
 
