@@ -153,9 +153,9 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
         if (maxPlayers < matchFilters.minPlayers || maxPlayers > matchFilters.maxPlayers) continue;
         if (entryFee < feeMinWei || entryFee > feeMaxWei) continue;
 
-        const aiSlots = Math.max(1, Math.floor((maxPlayers * 30) / 100));
-        const humanSlots = maxPlayers - aiSlots;
-        if (Number(roomInfo.humanCount) >= humanSlots) continue;
+        // Slot enforcement is handled by chat-server operator (commit-reveal hides identity)
+        // Frontend just checks if room has space
+        if (playerCount >= maxPlayers) continue;
 
         // Found a joinable room — contract enforces single-room limit via playerActiveRoom
         notification.remove(notifId);
