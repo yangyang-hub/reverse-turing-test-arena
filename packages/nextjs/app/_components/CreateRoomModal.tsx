@@ -158,10 +158,6 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
     }
   };
 
-  const handleDialogClose = () => {
-    onClose();
-  };
-
   const tier = TIERS[selectedTier];
 
   return (
@@ -239,9 +235,23 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
 
                   {/* Right decoration */}
                   <div className="ml-auto flex items-center gap-1.5">
-                    <div style={{ width: 40, height: 2, background: "linear-gradient(90deg, transparent, rgba(0,229,255,0.7))" }} />
+                    <div
+                      style={{
+                        width: 40,
+                        height: 2,
+                        background: "linear-gradient(90deg, transparent, rgba(0,229,255,0.7))",
+                      }}
+                    />
                     <div style={{ width: 12, height: 2, background: "rgba(0,229,255,0.5)" }} />
-                    <div style={{ width: 5, height: 5, transform: "rotate(45deg)", background: "#00e5ff", boxShadow: "0 0 6px #00e5ff" }} />
+                    <div
+                      style={{
+                        width: 5,
+                        height: 5,
+                        transform: "rotate(45deg)",
+                        background: "#00e5ff",
+                        boxShadow: "0 0 6px #00e5ff",
+                      }}
+                    />
                   </div>
 
                   {/* Close button */}
@@ -276,8 +286,17 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                   <div>
                     <label className="mb-2 flex items-center gap-3">
                       <div style={{ width: 2, height: 16, background: "#39d353", borderRadius: 1 }} />
-                      <Image src="/icon-radar.png" alt="tier" width={36} height={36} style={{ filter: "drop-shadow(0 0 4px rgba(57,211,83,0.5))" }} />
-                      <span className="font-mono text-sm font-bold tracking-[0.15em] uppercase" style={{ color: "rgba(0,229,255,0.8)" }}>
+                      <Image
+                        src="/icon-radar.png"
+                        alt="tier"
+                        width={36}
+                        height={36}
+                        style={{ filter: "drop-shadow(0 0 4px rgba(57,211,83,0.5))" }}
+                      />
+                      <span
+                        className="font-mono text-sm font-bold tracking-[0.15em] uppercase"
+                        style={{ color: "rgba(0,229,255,0.8)" }}
+                      >
                         ARENA TIER
                       </span>
                     </label>
@@ -287,8 +306,9 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                         return (
                           <button
                             key={t.id}
-                            className={`flex cursor-pointer flex-col items-center gap-3 rounded-lg border-2 p-5 transition-all duration-200 ${isSelected ? "scale-105" : "border-base-content/10 hover:border-base-content/30"
-                              }`}
+                            className={`flex cursor-pointer flex-col items-center gap-3 rounded-lg border-2 p-5 transition-all duration-200 ${
+                              isSelected ? "scale-105" : "border-base-content/10 hover:border-base-content/30"
+                            }`}
                             style={{
                               borderColor: isSelected ? t.color : undefined,
                               backgroundColor: isSelected ? `${t.color}10` : "transparent",
@@ -304,13 +324,20 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                                 boxShadow: isSelected ? `0 0 16px ${t.color}40` : undefined,
                               }}
                             >
-                              <span className="text-lg font-black" style={{ color: t.color }}>{t.name[0]}</span>
+                              <span className="text-lg font-black" style={{ color: t.color }}>
+                                {t.name[0]}
+                              </span>
                             </div>
-                            <span className="text-sm font-bold tracking-widest" style={{ color: t.color, textShadow: isSelected ? `0 0 8px ${t.color}` : undefined }}>
+                            <span
+                              className="text-sm font-bold tracking-widest"
+                              style={{ color: t.color, textShadow: isSelected ? `0 0 8px ${t.color}` : undefined }}
+                            >
                               {t.name.toUpperCase()}
                             </span>
                             <span className="text-xs tracking-wider text-base-content/40">{t.label}</span>
-                            <span className="font-mono text-lg font-bold" style={{ color: t.color }}>{t.defaultFee} USDC</span>
+                            <span className="font-mono text-lg font-bold" style={{ color: t.color }}>
+                              {t.defaultFee} USDC
+                            </span>
                             <div className="flex flex-col items-center gap-1 text-xs text-base-content/50">
                               <span>up to {t.defaultMaxPlayers} players</span>
                               <span>{t.duration}</span>
@@ -323,7 +350,12 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                   </div>
 
                   {/* Divider */}
-                  <div style={{ height: 1, background: "linear-gradient(90deg, transparent, rgba(57,211,83,0.15), transparent)" }} />
+                  <div
+                    style={{
+                      height: 1,
+                      background: "linear-gradient(90deg, transparent, rgba(57,211,83,0.15), transparent)",
+                    }}
+                  />
 
                   {/* CUSTOM SETTINGS: Players + Fee */}
                   <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -331,11 +363,22 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                     <div>
                       <label className="mb-2.5 flex items-center gap-3">
                         <div style={{ width: 2, height: 16, background: "#39d353", borderRadius: 1 }} />
-                        <Image src="/icon-group.png" alt="players" width={36} height={36} style={{ filter: "drop-shadow(0 0 4px rgba(57,211,83,0.5))" }} />
-                        <span className="font-mono text-sm font-bold tracking-[0.15em] uppercase" style={{ color: "rgba(0,229,255,0.8)" }}>
+                        <Image
+                          src="/icon-group.png"
+                          alt="players"
+                          width={36}
+                          height={36}
+                          style={{ filter: "drop-shadow(0 0 4px rgba(57,211,83,0.5))" }}
+                        />
+                        <span
+                          className="font-mono text-sm font-bold tracking-[0.15em] uppercase"
+                          style={{ color: "rgba(0,229,255,0.8)" }}
+                        >
                           MAX PLAYERS
                         </span>
-                        <span className="font-mono text-[11px]" style={{ color: "rgba(57,211,83,0.4)" }}>(3-50)</span>
+                        <span className="font-mono text-[11px]" style={{ color: "rgba(57,211,83,0.4)" }}>
+                          (3-50)
+                        </span>
                       </label>
                       <input
                         type="number"
@@ -350,7 +393,9 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                         }}
                       />
                       {!isValidPlayers && (
-                        <p className="mt-1 font-mono text-xs" style={{ color: "rgba(255,120,120,0.9)" }}>▲ Must be 3-50</p>
+                        <p className="mt-1 font-mono text-xs" style={{ color: "rgba(255,120,120,0.9)" }}>
+                          ▲ Must be 3-50
+                        </p>
                       )}
                     </div>
 
@@ -358,11 +403,22 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                     <div>
                       <label className="mb-2.5 flex items-center gap-3">
                         <div style={{ width: 2, height: 16, background: "#39d353", borderRadius: 1 }} />
-                        <Image src="/icon-coin.png" alt="fee" width={36} height={36} style={{ filter: "drop-shadow(0 0 4px rgba(57,211,83,0.5))" }} />
-                        <span className="font-mono text-sm font-bold tracking-[0.15em] uppercase" style={{ color: "rgba(0,229,255,0.8)" }}>
+                        <Image
+                          src="/icon-coin.png"
+                          alt="fee"
+                          width={36}
+                          height={36}
+                          style={{ filter: "drop-shadow(0 0 4px rgba(57,211,83,0.5))" }}
+                        />
+                        <span
+                          className="font-mono text-sm font-bold tracking-[0.15em] uppercase"
+                          style={{ color: "rgba(0,229,255,0.8)" }}
+                        >
                           ENTRY FEE
                         </span>
-                        <span className="font-mono text-[11px]" style={{ color: "rgba(57,211,83,0.4)" }}>(USDC)</span>
+                        <span className="font-mono text-[11px]" style={{ color: "rgba(57,211,83,0.4)" }}>
+                          (USDC)
+                        </span>
                       </label>
                       <input
                         type="number"
@@ -378,20 +434,30 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                         }}
                       />
                       {!isValidFee && (
-                        <p className="mt-1 font-mono text-xs" style={{ color: "rgba(255,120,120,0.9)" }}>▲ Must be 1-100 USDC</p>
+                        <p className="mt-1 font-mono text-xs" style={{ color: "rgba(255,120,120,0.9)" }}>
+                          ▲ Must be 1-100 USDC
+                        </p>
                       )}
                     </div>
                   </div>
 
                   {/* Divider */}
-                  <div style={{ height: 1, background: "linear-gradient(90deg, transparent, rgba(57,211,83,0.15), transparent)" }} />
+                  <div
+                    style={{
+                      height: 1,
+                      background: "linear-gradient(90deg, transparent, rgba(57,211,83,0.15), transparent)",
+                    }}
+                  />
 
                   {/* YOUR NAME */}
                   <div>
                     <label className="mb-2.5 flex items-center gap-3">
                       <div style={{ width: 2, height: 16, background: "#39d353", borderRadius: 1 }} />
                       <Image src="/icon-agent.png" alt="name" width={36} height={36} />
-                      <span className="font-mono text-sm font-bold tracking-[0.15em] uppercase" style={{ color: "rgba(0,229,255,0.8)" }}>
+                      <span
+                        className="font-mono text-sm font-bold tracking-[0.15em] uppercase"
+                        style={{ color: "rgba(0,229,255,0.8)" }}
+                      >
                         YOUR NAME
                       </span>
                     </label>
@@ -414,23 +480,31 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                       <span
                         className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] font-bold"
                         style={{
-                          color: playerName.trim().length > 20
-                            ? "rgba(255,80,80,0.8)"
-                            : playerName.trim().length > 0
-                              ? "rgba(57,211,83,0.6)"
-                              : "rgba(57,211,83,0.25)",
+                          color:
+                            playerName.trim().length > 20
+                              ? "rgba(255,80,80,0.8)"
+                              : playerName.trim().length > 0
+                                ? "rgba(57,211,83,0.6)"
+                                : "rgba(57,211,83,0.25)",
                         }}
                       >
                         {playerName.trim().length}/20
                       </span>
                     </div>
                     {playerName.length > 0 && !isValidName && (
-                      <p className="mt-1 font-mono text-xs" style={{ color: "rgba(255,120,120,0.9)" }}>▲ Must be 1-20 characters</p>
+                      <p className="mt-1 font-mono text-xs" style={{ color: "rgba(255,120,120,0.9)" }}>
+                        ▲ Must be 1-20 characters
+                      </p>
                     )}
                   </div>
 
                   {/* Divider */}
-                  <div style={{ height: 1, background: "linear-gradient(90deg, transparent, rgba(57,211,83,0.15), transparent)" }} />
+                  <div
+                    style={{
+                      height: 1,
+                      background: "linear-gradient(90deg, transparent, rgba(57,211,83,0.15), transparent)",
+                    }}
+                  />
 
                   {/* Summary bar */}
                   <div
@@ -442,18 +516,37 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                     }}
                   >
                     <div className="flex flex-col">
-                      <span className="font-mono text-[10px] tracking-widest uppercase" style={{ color: "rgba(57,211,83,0.4)" }}>SELECTED TIER</span>
+                      <span
+                        className="font-mono text-[10px] tracking-widest uppercase"
+                        style={{ color: "rgba(57,211,83,0.4)" }}
+                      >
+                        SELECTED TIER
+                      </span>
                       <span className="font-mono text-sm font-bold tracking-wider" style={{ color: tier.color }}>
                         {tier.name.toUpperCase()} ({tier.label})
                       </span>
                     </div>
                     <div className="flex flex-col items-center">
-                      <span className="font-mono text-[10px] tracking-widest uppercase" style={{ color: "rgba(57,211,83,0.4)" }}>PLAYERS</span>
-                      <span className="font-mono text-sm font-bold" style={{ color: tier.color }}>{customMaxPlayers}</span>
+                      <span
+                        className="font-mono text-[10px] tracking-widest uppercase"
+                        style={{ color: "rgba(57,211,83,0.4)" }}
+                      >
+                        PLAYERS
+                      </span>
+                      <span className="font-mono text-sm font-bold" style={{ color: tier.color }}>
+                        {customMaxPlayers}
+                      </span>
                     </div>
                     <div className="flex flex-col items-end">
-                      <span className="font-mono text-[10px] tracking-widest uppercase" style={{ color: "rgba(57,211,83,0.4)" }}>ENTRY FEE</span>
-                      <span className="font-mono text-sm font-bold" style={{ color: tier.color }}>{customEntryFee} USDC</span>
+                      <span
+                        className="font-mono text-[10px] tracking-widest uppercase"
+                        style={{ color: "rgba(57,211,83,0.4)" }}
+                      >
+                        ENTRY FEE
+                      </span>
+                      <span className="font-mono text-sm font-bold" style={{ color: tier.color }}>
+                        {customEntryFee} USDC
+                      </span>
                     </div>
                   </div>
 
@@ -521,7 +614,13 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
                           </>
                         ) : (
                           <>
-                            <Image src="/icon-bolt.png" alt="create" width={24} height={24} style={{ filter: "drop-shadow(0 0 6px rgba(57,211,83,0.8))" }} />
+                            <Image
+                              src="/icon-bolt.png"
+                              alt="create"
+                              width={24}
+                              height={24}
+                              style={{ filter: "drop-shadow(0 0 6px rgba(57,211,83,0.8))" }}
+                            />
                             CREATE ROOM
                           </>
                         )}
