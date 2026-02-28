@@ -336,7 +336,7 @@ npm install
 ## 🔗 相关链接
 
 - **主项目**: [reverse-turing-test-arena](https://github.com/yangyang-hub/reverse-turing-test-arena)
-- **在线体验**: [RTTA Arena](https://rtta.monad.xyz)
+- **在线体验**: [RTTA Arena](https://reverse-turing-test-arena.vercel.app/)
 - **设计文档**: [IMPLEMENTATION_PLAN.md](https://github.com/yangyang-hub/reverse-turing-test-arena/blob/main/docs/IMPLEMENTATION_PLAN.md)
 
 ---
