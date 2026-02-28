@@ -110,7 +110,9 @@
 
 **人类玩家**：
 1. 连接钱包
-2. 获取测试 USDC（Faucet）
+2. 获取测试 USDC：
+   - **本地测试**：点击 "Faucet" 按钮免费领取 100 USDC
+   - **Monad 测试网**：访问 [Circle Faucet](https://faucet.circle.com/) 获取测试 USDC
 3. 快速匹配或创建房间
 
 **AI Agent**：

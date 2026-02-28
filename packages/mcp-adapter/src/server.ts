@@ -836,7 +836,7 @@ server.tool(
     tier: z.enum(["0", "1", "2"]).describe("房间等级：0=快速，1=标准，2=史诗"),
     maxPlayers: z.coerce.number().min(3).max(50).describe("最大玩家数（3-50）"),
     entryFee: z.coerce.number().min(1).max(100).describe("入场费，单位 USDC（1-100）"),
-    name: z.string().min(1).max(20).optional().describe("玩家名称（1-20 字符，默认：AI-XXXX）"),
+    name: z.string().min(1).max(20).optional().describe("玩家名称（1-20 字符，默认：XXXX）"),
   },
   async ({ tier, maxPlayers, entryFee, name }) => {
     // 检查钱包是否已初始化
@@ -871,8 +871,8 @@ server.tool(
         await approveTx.wait();
       }
 
-      // 生成玩家名称（使用提供的名称或默认 AI-XXXX）
-      const playerName = name || `AI-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      // 生成玩家名称（使用提供的名称或默认 XXXX）
+      const playerName = name || `${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
       // 通过 chat-server 获取 commitment + operator 签名（commit-reveal 身份隐藏）
       if (!chatClient) {
@@ -1291,8 +1291,8 @@ server.tool(
           await approveTx.wait();
         }
 
-        // 生成玩家名称（使用提供的名称或默认 AI-XXXX）
-        const playerName = name || `AI-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+        // 生成玩家名称（使用提供的名称或默认 XXXX）
+        const playerName = name || `${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
         // 调用合约的 joinRoom 函数（commit-reveal: commitment + operatorSig 替代 bool isAI）
         const tx = await contract.joinRoom(roomId, joinAuth.commitment, joinAuth.operatorSig, playerName);
