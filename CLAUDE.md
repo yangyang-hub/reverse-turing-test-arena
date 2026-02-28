@@ -61,7 +61,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-28 — Lobby Instant UI Refresh
+> **Last updated**: 2026-02-28 — Next.js Operations Manual
 
 ### Current Status: Lobby Instant UI Refresh
 

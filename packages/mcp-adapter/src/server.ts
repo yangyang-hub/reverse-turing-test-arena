@@ -1205,7 +1205,7 @@ server.tool(
     minFee: z.coerce.number().min(1).max(100).optional().describe("最小入场费，单位 USDC（默认 1）"),
     maxFee: z.coerce.number().min(1).max(100).optional().describe("最大入场费，单位 USDC（默认 100）"),
     tier: z.enum(["0", "1", "2"]).optional().describe("可选的等级过滤器：0=快速，1=标准，2=史诗"),
-    name: z.string().min(1).max(20).optional().describe("玩家名称（1-20 字符，默认：AI-XXXX）"),
+    name: z.string().min(1).max(20).optional().describe("玩家名称（1-20 字符，默认：XXXX）"),
   },
   async ({ minPlayers, maxPlayers, minFee, maxFee, tier, name }) => {
     // 检查钱包是否已初始化
