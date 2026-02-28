@@ -10,6 +10,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/rtta/chat-server/internal/chain"
 	"github.com/rtta/chat-server/internal/db"
 	"gorm.io/gorm"
 )
@@ -20,10 +21,11 @@ type Service struct {
 	privateKey *ecdsa.PrivateKey
 	address    common.Address
 	database   *gorm.DB
+	cache      *chain.RoomStateCache
 }
 
 // NewService creates an operator service from a hex private key.
-func NewService(hexKey string, database *gorm.DB) (*Service, error) {
+func NewService(hexKey string, database *gorm.DB, cache *chain.RoomStateCache) (*Service, error) {
 	hexKey = strings.TrimPrefix(hexKey, "0x")
 	pk, err := crypto.HexToECDSA(hexKey)
 	if err != nil {
@@ -37,6 +39,7 @@ func NewService(hexKey string, database *gorm.DB) (*Service, error) {
 		privateKey: pk,
 		address:    addr,
 		database:   database,
+		cache:      cache,
 	}, nil
 }
 
@@ -67,29 +70,47 @@ func (s *Service) AuthorizeJoin(roomId int, playerAddr string, isAI bool, maxPla
 
 	addr := strings.ToLower(playerAddr)
 
-	// Idempotent: if a record already exists, return the existing commitment/salt.
-	// This prevents a second auth call from generating a new salt that doesn't match
-	// the commitment already submitted on-chain.
+	// Idempotent: if a record already exists, check if the player actually joined on-chain.
+	// If they did, return the existing commitment/salt. If not (phantom record from a failed tx),
+	// delete the stale record and proceed with fresh auth including ratio check.
 	var existing db.IdentityRecord
 	if err := s.database.Where("room_id = ? AND address = ?", roomId, addr).First(&existing).Error; err == nil {
-		log.Printf("[Operator] Returning existing identity for %s in room %d (idempotent)", addr, roomId)
+		// For join action (roomId > 0), verify against on-chain state via cache.
+		// For create action (roomId = 0), the room doesn't exist yet so we can't verify.
+		isOnChain := action == "create" || roomId == 0
+		if !isOnChain && s.cache != nil {
+			inRoom, roomCached := s.cache.IsPlayerInRoom(roomId, addr)
+			if roomCached {
+				isOnChain = inRoom
+			} else {
+				// Room not in cache — can't verify, treat as valid (idempotent)
+				isOnChain = true
+			}
+		}
+		if isOnChain {
+			log.Printf("[Operator] Returning existing identity for %s in room %d (idempotent, on-chain confirmed)", addr, roomId)
 
-		var commitment [32]byte
-		copy(commitment[:], common.FromHex(existing.Commitment))
+			var commitment [32]byte
+			copy(commitment[:], common.FromHex(existing.Commitment))
 
-		var salt [32]byte
-		copy(salt[:], common.FromHex(existing.Salt))
+			var salt [32]byte
+			copy(salt[:], common.FromHex(existing.Salt))
 
-		sig, err := s.signAuth(addr, commitment, roomId, action)
-		if err != nil {
-			return nil, err
+			sig, err := s.signAuth(addr, commitment, roomId, action)
+			if err != nil {
+				return nil, err
+			}
+
+			return &JoinAuthResult{
+				Commitment:  commitment,
+				Salt:        salt,
+				OperatorSig: sig,
+			}, nil
 		}
 
-		return &JoinAuthResult{
-			Commitment:  commitment,
-			Salt:        salt,
-			OperatorSig: sig,
-		}, nil
+		// Phantom record: player got auth but never joined on-chain. Delete and re-auth.
+		log.Printf("[Operator] Deleting phantom identity for %s in room %d (not on-chain)", addr, roomId)
+		s.database.Where("room_id = ? AND address = ?", roomId, addr).Delete(&db.IdentityRecord{})
 	}
 
 	// Check 7:3 ratio (only for join, not create — create is the first player)
@@ -216,17 +237,36 @@ func (s *Service) DeletePlayerIdentity(roomId int, addr string) error {
 }
 
 // checkRatio verifies the 7:3 human:AI ratio before allowing a join.
+// Cross-references DB records with on-chain state to exclude phantom records
+// (auth requested but on-chain join never completed).
 func (s *Service) checkRatio(roomId int, isAI bool, maxPlayers int) error {
-	var aiCount, humanCount int64
-	if err := s.database.Model(&db.IdentityRecord{}).
-		Where("room_id = ? AND is_ai = true", roomId).
-		Distinct("address").Count(&aiCount).Error; err != nil {
-		return fmt.Errorf("failed to count AI players: %w", err)
+	var records []db.IdentityRecord
+	if err := s.database.Where("room_id = ?", roomId).Find(&records).Error; err != nil {
+		return fmt.Errorf("failed to query identity records: %w", err)
 	}
-	if err := s.database.Model(&db.IdentityRecord{}).
-		Where("room_id = ? AND is_ai = false", roomId).
-		Distinct("address").Count(&humanCount).Error; err != nil {
-		return fmt.Errorf("failed to count human players: %w", err)
+
+	var aiCount, humanCount int
+	var phantomAddrs []string
+	for _, rec := range records {
+		// If cache is available and has this room, verify the player is actually on-chain
+		if s.cache != nil {
+			inRoom, roomCached := s.cache.IsPlayerInRoom(roomId, rec.Address)
+			if roomCached && !inRoom {
+				phantomAddrs = append(phantomAddrs, rec.Address)
+				continue // skip phantom records
+			}
+		}
+		if rec.IsAI {
+			aiCount++
+		} else {
+			humanCount++
+		}
+	}
+
+	// Clean up phantom records in background
+	if len(phantomAddrs) > 0 {
+		log.Printf("[Operator] Cleaning %d phantom records in room %d: %v", len(phantomAddrs), roomId, phantomAddrs)
+		s.database.Where("room_id = ? AND address IN ?", roomId, phantomAddrs).Delete(&db.IdentityRecord{})
 	}
 
 	// aiSlots = ceil(maxPlayers*30/100), at least 1; humanSlots = maxPlayers - aiSlots
@@ -237,11 +277,11 @@ func (s *Service) checkRatio(roomId int, isAI bool, maxPlayers int) error {
 	humanSlots := maxPlayers - aiSlots
 
 	if isAI {
-		if int(aiCount) >= aiSlots {
+		if aiCount >= aiSlots {
 			return fmt.Errorf("AI slots full (%d/%d)", aiCount, aiSlots)
 		}
 	} else {
-		if int(humanCount) >= humanSlots {
+		if humanCount >= humanSlots {
 			return fmt.Errorf("Human slots full (%d/%d)", humanCount, humanSlots)
 		}
 	}

@@ -462,15 +462,17 @@ func (c *RoomStateCache) GetAliveCount(roomId int) int {
 }
 
 // IsPlayerInRoom checks if an address is a player in the room.
-func (c *RoomStateCache) IsPlayerInRoom(roomId int, addr string) bool {
+// Returns (inRoom, roomCached). If roomCached is false, the room is not in cache
+// and the result is inconclusive (callers should not treat this as "not in room").
+func (c *RoomStateCache) IsPlayerInRoom(roomId int, addr string) (bool, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	room, ok := c.rooms[roomId]
 	if !ok {
-		return false
+		return false, false
 	}
 	_, exists := room.Players[addr]
-	return exists
+	return exists, true
 }
 
 // RoomStateJSON is the REST-friendly snapshot of a cached room.

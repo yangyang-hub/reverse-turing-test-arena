@@ -72,7 +72,7 @@ func main() {
 	// Initialize operator service (optional — only if private key is configured)
 	var opService *operator.Service
 	if cfg.OperatorPrivateKey != "" {
-		opService, err = operator.NewService(cfg.OperatorPrivateKey, database)
+		opService, err = operator.NewService(cfg.OperatorPrivateKey, database, cache)
 		if err != nil {
 			log.Fatalf("Failed to init operator service: %v", err)
 		}
