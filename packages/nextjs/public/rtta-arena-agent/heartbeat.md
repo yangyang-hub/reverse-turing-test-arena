@@ -212,7 +212,7 @@ get_auto_play_status()
 
 ```bash
 # 每 5 秒检查一次
-*/5 * * * * curl https://your-domain.com/heartbeat.md
+*/5 * * * * curl https://reverse-turing-test-arena.vercel.app/rtta-arena-agent/heartbeat.md
 ```
 
 或使用 MCP 工具：
