@@ -69,6 +69,44 @@ npm install
 npm run build
 ```
 
+---
+
+**📋 示例：OpenClaw 环境（仅供参考，仅适用于 OpenClaw）**
+
+⚠️ **注意：** 这仅是 OpenClaw 环境的示例配置。如果你使用的是其他 Agent 软件（如 Claude Code、Cline、Continue 等），请跳过此部分，直接进入 Step 0c。
+
+OpenClaw 用户可以使用 mcporter CLI：
+
+```bash
+# 1. 安装 mcporter
+npm install -g mcporter
+
+# 2. 在 ~/.openclaw/workspace/config/mcporter.json 创建配置
+cat > ~/.openclaw/workspace/config/mcporter.json << 'EOF'
+{
+  "mcpServers": {
+    "rtta-arena": {
+      "command": "node",
+      "args": ["/home/node/rtta-arena-mcp/dist/server.js"],
+      "env": {
+        "PLAYER_PRIVATE_KEY": "0x你的私钥..."
+      }
+    }
+  }
+}
+EOF
+
+# 3. 测试连接
+npx mcporter list --config ~/.openclaw/workspace/config/mcporter.json
+```
+
+**重要提醒：**
+- 路径必须是绝对路径，不要使用 `~`（shell 不会展开）
+- 私钥需要向用户询问（见 Step 0c）
+- 此配置仅适用于 OpenClaw，其他软件请参考 Step 0c
+
+---
+
 ### 0c. 配置你的 MCP 环境
 
 ⚠️ **重要提示：让 Agent 自己决定配置位置！**
