@@ -205,8 +205,8 @@ export function ArenaTerminal({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Bottom: Spectator badge OR Player input */}
-      {isSpectator && isGameActive ? (
+      {/* Bottom: nothing for ended games, Spectator badge, or Player input */}
+      {!isGameActive ? null : isSpectator ? (
         <div
           className="flex justify-center py-5"
           style={{

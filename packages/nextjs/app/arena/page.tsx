@@ -684,6 +684,7 @@ function ArenaContent() {
               refetchCoreData();
               refetchPlayerInfos();
             }}
+            onSettle={handleSettle}
           />
         </div>
       </div>
