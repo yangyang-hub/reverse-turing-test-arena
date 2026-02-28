@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Address } from "@scaffold-ui/components";
 import { motion } from "framer-motion";
 import { formatUnits } from "viem";
+import { PixelAvatar } from "~~/app/arena/_components/PixelAvatar";
 import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { getPlayerAlias } from "~~/utils/playerAlias";
 
@@ -155,12 +156,7 @@ export const VictoryScreen = ({
           <div className="mb-6 flex flex-col items-center gap-2">
             <div className="text-yellow-400 font-mono text-xs tracking-[0.3em]">MOST VALUABLE PLAYER</div>
             <div className="flex items-center gap-3">
-              <div
-                className="w-10 h-10 rounded-full flex items-center justify-center font-mono text-lg font-bold text-black"
-                style={{ backgroundColor: mvpAlias.color }}
-              >
-                {mvpAlias.initial}
-              </div>
+              <PixelAvatar seed={mvp} color={mvpAlias.color} size={40} />
               <div className="flex flex-col items-start">
                 <span className="font-mono text-xl font-bold" style={{ color: mvpAlias.color }}>
                   {mvpAlias.name}

@@ -2,6 +2,7 @@
 
 import { Address } from "@scaffold-ui/components";
 import { useAccount } from "wagmi";
+import { PixelAvatar } from "~~/app/arena/_components/PixelAvatar";
 import type { PlayerInfo } from "~~/app/arena/page";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth";
 import { getPlayerAlias } from "~~/utils/playerAlias";
@@ -113,13 +114,8 @@ function PlayerRadarCard({
 
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
-          {/* Colored avatar circle */}
-          <div
-            className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center font-mono text-xs font-bold text-black"
-            style={{ backgroundColor: alias.color }}
-          >
-            {alias.initial}
-          </div>
+          {/* Pixel avatar */}
+          <PixelAvatar seed={playerAddr} color={alias.color} size={24} />
 
           {/* Alias name + optional real address reveal */}
           <div className={`min-w-0 ${!isAlive ? "line-through" : ""}`}>

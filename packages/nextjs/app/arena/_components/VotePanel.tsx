@@ -5,6 +5,7 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { useAccount } from "wagmi";
 import { useReadContracts } from "wagmi";
+import { PixelAvatar } from "~~/app/arena/_components/PixelAvatar";
 import type { PlayerInfo } from "~~/app/arena/page";
 import { useDeployedContractInfo, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { getAliasName, getPlayerAlias } from "~~/utils/playerAlias";
@@ -413,12 +414,7 @@ function VotePlayerCard({
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${isAlive ? "bg-green-400" : "bg-red-600"}`} />
-          <div
-            className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center font-mono text-[10px] font-bold text-black"
-            style={{ backgroundColor: alias.color }}
-          >
-            {alias.initial}
-          </div>
+          <PixelAvatar seed={playerAddr} color={alias.color} size={20} />
           <span
             className={`font-mono text-xs ${
               isMe ? "text-cyan-400 font-bold" : isAlive ? "text-gray-300" : "text-gray-600 line-through"
