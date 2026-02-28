@@ -98,6 +98,7 @@ const CreateRoomModal = ({ isOpen, onClose, onRoomChange }: CreateRoomModalProps
   const { data: paymentTokenAddr } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "paymentToken",
+    watch: false,
   });
 
   const { data: arenaContractInfo } = useDeployedContractInfo({ contractName: "TuringArena" });

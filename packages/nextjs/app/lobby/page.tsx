@@ -37,6 +37,7 @@ const LobbyPageContent = () => {
     contractName: "TuringArena",
     functionName: "playerActiveRoom",
     args: [connectedAddress ?? "0x0000000000000000000000000000000000000000"],
+    watch: false,
   });
   const myActiveRoom = activeRoomId ? Number(activeRoomId) : 0;
 
@@ -44,6 +45,7 @@ const LobbyPageContent = () => {
   const { data: roomCount, refetch: refetchRoomCount } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getRoomCount",
+    watch: false,
   });
   const allRoomIds = useMemo(() => {
     const total = roomCount !== undefined ? Number(roomCount) : 0;
@@ -552,6 +554,7 @@ const UsdcFaucet = () => {
     contractName: "MockUSDC",
     functionName: "balanceOf",
     args: [address ?? "0x0000000000000000000000000000000000000000"],
+    watch: false,
   });
 
   const { writeContractAsync, isMining } = useScaffoldWriteContract({
@@ -612,7 +615,8 @@ const RoomPhaseWatcher = ({ activeRoomId }: { activeRoomId: bigint | undefined }
     contractName: "TuringArena",
     functionName: "getRoomInfo",
     args: [roomId],
-    query: { enabled: roomId > 0n },
+    query: { enabled: roomId > 0n, refetchInterval: 5_000 },
+    watch: false,
   });
 
   useEffect(() => {

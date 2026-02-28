@@ -57,6 +57,7 @@ const RoomCard = ({ roomId, roomInfo: propRoomInfo, onRoomChange }: RoomCardProp
     functionName: "getRoomInfo",
     args: [roomId],
     query: { enabled: !propRoomInfo },
+    watch: false,
   });
   const roomInfo = propRoomInfo || fetchedRoomInfo;
 

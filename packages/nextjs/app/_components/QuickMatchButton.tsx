@@ -67,6 +67,7 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch, onRoomJoined }: Quick
   const { data: paymentTokenAddr } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "paymentToken",
+    watch: false,
   });
 
   const { data: arenaContractInfo } = useDeployedContractInfo({ contractName: "TuringArena" });
