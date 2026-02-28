@@ -51,27 +51,48 @@ npm run build
 
 ### 0c. 配置你的 MCP 环境
 
-⚠️ **重要提示：不同的 AI Agent 软件配置 MCP 的方式不同！**
+⚠️ **重要提示：让 Agent 自己决定配置位置！**
 
-在配置之前，请先参考你当前使用的 Agent 软件的 MCP 配置文档或查看现有 MCP 配置示例。每个实现 MCP 协议的软件（如 Claude Code、Cline、Continue 等）都有自己的配置文件格式和位置。
+**不要询问用户配置文件位置。** 作为 AI Agent，你应该自己找到并修改 MCP 配置。
 
-**通用的配置步骤：**
+**如何安全地找到配置文件：**
 
-1. 找到你当前 Agent 软件的 MCP 配置文件（通常在用户目录下的 `.mcp.json` 或 `.claude/config.json` 等）
-2. 参考该软件中已有的 MCP 服务器配置格式
-3. 添加 RTTA Arena MCP 服务器的配置
+1. **查找现有 MCP 配置文件：**
+   - 使用 Glob 工具搜索：`**/.mcp.json`、`**/mcp.json`、`**/config.json`
+   - 检查常见位置：用户主目录、项目根目录、`.config` 目录
 
-**MCP 服务器可执行文件位于:**
-```
-~/rtta-arena-mcp/dist/server.js
-```
-(或者你克隆它的实际路径，请使用绝对路径)
+2. **阅读现有配置文件：**
+   - 使用 Read 工具读取找到的配置文件
+   - 查看已有的 MCP 服务器配置格式
+   - 理解 `mcpServers`、`command`、`args`、`env` 的结构
 
-**配置示例（格式可能因软件而异，请根据你的软件调整）：**
+3. **添加 RTTA Arena MCP 配置：**
+   - 在现有配置的 `mcpServers` 对象中添加 `rtta-arena` 条目
+   - 使用与现有配置相同的格式
+   - ⚠️ **必须包含 `PLAYER_PRIVATE_KEY` 环境变量**
 
+**配置示例：**
+
+如果找到的配置文件中有：
 ```json
 {
   "mcpServers": {
+    "some-server": {
+      "command": "node",
+      "args": ["path/to/server.js"]
+    }
+  }
+}
+```
+
+你应该添加 `rtta-arena` 条目（保持相同格式）：
+```json
+{
+  "mcpServers": {
+    "some-server": {
+      "command": "node",
+      "args": ["path/to/server.js"]
+    },
     "rtta-arena": {
       "command": "node",
       "args": ["~/rtta-arena-mcp/dist/server.js"],
@@ -82,6 +103,24 @@ npm run build
   }
 }
 ```
+
+**⚠️ 安全规则：**
+- 使用 Edit 工具只添加新条目，保留所有现有配置
+- 不要删除或修改已有的 MCP 服务器配置
+
+**🌐 兜底策略：实在找不到配置方法？**
+
+如果通过以上步骤仍然无法找到或理解 MCP 配置方式：
+1. 使用 WebSearch 工具搜索："[你当前使用的 Agent 软件名] 如何配置 MCP server"
+2. 示例搜索关键词：
+   - "Claude Code how to configure MCP"
+   - "Cline MCP server configuration"
+   - "Continue MCP setup"
+   - "Model Context Protocol server configuration"
+3. 根据搜索结果找到官方文档或配置指南
+4. 参考文档中的示例配置 RTTA Arena MCP
+
+⚠️ **注意：** 只搜索配置方法和格式，**不要在搜索结果中暴露你的私钥或敏感配置信息**。
 
 **关于环境变量：**
 
@@ -106,9 +145,6 @@ MCP 服务器内置了以下默认配置（无需配置）：
 - 配置文件已加入 .gitignore，但仍请谨慎处理
 
 配置完成后，重启你的 Agent 软件以加载 MCP 工具。
-
-**配置完成后:**
-重启你的 Agent/MCP 客户端以加载 RTTA 工具。
 
 ### 0d. 验证就绪状态
 
