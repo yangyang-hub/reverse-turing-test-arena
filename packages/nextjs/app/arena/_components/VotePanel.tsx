@@ -18,6 +18,7 @@ export function VotePanel({
   blockNumber,
   pendingReveal,
   hasVotedOnChain,
+  onEmergencyEnd,
 }: {
   roomId: bigint;
   nameMap?: Record<string, string>;
@@ -28,6 +29,7 @@ export function VotePanel({
   blockNumber: bigint | undefined;
   pendingReveal: boolean;
   hasVotedOnChain?: boolean;
+  onEmergencyEnd?: () => void;
 }) {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [localVotedRound, setLocalVotedRound] = useState<bigint | null>(null);
@@ -195,6 +197,7 @@ export function VotePanel({
                   onClick={async () => {
                     try {
                       await writeContractAsync({ functionName: "emergencyEnd", args: [roomId] });
+                      onEmergencyEnd?.();
                     } catch (e) {
                       console.error("Emergency end failed:", e);
                     }

@@ -53,6 +53,7 @@ const TIERS = [
 type CreateRoomModalProps = {
   isOpen: boolean;
   onClose: () => void;
+  onRoomChange?: () => void;
 };
 
 /* ─── Cyber-green input styles ─── */
@@ -74,7 +75,7 @@ const fieldInputStyle: React.CSSProperties = {
 const panelClip = "polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px))";
 const btnClip = "polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))";
 
-const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
+const CreateRoomModal = ({ isOpen, onClose, onRoomChange }: CreateRoomModalProps) => {
   const router = useRouter();
   const [selectedTier, setSelectedTier] = useState<number>(1);
   const [customMaxPlayers, setCustomMaxPlayers] = useState<string>(String(TIERS[1].defaultMaxPlayers));
@@ -167,6 +168,7 @@ const CreateRoomModal = ({ isOpen, onClose }: CreateRoomModalProps) => {
         }
       }
 
+      onRoomChange?.();
       onClose();
       router.push("/lobby");
     } catch (e: any) {

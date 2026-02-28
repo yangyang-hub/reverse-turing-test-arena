@@ -30,6 +30,7 @@ type QuickMatchButtonProps = {
   roomIds: bigint[];
   onNoMatch: () => void;
   autoMatch?: boolean;
+  onRoomJoined?: () => void;
 };
 
 /* ─── Cyber-green input styles ─── */
@@ -52,7 +53,7 @@ const fieldInputFocusStyle: React.CSSProperties = {
   boxShadow: "inset 0 0 14px rgba(0,229,255,0.1), 0 0 8px rgba(0,229,255,0.15)",
 };
 
-const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonProps) => {
+const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch, onRoomJoined }: QuickMatchButtonProps) => {
   const { address: connectedAddress } = useAccount();
   const config = useConfig();
   const [isSearching, setIsSearching] = useState(false);
@@ -184,6 +185,7 @@ const QuickMatchButton = ({ roomIds, onNoMatch, autoMatch }: QuickMatchButtonPro
           notification.success(
             `Joined Room #${roomId.toString()}! Waiting for players (${playerCount + 1}/${maxPlayers})...`,
           );
+          onRoomJoined?.();
         } catch (e: any) {
           notification.remove(joinNotifId);
           const msg = e?.shortMessage || e?.message || "Unknown error";

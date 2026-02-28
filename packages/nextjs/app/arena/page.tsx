@@ -83,7 +83,11 @@ function ArenaContent() {
     ];
   }, [arenaInfo, roomId]);
 
-  const { data: coreData, isLoading: coreLoading } = useReadContracts({
+  const {
+    data: coreData,
+    isLoading: coreLoading,
+    refetch: refetchCoreData,
+  } = useReadContracts({
     contracts: coreContracts,
     query: { enabled: coreContracts.length > 0, refetchInterval: 4_000 },
   });
@@ -404,6 +408,8 @@ function ArenaContent() {
     setIsSettling(true);
     try {
       await writeArena({ functionName: "settleRound", args: [roomId] });
+      refetchCoreData();
+      refetchPlayerInfos();
     } catch (e: any) {
       const msg = e?.message || "";
       if (!msg.includes("Round not ended yet")) {
@@ -428,6 +434,8 @@ function ArenaContent() {
     setIsEmergencyEnding(true);
     try {
       await writeArena({ functionName: "emergencyEnd", args: [roomId] });
+      refetchCoreData();
+      refetchPlayerInfos();
     } catch (e: any) {
       console.error("Emergency end failed:", e);
     } finally {
@@ -630,6 +638,10 @@ function ArenaContent() {
             blockNumber={blockNumber}
             pendingReveal={pendingReveal}
             hasVotedOnChain={hasVotedOnChain}
+            onEmergencyEnd={() => {
+              refetchCoreData();
+              refetchPlayerInfos();
+            }}
           />
         </div>
       </div>

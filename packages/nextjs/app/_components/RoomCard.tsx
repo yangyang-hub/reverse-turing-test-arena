@@ -40,9 +40,10 @@ const PHASE_CLASSES = ["text-secondary", "phase-active", "phase-ended"] as const
 type RoomCardProps = {
   roomId: bigint;
   roomInfo?: any; // Optional: from parent batch fetch
+  onRoomChange?: () => void;
 };
 
-const RoomCard = ({ roomId, roomInfo: propRoomInfo }: RoomCardProps) => {
+const RoomCard = ({ roomId, roomInfo: propRoomInfo, onRoomChange }: RoomCardProps) => {
   const router = useRouter();
   const { address: connectedAddress } = useAccount();
   const [isLeaving, setIsLeaving] = useState(false);
@@ -122,6 +123,7 @@ const RoomCard = ({ roomId, roomInfo: propRoomInfo }: RoomCardProps) => {
     setIsLeaving(true);
     try {
       await writeArena({ functionName: "leaveRoom", args: [roomId] });
+      onRoomChange?.();
     } catch (e: any) {
       const msg = e?.shortMessage || e?.message || "Unknown error";
       if (!msg.includes("User rejected")) {
@@ -138,6 +140,7 @@ const RoomCard = ({ roomId, roomInfo: propRoomInfo }: RoomCardProps) => {
     try {
       await writeArena({ functionName: "claimReward", args: [roomId] });
       notification.success("Reward claimed!");
+      onRoomChange?.();
     } catch (e: any) {
       const msg = e?.shortMessage || e?.message || "Unknown error";
       if (!msg.includes("User rejected")) {

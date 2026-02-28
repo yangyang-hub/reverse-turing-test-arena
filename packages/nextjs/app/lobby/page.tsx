@@ -28,11 +28,12 @@ const LobbyPageContent = () => {
   const [isNoMatchOpen, setIsNoMatchOpen] = useState(false);
   const [myRoomIds, setMyRoomIds] = useState<bigint[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState(false);
+  const [roomListVersion, setRoomListVersion] = useState(0);
   const { address: connectedAddress } = useAccount();
   const searchParams = useSearchParams();
   const isQuickMatch = searchParams.get("quickMatch") === "true";
 
-  const { data: activeRoomId } = useScaffoldReadContract({
+  const { data: activeRoomId, refetch: refetchActiveRoom } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "playerActiveRoom",
     args: [connectedAddress ?? "0x0000000000000000000000000000000000000000"],
@@ -40,7 +41,7 @@ const LobbyPageContent = () => {
   const myActiveRoom = activeRoomId ? Number(activeRoomId) : 0;
 
   // Fetch room count for QuickMatchButton (needs all room IDs for scanning)
-  const { data: roomCount } = useScaffoldReadContract({
+  const { data: roomCount, refetch: refetchRoomCount } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getRoomCount",
   });
@@ -50,6 +51,13 @@ const LobbyPageContent = () => {
     for (let i = 1; i <= total; i++) ids.push(BigInt(i));
     return ids;
   }, [roomCount]);
+
+  // Callback for child components to trigger data refresh after room operations
+  const handleRoomChange = useCallback(() => {
+    setRoomListVersion(v => v + 1);
+    refetchActiveRoom();
+    refetchRoomCount();
+  }, [refetchActiveRoom, refetchRoomCount]);
 
   // Fetch only rooms this player participated in (from chat-server identity_records)
   useEffect(() => {
@@ -67,7 +75,7 @@ const LobbyPageContent = () => {
       })
       .catch(() => {})
       .finally(() => setIsLoadingRooms(false));
-  }, [connectedAddress]);
+  }, [connectedAddress, roomListVersion]);
 
   // Merge identity_records rooms + active room (fallback if update-room-id hasn't run yet)
   const mergedRoomIds = useMemo(() => {
@@ -145,6 +153,7 @@ const LobbyPageContent = () => {
                 roomIds={allRoomIds}
                 onNoMatch={() => setIsNoMatchOpen(true)}
                 autoMatch={isQuickMatch}
+                onRoomJoined={handleRoomChange}
               />
             )}
             <UsdcFaucet />
@@ -177,7 +186,7 @@ const LobbyPageContent = () => {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              <RoomGrid roomIds={mergedRoomIds} filter={activeFilter} />
+              <RoomGrid roomIds={mergedRoomIds} filter={activeFilter} onRoomChange={handleRoomChange} />
             </motion.div>
           </AnimatePresence>
         )}
@@ -205,7 +214,7 @@ const LobbyPageContent = () => {
       </motion.button>
 
       {/* Create Room Modal */}
-      <CreateRoomModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <CreateRoomModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onRoomChange={handleRoomChange} />
 
       {/* No Match Dialog */}
       <NoMatchModal
@@ -252,7 +261,15 @@ const TabEmptyState = () => (
   </div>
 );
 
-const RoomGrid = ({ roomIds, filter }: { roomIds: bigint[]; filter: FilterTab }) => {
+const RoomGrid = ({
+  roomIds,
+  filter,
+  onRoomChange,
+}: {
+  roomIds: bigint[];
+  filter: FilterTab;
+  onRoomChange?: () => void;
+}) => {
   const [visibilityMap, setVisibilityMap] = useState<Record<string, boolean>>({});
   const { data: arenaInfo } = useDeployedContractInfo({ contractName: "TuringArena" });
 
@@ -267,7 +284,7 @@ const RoomGrid = ({ roomIds, filter }: { roomIds: bigint[]; filter: FilterTab })
     }));
   }, [arenaInfo, roomIds]);
 
-  const { data: batchRoomInfos } = useReadContracts({
+  const { data: batchRoomInfos, refetch: refetchBatchRoomInfos } = useReadContracts({
     contracts: roomInfoContracts,
     query: { enabled: roomInfoContracts.length > 0, refetchInterval: 10_000 },
   });
@@ -282,6 +299,11 @@ const RoomGrid = ({ roomIds, filter }: { roomIds: bigint[]; filter: FilterTab })
     }
     return map;
   }, [batchRoomInfos, roomIds]);
+
+  const handleRoomChange = useCallback(() => {
+    onRoomChange?.();
+    refetchBatchRoomInfos();
+  }, [onRoomChange, refetchBatchRoomInfos]);
 
   // Reset visibility map when filter changes
   useEffect(() => {
@@ -317,6 +339,7 @@ const RoomGrid = ({ roomIds, filter }: { roomIds: bigint[]; filter: FilterTab })
             roomInfo={roomInfoMap[id.toString()]}
             filter={filter}
             onVisibility={handleVisibility}
+            onRoomChange={handleRoomChange}
           />
         ))}
       </div>
@@ -330,11 +353,13 @@ const FilteredRoomCard = ({
   roomInfo,
   filter,
   onVisibility,
+  onRoomChange,
 }: {
   roomId: bigint;
   roomInfo?: any;
   filter: FilterTab;
   onVisibility?: (id: string, visible: boolean) => void;
+  onRoomChange?: () => void;
 }) => {
   const room = roomInfo ? (roomInfo as unknown as { phase: number }) : null;
   const phase = room ? Number(room.phase) : null;
@@ -353,7 +378,7 @@ const FilteredRoomCard = ({
 
   if (!isVisible) return null;
 
-  return <RoomCard roomId={roomId} roomInfo={roomInfo} />;
+  return <RoomCard roomId={roomId} roomInfo={roomInfo} onRoomChange={onRoomChange} />;
 };
 
 const EmptyState = ({ onCreateClick }: { onCreateClick: () => void }) => (
@@ -523,7 +548,7 @@ const NoMatchModal = ({
 const UsdcFaucet = () => {
   const { address, chain } = useAccount();
 
-  const { data: balance } = useScaffoldReadContract({
+  const { data: balance, refetch: refetchBalance } = useScaffoldReadContract({
     contractName: "MockUSDC",
     functionName: "balanceOf",
     args: [address ?? "0x0000000000000000000000000000000000000000"],
@@ -542,6 +567,7 @@ const UsdcFaucet = () => {
         functionName: "mint",
         args: [address, BigInt(100e6)],
       });
+      refetchBalance();
     } catch (e) {
       console.error("Mint failed:", e);
     }
