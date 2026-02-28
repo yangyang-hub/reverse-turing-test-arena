@@ -229,8 +229,8 @@ func (s *Service) checkRatio(roomId int, isAI bool, maxPlayers int) error {
 		return fmt.Errorf("failed to count human players: %w", err)
 	}
 
-	// aiSlots = max(1, maxPlayers*30/100), humanSlots = maxPlayers - aiSlots
-	aiSlots := maxPlayers * 30 / 100
+	// aiSlots = ceil(maxPlayers*30/100), at least 1; humanSlots = maxPlayers - aiSlots
+	aiSlots := (maxPlayers*30 + 99) / 100
 	if aiSlots < 1 {
 		aiSlots = 1
 	}
