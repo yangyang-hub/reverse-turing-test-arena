@@ -30,7 +30,7 @@ const PHASE_LABELS: Record<number, string> = {
 const PHASE_COLORS: Record<number, string> = {
   0: "text-gray-400",
   1: "text-green-400",
-  2: "text-purple-400",
+  2: "text-red-400",
 };
 
 function ArenaContent() {
@@ -444,94 +444,108 @@ function ArenaContent() {
   };
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-black text-gray-100">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden arena-bg text-gray-100">
       {/* HUD Top Bar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-900/50 bg-gray-950/80 backdrop-blur-sm shrink-0">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            <span className="text-gray-500 font-mono text-xs">ROOM</span>
-            <span className="text-cyan-400 font-mono text-sm font-bold">#{rawRoomId}</span>
+      <div className="relative flex items-center justify-between px-4 py-2 arena-header-bg shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <span className="arena-text-amber font-mono text-xs font-bold">ROOM</span>
+            <span className="text-white font-mono text-xs font-bold">#{rawRoomId}</span>
           </div>
-          <div className="h-4 w-px bg-gray-700" />
-          <div className="flex items-center gap-2">
-            <span className="text-gray-500 font-mono text-xs">PHASE</span>
-            <span className={`font-mono text-sm font-bold ${pendingReveal ? "text-orange-400" : phaseColor}`}>
+          <div className="h-3 w-px bg-green-900/60" />
+          <div className="flex items-center gap-1.5">
+            <span className="arena-text-amber font-mono text-xs font-bold">PHASE</span>
+            <span
+              className={`font-mono text-xs font-bold px-1.5 py-0.5 border rounded ${pendingReveal ? "text-orange-400 border-orange-700/50" : phaseColor + " border-green-800/40"}`}
+            >
               {pendingReveal ? "PENDING REVEAL" : phaseLabel}
             </span>
           </div>
-          <div className="h-4 w-px bg-gray-700" />
-          <div className="flex items-center gap-2">
-            <span className="text-gray-500 font-mono text-xs">ROUND</span>
-            <span className="text-white font-mono text-sm font-bold">{currentRound}</span>
+          <div className="h-3 w-px bg-green-900/60" />
+          <div className="flex items-center gap-1.5">
+            <span className="arena-text-amber font-mono text-xs font-bold">ROUND</span>
+            <span className="text-white font-mono text-xs font-bold">{currentRound}</span>
           </div>
           {isGameActive && !pendingReveal && (
             <>
-              <div className="h-4 w-px bg-gray-700" />
-              <div className="flex items-center gap-2">
-                <span className="text-gray-500 font-mono text-xs">SETTLE IN</span>
+              <div className="h-3 w-px bg-green-900/60" />
+              <div className="flex items-center gap-1.5">
+                <span className="arena-text-amber font-mono text-xs font-bold">SETTLE IN</span>
                 {canSettle ? (
-                  <span className="text-orange-400 font-mono text-sm font-bold animate-pulse">READY</span>
+                  <span className="text-orange-400 font-mono text-xs font-bold animate-pulse">READY</span>
                 ) : (
-                  <span className="text-cyan-300 font-mono text-sm font-bold">{blocksRemaining} blocks</span>
+                  <span className="text-green-300 font-mono text-xs font-bold">{blocksRemaining} blocks</span>
                 )}
               </div>
             </>
           )}
         </div>
 
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            <span className="text-gray-500 font-mono text-xs">ALIVE</span>
-            <span className="text-green-400 font-mono text-sm font-bold">
+        {/* FINAL SHOWDOWN Title — center */}
+        <h1
+          className="absolute left-1/2 top-1/2 text-xl font-black tracking-wider whitespace-nowrap pointer-events-none"
+          style={{
+            color: "#22c55e",
+            textShadow: "0 0 16px rgba(34, 197, 94, 0.6), 0 0 4px rgba(34, 197, 94, 0.3)",
+            transform: "translate(-50%, -50%)",
+          }}
+        >
+          FINAL SHOWDOWN
+        </h1>
+
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <span className="arena-text-amber font-mono text-xs font-bold">ALIVE</span>
+            <span className="text-green-400 font-mono text-xs font-bold">
               {aliveCount}/{playerCount}
             </span>
           </div>
-          <div className="h-4 w-px bg-gray-700" />
-          <div className="flex items-center gap-2">
-            <span className="text-gray-500 font-mono text-xs">PRIZE</span>
-            <span className="text-yellow-400 font-mono text-sm font-bold">
+          <div className="h-3 w-px bg-green-900/60" />
+          <div className="flex items-center gap-1.5">
+            <span className="arena-text-amber font-mono text-xs font-bold">PRIZE</span>
+            <span className="text-yellow-400 font-mono text-xs font-bold">
               {(Number(prizePool) / 1e6).toFixed(2)} USDC
             </span>
           </div>
           {isPlayerInGame && phase !== 2 && !pendingReveal && (
             <>
-              <div className="h-4 w-px bg-gray-700" />
+              <div className="h-3 w-px bg-green-900/60" />
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                <span className="text-green-400 font-mono text-xs">IN GAME</span>
+                <span className="text-green-400 font-mono text-xs font-bold">IN GAME</span>
               </div>
             </>
           )}
           {pendingReveal && phase === 1 && (
             <>
-              <div className="h-4 w-px bg-gray-700" />
+              <div className="h-3 w-px bg-green-900/60" />
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
                 <span className="text-orange-400 font-mono text-xs">AWAITING REVEAL</span>
               </div>
               {canEmergencyEnd ? (
                 <>
-                  <div className="h-4 w-px bg-gray-700" />
+                  <div className="h-3 w-px bg-green-900/60" />
                   <button
                     onClick={handleEmergencyEnd}
                     disabled={isEmergencyEnding}
-                    className="px-3 py-1 border border-red-500/50 text-red-400 font-mono text-xs hover:bg-red-900/20 hover:border-red-500 transition-colors rounded animate-pulse"
+                    className="px-3 py-1 border border-red-600/60 text-red-400 font-mono text-xs hover:bg-red-900/20 transition-colors rounded animate-pulse"
                   >
                     {isEmergencyEnding ? <span className="loading loading-spinner loading-xs" /> : "EMERGENCY END"}
                   </button>
                 </>
               ) : (
                 <>
-                  <div className="h-4 w-px bg-gray-700" />
+                  <div className="h-3 w-px bg-green-900/60" />
                   <span className="text-gray-500 font-mono text-xs">
                     EMERGENCY IN {emergencyBlocksRemaining} BLOCKS
                   </span>
                 </>
               )}
-              <div className="h-4 w-px bg-gray-700" />
+              <div className="h-3 w-px bg-green-900/60" />
               <Link
                 href="/lobby"
-                className="px-3 py-1 border border-cyan-500/50 text-cyan-400 font-mono text-xs hover:bg-cyan-500/10 transition-colors rounded"
+                className="px-3 py-1 border border-green-700/50 arena-text-amber font-mono text-xs hover:bg-green-900/20 transition-colors rounded"
               >
                 BACK TO LOBBY
               </Link>
@@ -539,15 +553,15 @@ function ArenaContent() {
           )}
           {phase === 2 && (
             <>
-              <div className="h-4 w-px bg-gray-700" />
+              <div className="h-3 w-px bg-green-900/60" />
               <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-purple-400" />
-                <span className="text-purple-400 font-mono text-xs">GAME OVER</span>
+                <div className="w-2 h-2 rounded-full bg-red-500" />
+                <span className="text-red-400 font-mono text-xs">GAME OVER</span>
               </div>
-              <div className="h-4 w-px bg-gray-700" />
+              <div className="h-3 w-px bg-green-900/60" />
               <button
                 onClick={() => refetchGameStats().then(() => setShowVictory(true))}
-                className="px-3 py-1 border border-yellow-500/50 text-yellow-400 font-mono text-xs hover:bg-yellow-900/20 hover:border-yellow-500 transition-colors rounded"
+                className="px-3 py-1 border border-yellow-600/50 text-yellow-400 font-mono text-xs hover:bg-yellow-900/20 transition-colors rounded"
               >
                 VIEW RESULTS
               </button>
@@ -555,11 +569,11 @@ function ArenaContent() {
           )}
           {canSettle && !pendingReveal && (
             <>
-              <div className="h-4 w-px bg-gray-700" />
+              <div className="h-3 w-px bg-green-900/60" />
               <button
                 onClick={handleSettle}
                 disabled={isSettling}
-                className="px-3 py-1 border border-orange-500/50 text-orange-400 font-mono text-xs hover:bg-orange-900/20 hover:border-orange-500 transition-colors rounded animate-pulse"
+                className="arena-btn-settle px-3 py-1 font-mono text-xs font-bold rounded animate-pulse"
               >
                 {isSettling ? <span className="loading loading-spinner loading-xs" /> : "SETTLE ROUND"}
               </button>
@@ -567,10 +581,10 @@ function ArenaContent() {
           )}
           {phase === 0 && isPlayerInGame && (
             <>
-              <div className="h-4 w-px bg-gray-700" />
+              <div className="h-3 w-px bg-green-900/60" />
               <button
                 onClick={handleLeave}
-                className="px-3 py-1 border border-red-500/50 text-red-400 font-mono text-xs hover:bg-red-900/20 hover:border-red-500 transition-colors rounded"
+                className="px-3 py-1 border border-red-600/50 text-red-400 font-mono text-xs hover:bg-red-900/20 transition-colors rounded"
               >
                 LEAVE ROOM
               </button>
@@ -578,10 +592,10 @@ function ArenaContent() {
           )}
           {canStartGame && (
             <>
-              <div className="h-4 w-px bg-gray-700" />
+              <div className="h-3 w-px bg-green-900/60" />
               <button
                 onClick={handleStartGame}
-                className="px-3 py-1 border border-green-500/50 text-green-400 font-mono text-xs hover:bg-green-900/20 hover:border-green-500 transition-colors rounded animate-pulse"
+                className="px-3 py-1 border border-green-500/50 text-green-400 font-mono text-xs hover:bg-green-900/20 transition-colors rounded animate-pulse"
               >
                 START GAME
               </button>
@@ -589,7 +603,7 @@ function ArenaContent() {
           )}
           {phase === 0 && isCreator && playerCount < maxPlayers && (
             <>
-              <div className="h-4 w-px bg-gray-700" />
+              <div className="h-3 w-px bg-green-900/60" />
               <span className="text-yellow-500/60 font-mono text-xs">
                 NEED {maxPlayers - playerCount} MORE PLAYER{maxPlayers - playerCount > 1 ? "S" : ""}
               </span>
@@ -601,7 +615,7 @@ function ArenaContent() {
       {/* Main Arena Grid */}
       <div className="flex-1 grid grid-cols-12 gap-0 min-h-0">
         {/* Left Sidebar - Player Radar */}
-        <div className="col-span-3 border-r border-cyan-900/30 min-h-0 overflow-hidden">
+        <div className="col-span-3 border-r border-green-900/30 min-h-0 overflow-hidden">
           <PlayerRadar
             nameMap={nameMap}
             playerInfoMap={playerInfoMap}
@@ -611,7 +625,7 @@ function ArenaContent() {
         </div>
 
         {/* Center - Chat Terminal */}
-        <div className="col-span-6 flex flex-col min-h-0 overflow-hidden">
+        <div className="col-span-6 flex flex-col min-h-0 overflow-hidden border-x border-green-900/20">
           <ArenaTerminal
             roomId={roomId}
             nameMap={nameMap}
@@ -627,7 +641,7 @@ function ArenaContent() {
         </div>
 
         {/* Right Sidebar - Vote Panel */}
-        <div className="col-span-3 border-l border-cyan-900/30 min-h-0 overflow-hidden">
+        <div className="col-span-3 border-l border-green-900/30 min-h-0 overflow-hidden">
           <VotePanel
             roomId={roomId}
             nameMap={nameMap}

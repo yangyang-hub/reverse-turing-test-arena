@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { useAccount } from "wagmi";
 import { useReadContracts } from "wagmi";
@@ -51,6 +52,7 @@ export function VotePanel({
 
   const phase = roomInfo && typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
   const isGameActive = phase === 1;
+  const currentRound = roundNum !== undefined ? Number(roundNum) : 0;
 
   // Round countdown — using parent's blockNumber prop instead of independent useBlockNumber
   const lastSettleBlock =
@@ -126,14 +128,36 @@ export function VotePanel({
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-950">
+    <div className="flex flex-col h-full arena-panel-bg arena-scanline">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-red-900/40 bg-black/60">
+      <div
+        className="px-4 py-3 border-b border-green-900/40"
+        style={{ background: "linear-gradient(90deg, #121a12, #1a2619, #121a12)" }}
+      >
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          <h2 className="text-red-400 font-mono text-sm font-bold tracking-wider">ELIMINATION VOTE</h2>
+          <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+          <h2 className="arena-text-amber font-mono text-sm font-bold tracking-wider">ELIMINATION VOTE</h2>
         </div>
-        <p className="text-gray-600 font-mono text-xs mt-1">Select a target and confirm your vote</p>
+        <p className="text-gray-500 font-mono text-xs mt-1">Select a target and confirm your vote</p>
+      </div>
+
+      {/* Fight Image with Round Number Overlay */}
+      <div className="relative w-full" style={{ background: "#0a0f0a" }}>
+        <Image
+          src="/icon-fight.png"
+          alt="Fight Arena"
+          width={800}
+          height={200}
+          className="arena-fight-img w-full object-cover"
+          priority
+        />
+        {/* 当前轮次数字，放在图片绿色圈内 */}
+        <div
+          className="absolute inset-0 flex justify-center"
+          style={{ alignItems: "flex-start", paddingTop: "16%", paddingRight: "2%" }}
+        >
+          <span className="text-3xl font-bold font-mono text-white">{currentRound}</span>
+        </div>
       </div>
 
       {/* Round Countdown */}
@@ -149,7 +173,10 @@ export function VotePanel({
 
       {/* Status Banner */}
       {!isGameActive && (
-        <div className="mx-4 mt-3 px-3 py-2 border border-gray-700/50 bg-gray-900/50 rounded">
+        <div
+          className="mx-4 mt-3 px-3 py-2 border border-green-900/40 rounded"
+          style={{ background: "rgba(26, 38, 25, 0.4)" }}
+        >
           <span className="text-gray-500 font-mono text-xs">
             {phase === 0 ? "Voting opens when the game begins" : "Game has ended"}
           </span>
@@ -157,19 +184,28 @@ export function VotePanel({
       )}
 
       {isGameActive && !isPlayerInGame && (
-        <div className="mx-4 mt-3 px-3 py-2 border border-yellow-700/50 bg-yellow-950/20 rounded">
+        <div
+          className="mx-4 mt-3 px-3 py-2 border border-yellow-800/40 rounded"
+          style={{ background: "rgba(50, 40, 15, 0.3)" }}
+        >
           <span className="text-yellow-500 font-mono text-xs">You are not a participant in this room</span>
         </div>
       )}
 
       {isGameActive && isPlayerInGame && !isMyPlayerAlive && (
-        <div className="mx-4 mt-3 px-3 py-2 border border-red-700/50 bg-red-950/20 rounded">
+        <div
+          className="mx-4 mt-3 px-3 py-2 border border-red-800/40 rounded"
+          style={{ background: "rgba(50, 15, 15, 0.3)" }}
+        >
           <span className="text-red-400 font-mono text-xs">You have been eliminated. Observe mode active.</span>
         </div>
       )}
 
       {hasVotedThisRound && (
-        <div className="mx-4 mt-3 px-3 py-2 border border-green-700/50 bg-green-950/20 rounded">
+        <div
+          className="mx-4 mt-3 px-3 py-2 border border-green-700/50 rounded"
+          style={{ background: "rgba(15, 50, 15, 0.3)" }}
+        >
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-400" />
             <span className="text-green-400 font-mono text-xs">VOTE CAST - Awaiting round settlement</span>
@@ -178,7 +214,10 @@ export function VotePanel({
       )}
 
       {pendingReveal && (
-        <div className="mx-4 mt-3 px-3 py-2 border border-orange-500/50 bg-orange-950/20 rounded">
+        <div
+          className="mx-4 mt-3 px-3 py-2 border border-orange-600/50 rounded"
+          style={{ background: "rgba(50, 30, 10, 0.3)" }}
+        >
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
             <span className="text-orange-400 font-mono text-xs">
@@ -193,7 +232,7 @@ export function VotePanel({
               const canEmergency = currentBlock > lastSettleBlock + REVEAL_TIMEOUT;
               return canEmergency ? (
                 <button
-                  className="mt-2 w-full px-3 py-1.5 border border-red-500/50 text-red-400 font-mono text-xs hover:bg-red-900/20 hover:border-red-500 transition-colors rounded animate-pulse"
+                  className="mt-2 w-full px-3 py-1.5 border border-red-600/50 text-red-400 font-mono text-xs hover:bg-red-900/20 transition-colors rounded animate-pulse"
                   onClick={async () => {
                     try {
                       await writeContractAsync({ functionName: "emergencyEnd", args: [roomId] });
@@ -217,9 +256,12 @@ export function VotePanel({
 
       {/* Previous Round Votes */}
       {isGameActive && prevRoundVotes && prevRound !== undefined && (
-        <div className="mx-4 mt-3 px-3 py-2 border border-purple-700/40 bg-purple-950/10 rounded">
+        <div
+          className="mx-4 mt-3 px-3 py-2 border border-amber-800/30 rounded"
+          style={{ background: "rgba(40, 35, 15, 0.3)" }}
+        >
           <div className="flex items-center gap-1.5 mb-1.5">
-            <span className="text-purple-400 font-mono text-xs font-bold">ROUND {Number(prevRound)} VOTES</span>
+            <span className="arena-text-amber font-mono text-xs font-bold">ROUND {Number(prevRound)} VOTES</span>
           </div>
           <div className="space-y-0.5">
             {Object.entries(prevRoundVotes).map(([voter, target]) => {
@@ -271,15 +313,31 @@ export function VotePanel({
       </div>
 
       {/* Vote Confirm Button */}
-      <div className="px-4 py-3 border-t border-red-900/40 bg-black/60">
+      <div
+        className="px-4 py-4 border-t border-green-900/40"
+        style={{ background: "linear-gradient(90deg, #0c1210, #101810, #0c1210)" }}
+      >
         <button
           onClick={handleVote}
           disabled={!selectedTarget || !canVote || isMining}
-          className={`w-full py-3 font-mono text-sm font-bold tracking-widest transition-all duration-200 ${
+          className={`w-full py-4 font-mono text-base font-bold tracking-widest transition-all duration-200 rounded ${
             selectedTarget && canVote && !isMining
-              ? "bg-red-900/40 border border-red-500/60 text-red-400 hover:bg-red-800/50 hover:border-red-400 cursor-pointer"
-              : "bg-gray-900/40 border border-gray-700/30 text-gray-600 cursor-not-allowed"
+              ? "cursor-pointer"
+              : "border border-green-900/40 text-gray-600 cursor-not-allowed"
           }`}
+          style={
+            selectedTarget && canVote && !isMining
+              ? {
+                  background: "linear-gradient(180deg, #4a3a10, #2a1e08)",
+                  border: "2px solid #c9a84c",
+                  color: "#ffd700",
+                  textShadow: "0 0 8px rgba(255, 215, 0, 0.5)",
+                  boxShadow: "0 0 16px rgba(201, 168, 76, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+                }
+              : {
+                  background: "rgba(15, 20, 15, 0.6)",
+                }
+          }
         >
           {isMining ? (
             <span className="animate-pulse">BROADCASTING VOTE...</span>
@@ -288,7 +346,7 @@ export function VotePanel({
           ) : selectedTarget ? (
             <>VOTE TO ELIMINATE {getAliasName(allPlayers, selectedTarget, nameMap)}</>
           ) : (
-            "SELECT A TARGET"
+            "CONFIRMATION OR SELECT"
           )}
         </button>
       </div>
@@ -321,7 +379,6 @@ function VotePlayerCard({
   const humanityScore = playerInfo?.humanityScore ?? 100;
 
   const scoreColor = humanityScore > 60 ? "bg-green-500" : humanityScore > 30 ? "bg-yellow-500" : "bg-red-500";
-  const scoreTrackColor = humanityScore > 60 ? "bg-green-950" : humanityScore > 30 ? "bg-yellow-950" : "bg-red-950";
 
   const isClickable = canVote && !isMe && isAlive;
 
@@ -332,22 +389,23 @@ function VotePlayerCard({
       onClick={isClickable ? onSelect : undefined}
       whileHover={isClickable ? { scale: 1.01 } : undefined}
       whileTap={isClickable ? { scale: 0.99 } : undefined}
-      className={`relative p-3 rounded border transition-all duration-150 ${
+      className={`relative p-3 rounded transition-all duration-150 ${
         isSelected
-          ? "border-red-500/80 bg-red-950/30 shadow-[0_0_12px_rgba(239,68,68,0.15)]"
+          ? "arena-card-selected"
           : isMe
-            ? "border-cyan-800/40 bg-cyan-950/10"
+            ? "arena-card-military border-cyan-800/30"
             : !isAlive
-              ? "border-gray-800/30 bg-gray-900/20 opacity-50"
+              ? "arena-card-military opacity-50"
               : isClickable
-                ? "border-gray-700/30 bg-gray-900/30 hover:border-red-700/40 hover:bg-red-950/10 cursor-pointer"
-                : "border-gray-800/30 bg-gray-900/20"
+                ? "arena-card-military cursor-pointer"
+                : "arena-card-military opacity-60"
       }`}
+      style={isMe && !isSelected ? { borderColor: "#1a4a5a" } : undefined}
     >
       {isSelected && (
         <div className="absolute top-1 right-1">
-          <div className="w-4 h-4 rounded-full bg-red-500/20 border border-red-500/60 flex items-center justify-center">
-            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
+          <div className="w-4 h-4 rounded-full bg-amber-500/20 border border-amber-500/60 flex items-center justify-center">
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
           </div>
         </div>
       )}
@@ -371,14 +429,18 @@ function VotePlayerCard({
             {isMe && " (YOU)"}
           </span>
         </div>
-        {!isAlive && <span className="text-red-600 font-mono text-xs">DEAD</span>}
+        {!isAlive && (
+          <span className="text-red-500 font-mono text-xs font-bold px-1.5 py-0.5 rounded border border-red-800/40 bg-red-900/20">
+            DEAD
+          </span>
+        )}
       </div>
 
       {/* Previous round vote indicator */}
       {prevVoteTarget && (
         <div className="flex items-center gap-1 mb-1.5 ml-4">
           <span className="text-gray-600 font-mono text-[10px]">{"\u2192"}</span>
-          <span className="text-purple-400 font-mono text-[10px]">
+          <span className="arena-text-amber font-mono text-[10px]">
             voted {getAliasName(playerAddresses, prevVoteTarget, nameMap)}
           </span>
         </div>
@@ -386,8 +448,8 @@ function VotePlayerCard({
 
       {/* Humanity Score Bar */}
       <div className="flex items-center gap-2">
-        <span className="text-gray-600 font-mono text-xs w-8 shrink-0">{humanityScore}</span>
-        <div className={`flex-1 h-1.5 rounded-full ${scoreTrackColor}`}>
+        <span className="text-gray-500 font-mono text-xs w-8 shrink-0">{humanityScore}</span>
+        <div className="flex-1 h-1.5 rounded-full arena-hp-track">
           <div
             className={`h-full rounded-full ${scoreColor} transition-all duration-500`}
             style={{ width: `${Math.max(0, Math.min(100, humanityScore))}%` }}
@@ -417,14 +479,14 @@ function RoundCountdown({
       ? "bg-red-500"
       : progress > 0.5
         ? "bg-yellow-500"
-        : "bg-cyan-500";
+        : "bg-green-500";
   const textColor = isExpired
     ? "text-orange-400"
     : isUrgent
       ? "text-red-400"
       : progress > 0.5
         ? "text-yellow-400"
-        : "text-cyan-400";
+        : "text-green-400";
   const glowColor = isExpired
     ? "shadow-[0_0_8px_rgba(249,115,22,0.4)]"
     : isUrgent
@@ -434,15 +496,14 @@ function RoundCountdown({
   return (
     <div
       className={`mx-4 mt-3 px-3 py-2.5 border rounded ${
-        isExpired
-          ? "border-orange-500/50 bg-orange-950/20"
-          : isUrgent
-            ? "border-red-500/50 bg-red-950/20"
-            : "border-gray-700/50 bg-gray-900/50"
+        isExpired ? "border-orange-600/50" : isUrgent ? "border-red-600/50" : "border-green-900/40"
       } ${glowColor}`}
+      style={{
+        background: isExpired ? "rgba(50, 30, 10, 0.4)" : isUrgent ? "rgba(50, 15, 15, 0.4)" : "rgba(26, 38, 25, 0.4)",
+      }}
     >
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-gray-500 font-mono text-xs tracking-wider">ROUND DEADLINE</span>
+        <span className="arena-text-amber font-mono text-xs tracking-wider font-bold">ROUND DEADLINE</span>
         {isExpired ? (
           <span className="text-orange-400 font-mono text-sm font-bold animate-pulse">SETTLING...</span>
         ) : (
@@ -453,7 +514,7 @@ function RoundCountdown({
       </div>
 
       {/* Progress bar */}
-      <div className="h-1.5 w-full rounded-full bg-gray-800 overflow-hidden">
+      <div className="h-1.5 w-full rounded-full arena-hp-track overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-1000 ease-linear ${barColor}`}
           style={{ width: `${progress * 100}%` }}

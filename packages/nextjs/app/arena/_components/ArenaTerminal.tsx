@@ -39,12 +39,12 @@ function getMessageColor(sender: string, content: string, connectedAddress?: str
 
 function getTimestampColor(content: string): string {
   if (content.startsWith("[SYSTEM]") || content.startsWith("[VOTE]") || content.startsWith("[PHASE]")) {
-    return "text-yellow-600";
+    return "text-yellow-700";
   }
   if (content.startsWith("[ELIMINATED]") || content.startsWith("[KILL]")) {
-    return "text-red-600";
+    return "text-red-700";
   }
-  return "text-gray-600";
+  return "text-gray-500";
 }
 
 export function ArenaTerminal({
@@ -80,15 +80,15 @@ export function ArenaTerminal({
   const phase = roomInfo && typeof roomInfo === "object" && "phase" in roomInfo ? Number((roomInfo as any).phase) : 0;
   const isGameActive = phase === 1;
   const isMyPlayerAlive = myPlayerInfo?.isAlive ?? false;
-  // Channel exclusivity is enforced server-side — no need to check isAI here
+  const isPlayerInGame =
+    connectedAddress && allPlayers ? allPlayers.some(p => p.toLowerCase() === connectedAddress.toLowerCase()) : false;
   const canSend = isGameActive && isMyPlayerAlive;
+  const isSpectator = !isPlayerInGame || !isMyPlayerAlive;
 
-  // Message limit per round
   const MAX_MESSAGES = 6;
   const messagesRemaining = MAX_MESSAGES - myMessageCount;
   const canSendMessage = canSend && messagesRemaining > 0;
 
-  // Transform chat messages to terminal format
   const filteredMessages: TerminalMessage[] = chatMessages.map((msg, idx) => ({
     id: `chat-${msg.id || idx}`,
     sender: msg.sender,
@@ -111,11 +111,9 @@ export function ArenaTerminal({
 
   const handleSend = async () => {
     if (!inputMessage.trim() || isSending || !canSendMessage || !isConnected) return;
-
     const message = inputMessage.trim();
     setInputMessage("");
     setIsSending(true);
-
     try {
       sendMessage(message);
     } catch (err) {
@@ -134,56 +132,47 @@ export function ArenaTerminal({
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-950">
-      {/* Terminal Header */}
-      <div className="flex flex-col border-b border-green-900/40 bg-black/60">
-        <div className="flex items-center justify-between px-4 py-2">
-          <div className="flex items-center gap-2">
-            <div className="flex gap-1">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
-              <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
-              <div className="w-2.5 h-2.5 rounded-full bg-green-500/80" />
-            </div>
-            <span className="text-green-500/70 font-mono text-xs ml-2">arena://room-{roomId.toString()}/terminal</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-gray-600 font-mono text-xs">{filteredMessages.length} msgs</span>
-            {isConnected ? (
-              <div className="w-2 h-2 rounded-full bg-green-400" title="WebSocket connected" />
-            ) : (
-              <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse" title="Reconnecting..." />
-            )}
-          </div>
+    <div
+      className="flex flex-col h-full"
+      style={{
+        background: "linear-gradient(180deg, #0f1a1f 0%, #0c1518 50%, #0a1215 100%)",
+      }}
+    >
+      {/* Topic Banner at top */}
+      {isGameActive && currentRound > 0 && (
+        <div
+          className="px-5 py-3"
+          style={{
+            background: "linear-gradient(90deg, rgba(15, 30, 35, 0.9), rgba(20, 35, 40, 0.95), rgba(15, 30, 35, 0.9))",
+            borderBottom: "1px solid rgba(42, 161, 152, 0.2)",
+          }}
+        >
+          <span className="font-mono text-sm font-bold" style={{ color: "#c9a84c" }}>
+            RIDOH:{" "}
+          </span>
+          <span className="text-white font-mono text-sm">{getTopicForRound(currentRound)}</span>
         </div>
-        {/* Discussion topic */}
-        {isGameActive && currentRound > 0 && (
-          <div className="px-4 py-1.5 border-t border-green-900/20 bg-green-950/10">
-            <span className="text-gray-500 font-mono text-xs">TOPIC: </span>
-            <span className="text-cyan-400 font-mono text-xs">{getTopicForRound(currentRound)}</span>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Messages Area */}
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4 space-y-1 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-green-900/40"
+        className="flex-1 overflow-y-auto px-5 py-4 space-y-0.5"
+        style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(42, 161, 152, 0.3) transparent" }}
       >
-        {/* Welcome message */}
-        <div className="text-gray-600 font-mono text-xs mb-4 pb-2 border-b border-gray-800/50">
-          <div>{"// ============================================"}</div>
+        {/* System welcome header */}
+        <div className="font-mono text-xs mb-4 space-y-0.5" style={{ color: "#4a6a6a" }}>
           <div>
-            {"//  REVERSE TURING TEST ARENA - ROOM #"}
+            {"// REVERSE TURING TEST ARENA — ROOM #"}
             {roomId.toString()}
           </div>
-          <div>{"//  Chat powered by WebSocket (off-chain)"}</div>
-          <div>{"//  Trust no one. Spot the AI."}</div>
-          <div>{"// ============================================"}</div>
+          <div>{"// Chat powered by WebSocket (off-chain)"}</div>
+          <div>{"// Trust no one. Spot the AI."}</div>
         </div>
 
         {filteredMessages.length === 0 && (
-          <div className="text-gray-600 font-mono text-sm text-center py-8">
+          <div className="font-mono text-sm text-center py-8" style={{ color: "#4a6a6a" }}>
             <div className="mb-2">No messages yet.</div>
             <div className="text-xs">Be the first to speak... if you dare.</div>
           </div>
@@ -196,13 +185,13 @@ export function ArenaTerminal({
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.2 }}
-              className="font-mono text-sm leading-relaxed group"
+              className="font-mono text-sm leading-relaxed"
             >
               <span className={getTimestampColor(msg.content)}>[{formatTime(msg.createdAt)}]</span>{" "}
               <span
                 className={
                   connectedAddress && msg.sender.toLowerCase() === connectedAddress.toLowerCase()
-                    ? "text-cyan-500 font-bold"
+                    ? "text-cyan-400 font-bold"
                     : "text-purple-400"
                 }
               >
@@ -216,68 +205,104 @@ export function ArenaTerminal({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
-      <div className="border-t border-green-900/40 bg-black/60 p-3">
-        <div className="flex items-center gap-2">
-          <span className="text-green-500 font-mono text-sm shrink-0">
-            {connectedAddress ? getAliasName(allPlayers, connectedAddress, nameMap) : "anon"}@arena $
-          </span>
-          <input
-            type="text"
-            value={inputMessage}
-            onChange={e => setInputMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              !canSend
-                ? "Spectator mode"
-                : !canSendMessage
-                  ? "Message limit reached (3/round)"
-                  : !isConnected
-                    ? "Connecting to chat..."
-                    : "Type your message..."
-            }
-            disabled={isSending || !canSendMessage || !isConnected}
-            className="flex-1 bg-transparent border-none outline-none text-green-400 font-mono text-sm placeholder-gray-700 caret-green-400 disabled:opacity-50"
-            maxLength={280}
-          />
-          <button
-            onClick={handleSend}
-            disabled={!inputMessage.trim() || isSending || !canSendMessage || !isConnected}
-            className={`px-3 py-1 border font-mono text-xs transition-colors disabled:cursor-not-allowed flex items-center gap-1.5 ${
-              messagesRemaining <= 0
-                ? "border-red-700/50 text-red-500 opacity-50"
-                : messagesRemaining === 1
-                  ? "border-yellow-700/50 text-yellow-400 hover:bg-yellow-900/20 disabled:opacity-30"
-                  : "border-green-700/50 text-green-400 hover:bg-green-900/20 disabled:opacity-30"
-            }`}
+      {/* Bottom: Spectator badge OR Player input */}
+      {isSpectator && isGameActive ? (
+        <div
+          className="flex justify-center py-5"
+          style={{
+            borderTop: "1px solid rgba(42, 161, 152, 0.25)",
+            background: "linear-gradient(90deg, #0c1518, #0e1a1e, #0c1518)",
+          }}
+        >
+          <div
+            className="px-8 py-3 font-mono text-base font-bold tracking-wider"
+            style={{
+              border: "2px solid #2aa198",
+              color: "#d0d0d0",
+              background: "rgba(10, 25, 30, 0.9)",
+              boxShadow: "0 0 15px rgba(42, 161, 152, 0.15)",
+            }}
           >
-            {isSending ? (
-              <span className="animate-pulse">...</span>
-            ) : (
-              <>
-                SEND
-                {canSend && (
-                  <span
-                    className={`text-[10px] ${
-                      messagesRemaining <= 0
-                        ? "text-red-500"
-                        : messagesRemaining === 1
-                          ? "text-yellow-500"
-                          : "text-gray-500"
-                    }`}
-                  >
-                    [{messagesRemaining}/{MAX_MESSAGES}]
-                  </span>
-                )}
-              </>
-            )}
-          </button>
+            Spectator mode
+          </div>
         </div>
-        <div className="flex items-center justify-between mt-1">
-          <span className="text-gray-700 font-mono text-xs">{inputMessage.length}/280</span>
-          {!isConnected && <span className="text-yellow-600 font-mono text-xs animate-pulse">Reconnecting...</span>}
+      ) : (
+        <div
+          className="p-4"
+          style={{
+            borderTop: "2px solid rgba(42, 161, 152, 0.4)",
+            background: "linear-gradient(90deg, #101e22, #132428, #101e22)",
+          }}
+        >
+          <div
+            className="flex items-center gap-3 px-5 py-4 rounded-lg"
+            style={{
+              border: "2px solid rgba(42, 161, 152, 0.5)",
+              background: "rgba(15, 35, 40, 0.9)",
+              boxShadow: "0 0 12px rgba(42, 161, 152, 0.12), inset 0 0 8px rgba(42, 161, 152, 0.05)",
+            }}
+          >
+            <span className="font-mono text-sm shrink-0" style={{ color: "#2aa198" }}>
+              {connectedAddress ? getAliasName(allPlayers, connectedAddress, nameMap) : "anon"}@arena $
+            </span>
+            <input
+              type="text"
+              value={inputMessage}
+              onChange={e => setInputMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                !canSend
+                  ? "Spectator mode"
+                  : !canSendMessage
+                    ? "Message limit reached"
+                    : !isConnected
+                      ? "Connecting..."
+                      : "Type your message..."
+              }
+              disabled={isSending || !canSendMessage || !isConnected}
+              className="flex-1 bg-transparent border-none outline-none font-mono disabled:opacity-50"
+              style={{ color: "#66ccbb", fontSize: "15px", caretColor: "#2aa198" }}
+              maxLength={280}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!inputMessage.trim() || isSending || !canSendMessage || !isConnected}
+              className="disabled:cursor-not-allowed disabled:opacity-30 flex items-center gap-2 shrink-0"
+              style={{
+                padding: "10px 24px",
+                border: "2px solid #2aa198",
+                borderRadius: "6px",
+                fontFamily: "var(--font-mono)",
+                fontSize: "14px",
+                fontWeight: "bold",
+                letterSpacing: "0.1em",
+                color: "#ffffff",
+                background: "rgba(42, 161, 152, 0.2)",
+                transition: "all 0.15s",
+              }}
+            >
+              {isSending ? (
+                <span className="animate-pulse">...</span>
+              ) : (
+                <>
+                  SEND
+                  {canSend && (
+                    <span style={{ fontSize: "11px", color: "#6aadaa" }}>
+                      [{messagesRemaining}/{MAX_MESSAGES}]
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
+          </div>
+          <div className="flex items-center justify-between mt-2 px-2">
+            <span className="font-mono text-xs" style={{ color: "#3a5a5a" }}>
+              {inputMessage.length}/280
+            </span>
+            {!isConnected && <span className="text-yellow-600 font-mono text-xs animate-pulse">Reconnecting...</span>}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

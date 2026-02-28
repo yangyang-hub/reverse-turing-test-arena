@@ -28,22 +28,25 @@ export function PlayerRadar({
   const isEnded = phase === 2;
 
   return (
-    <div className="flex flex-col h-full bg-gray-950">
+    <div className="flex flex-col h-full arena-panel-bg arena-scanline">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-cyan-900/40 bg-black/60">
+      <div
+        className="px-4 py-3 border-b border-green-900/40"
+        style={{ background: "linear-gradient(90deg, #121a12, #1a2619, #121a12)" }}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
-            <h2 className="text-cyan-400 font-mono text-sm font-bold tracking-wider">PLAYER RADAR</h2>
+            <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            <h2 className="arena-text-amber font-mono text-sm font-bold tracking-wider">PLAYER RADAR</h2>
           </div>
-          <span className="text-gray-500 font-mono text-xs">
+          <span className="text-green-400 font-mono text-xs font-bold">
             {aliveCount}/{playerCount}
           </span>
         </div>
       </div>
 
       {/* Player List */}
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
         {allPlayers.length === 0 && (
           <div className="text-gray-600 font-mono text-xs text-center py-8">No players detected</div>
         )}
@@ -60,24 +63,6 @@ export function PlayerRadar({
             playerInfo={playerInfoMap[playerAddr.toLowerCase()]}
           />
         ))}
-      </div>
-
-      {/* Legend */}
-      <div className="px-4 py-2 border-t border-cyan-900/30 bg-black/40">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-            <span className="text-gray-600 font-mono text-xs">Alive</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-1.5 h-1.5 rounded-full bg-red-600" />
-            <span className="text-gray-600 font-mono text-xs">Dead</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-0.5 bg-cyan-500" />
-            <span className="text-gray-600 font-mono text-xs">You</span>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -105,8 +90,6 @@ function PlayerRadarCard({
   const isAI = playerInfo?.isAI ?? false;
 
   const scoreColor = humanityScore > 60 ? "bg-green-500" : humanityScore > 30 ? "bg-yellow-500" : "bg-red-500";
-  const scoreBorderColor =
-    humanityScore > 60 ? "border-green-800/40" : humanityScore > 30 ? "border-yellow-800/40" : "border-red-800/40";
   const scoreTextColor =
     humanityScore > 60 ? "text-green-400" : humanityScore > 30 ? "text-yellow-400" : "text-red-400";
 
@@ -114,13 +97,14 @@ function PlayerRadarCard({
 
   return (
     <div
-      className={`relative p-3 rounded border transition-all duration-200 ${
+      className={`relative p-3 rounded transition-all duration-200 ${
         isMe
-          ? "border-cyan-700/50 bg-cyan-950/15"
+          ? "arena-card-military border-cyan-800/50"
           : !isAlive
-            ? "border-gray-800/20 bg-gray-900/10 opacity-40"
-            : scoreBorderColor + " bg-gray-900/30"
+            ? "arena-card-military opacity-40"
+            : "arena-card-military"
       }`}
+      style={isMe ? { borderColor: "#1a5c6a" } : undefined}
     >
       {/* Me indicator */}
       {isMe && (
@@ -170,23 +154,24 @@ function PlayerRadarCard({
             </span>
           )}
           {!isAlive && (
-            <span className="px-1.5 py-0.5 bg-red-900/20 border border-red-700/30 rounded text-red-500 font-mono text-xs">
+            <span className="px-1.5 py-0.5 bg-red-900/30 border border-red-700/40 rounded text-red-400 font-mono text-xs font-bold">
               DEAD
             </span>
           )}
+          {isAlive && <span className="text-green-400 font-mono text-xs">Alive</span>}
         </div>
       </div>
 
       {/* Humanity Score */}
       <div className="flex items-center gap-2">
-        <span className="text-gray-500 font-mono text-xs shrink-0">HP</span>
-        <div className="flex-1 h-2 bg-gray-800/60 rounded-full overflow-hidden">
+        <span className="text-gray-500 font-mono text-xs shrink-0">{humanityScore}/100</span>
+        <div className="flex-1 h-2 arena-hp-track rounded-full overflow-hidden">
           <div
             className={`h-full ${scoreColor} rounded-full transition-all duration-700 ease-out`}
             style={{ width: `${Math.max(0, Math.min(100, humanityScore))}%` }}
           />
         </div>
-        <span className={`font-mono text-xs font-bold shrink-0 w-7 text-right ${scoreTextColor}`}>{humanityScore}</span>
+        <span className={`font-mono text-xs font-bold shrink-0 ${scoreTextColor}`}>{isAlive ? "Alive" : "Dead"}</span>
       </div>
     </div>
   );

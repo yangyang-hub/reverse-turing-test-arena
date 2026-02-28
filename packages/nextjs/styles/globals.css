@@ -639,6 +639,110 @@
   min-height: 0;
 }
 
+/* ============ Arena Military / Tactical HUD Theme ============ */
+
+.arena-bg {
+  background: linear-gradient(180deg, #0a0f0a 0%, #0d1410 50%, #0a0f0a 100%);
+}
+
+.arena-panel-bg {
+  background: linear-gradient(180deg, #0c1210 0%, #0a0f0a 100%);
+}
+
+.arena-header-bg {
+  background: linear-gradient(90deg, #121a12 0%, #1a2619 50%, #121a12 100%);
+  border-bottom: 1px solid #2d3d20;
+}
+
+.arena-border-military {
+  border-color: #2d3d20;
+}
+
+.arena-border-amber {
+  border-color: #6b5a1e;
+}
+
+.arena-text-amber {
+  color: #c9a84c;
+}
+
+.arena-text-amber-bright {
+  color: #d4b866;
+}
+
+.arena-title-gradient {
+  background: linear-gradient(180deg, #ffd700 0%, #c9a84c 40%, #a08030 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 8px rgba(201, 168, 76, 0.4));
+  font-family: 'Impact', 'Anton', sans-serif;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.arena-scanline {
+  position: relative;
+}
+
+.arena-scanline::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg,
+      transparent 0px,
+      transparent 2px,
+      rgba(57, 211, 83, 0.02) 2px,
+      rgba(57, 211, 83, 0.02) 4px);
+  z-index: 1;
+}
+
+.arena-card-military {
+  background: linear-gradient(180deg, rgba(26, 38, 25, 0.6) 0%, rgba(13, 20, 16, 0.8) 100%);
+  border: 1px solid #2d3d20;
+  transition: all 0.2s ease;
+}
+
+.arena-card-military:hover {
+  border-color: #3a4f2a;
+  background: linear-gradient(180deg, rgba(30, 45, 28, 0.7) 0%, rgba(15, 24, 18, 0.9) 100%);
+}
+
+.arena-card-selected {
+  border-color: #c9a84c !important;
+  background: linear-gradient(180deg, rgba(50, 40, 15, 0.4) 0%, rgba(30, 25, 10, 0.6) 100%) !important;
+  box-shadow: 0 0 12px rgba(201, 168, 76, 0.15);
+}
+
+.arena-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #2d3d20, transparent);
+}
+
+.arena-btn-settle {
+  background: linear-gradient(180deg, #3a2a0a, #2a1e08);
+  border: 1px solid #c9a84c;
+  color: #ffd700;
+  text-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+  transition: all 0.2s ease;
+}
+
+.arena-btn-settle:hover {
+  background: linear-gradient(180deg, #4a3a10, #3a2a0a);
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.3);
+}
+
+.arena-hp-track {
+  background: rgba(20, 30, 18, 0.8);
+  border: 1px solid #1a2510;
+}
+
+.arena-fight-img {
+  mix-blend-mode: screen;
+  filter: brightness(1.1) contrast(1.1) saturate(1.2);
+}
+
 /* ============ Hero Image Glow Animation ============ */
 
 @keyframes hero-glow-breathe {
