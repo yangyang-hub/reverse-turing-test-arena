@@ -124,7 +124,7 @@ function PlayerRadarCard({
             </div>
             {isEnded && (
               <div className="text-xs opacity-70">
-                <Address address={playerAddr as `0x${string}`} chain={targetNetwork} size="xs" />
+                <Address address={playerAddr as `0x${string}`} chain={targetNetwork} size="xs" onlyEnsOrAddress />
               </div>
             )}
           </div>

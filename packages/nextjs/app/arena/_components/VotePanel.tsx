@@ -21,6 +21,7 @@ export function VotePanel({
   pendingReveal,
   hasVotedOnChain,
   onEmergencyEnd,
+  onSettle,
 }: {
   roomId: bigint;
   nameMap?: Record<string, string>;
@@ -32,6 +33,7 @@ export function VotePanel({
   pendingReveal: boolean;
   hasVotedOnChain?: boolean;
   onEmergencyEnd?: () => void;
+  onSettle?: () => Promise<void>;
 }) {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [localVotedRound, setLocalVotedRound] = useState<bigint | null>(null);
@@ -169,6 +171,7 @@ export function VotePanel({
           isUrgent={isUrgent}
           isExpired={isExpired}
           currentInterval={currentInterval}
+          onSettle={onSettle}
         />
       )}
 
@@ -462,13 +465,27 @@ function RoundCountdown({
   isUrgent,
   isExpired,
   currentInterval,
+  onSettle,
 }: {
   blocksRemaining: number;
   progress: number;
   isUrgent: boolean;
   isExpired: boolean;
   currentInterval: number;
+  onSettle?: () => Promise<void>;
 }) {
+  const [isSettling, setIsSettling] = useState(false);
+
+  const handleSettle = async () => {
+    if (!onSettle || isSettling) return;
+    setIsSettling(true);
+    try {
+      await onSettle();
+    } finally {
+      setIsSettling(false);
+    }
+  };
+
   const barColor = isExpired
     ? "bg-orange-500"
     : isUrgent
@@ -501,7 +518,7 @@ function RoundCountdown({
       <div className="flex items-center justify-between mb-1.5">
         <span className="arena-text-amber font-mono text-xs tracking-wider font-bold">ROUND DEADLINE</span>
         {isExpired ? (
-          <span className="text-orange-400 font-mono text-sm font-bold animate-pulse">SETTLING...</span>
+          <span className="text-orange-400 font-mono text-sm font-bold animate-pulse">READY</span>
         ) : (
           <span className={`font-mono text-lg font-bold tabular-nums ${textColor} ${isUrgent ? "animate-pulse" : ""}`}>
             {blocksRemaining} <span className="text-xs font-normal">blocks</span>
@@ -523,6 +540,31 @@ function RoundCountdown({
         </span>
         <span className="text-gray-600 font-mono text-[10px]">{Math.round(progress * 100)}%</span>
       </div>
+
+      {/* Settle button when round expired */}
+      {isExpired && onSettle && (
+        <button
+          onClick={handleSettle}
+          disabled={isSettling}
+          className="w-full mt-2 py-2 font-mono text-sm font-bold tracking-widest rounded transition-all duration-200"
+          style={{
+            background: "linear-gradient(180deg, #4a3a10, #2a1e08)",
+            border: "2px solid #c9a84c",
+            color: "#ffd700",
+            textShadow: "0 0 8px rgba(255, 215, 0, 0.5)",
+            boxShadow: "0 0 16px rgba(201, 168, 76, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)",
+          }}
+        >
+          {isSettling ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="loading loading-spinner loading-xs" />
+              SETTLING...
+            </span>
+          ) : (
+            "SETTLE ROUND"
+          )}
+        </button>
+      )}
     </div>
   );
 }
