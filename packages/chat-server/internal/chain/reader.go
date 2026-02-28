@@ -58,6 +58,42 @@ type PlayerInfo struct {
 	IsAI          bool
 }
 
+// ABI tuple types for decoding contract return values (shared by individual calls and multicall).
+
+type roomTuple struct {
+	Id              *big.Int
+	Creator         common.Address
+	Tier            uint8
+	Phase           uint8
+	EntryFee        *big.Int
+	PrizePool       *big.Int
+	StartBlock      *big.Int
+	BaseInterval    *big.Int
+	CurrentInterval *big.Int
+	MaxPlayers      *big.Int
+	PlayerCount     *big.Int
+	AliveCount      *big.Int
+	EliminatedCount *big.Int
+	LastSettleBlock  *big.Int
+	IsActive        bool
+	IsEnded         bool
+}
+
+type playerTuple struct {
+	Addr             common.Address
+	HumanityScore    *big.Int
+	IsAlive          bool
+	IsAI             bool
+	JoinBlock        *big.Int
+	EliminationBlock *big.Int
+	EliminationRank  *big.Int
+	LastActionBlock  *big.Int
+	ActionCount      *big.Int
+	SuccessfulVotes  *big.Int
+}
+
+// --- Individual RPC calls ---
+
 // GetRoomInfo fetches room state from the contract.
 func (r *ChainReader) GetRoomInfo(ctx context.Context, roomId int) (*RoomInfo, error) {
 	data, err := r.abi.Pack("getRoomInfo", big.NewInt(int64(roomId)))
@@ -77,46 +113,7 @@ func (r *ChainReader) GetRoomInfo(ctx context.Context, roomId int) (*RoomInfo, e
 		return nil, fmt.Errorf("empty result")
 	}
 
-	// getRoomInfo returns a single struct as anonymous struct
-	type roomTuple struct {
-		Id              *big.Int
-		Creator         common.Address
-		Tier            uint8
-		Phase           uint8
-		EntryFee        *big.Int
-		PrizePool       *big.Int
-		StartBlock      *big.Int
-		BaseInterval    *big.Int
-		CurrentInterval *big.Int
-		MaxPlayers      *big.Int
-		PlayerCount     *big.Int
-		AliveCount      *big.Int
-		EliminatedCount *big.Int
-		LastSettleBlock  *big.Int
-		IsActive        bool
-		IsEnded         bool
-	}
-
-	repacked, err := r.abi.Methods["getRoomInfo"].Outputs.Unpack(result)
-	if err != nil {
-		return nil, err
-	}
-	if len(repacked) == 0 {
-		return nil, fmt.Errorf("empty output from getRoomInfo")
-	}
-
-	// Anonymous struct → convert via abi.ConvertType (not Outputs.Copy which maps per-field)
-	var room roomTuple
-	converted := abi.ConvertType(repacked[0], room)
-	room = converted.(roomTuple)
-
-	return &RoomInfo{
-		Phase:       room.Phase,
-		AliveCount:  int(room.AliveCount.Int64()),
-		PlayerCount: int(room.PlayerCount.Int64()),
-		IsActive:    room.IsActive,
-		IsEnded:     room.IsEnded,
-	}, nil
+	return r.UnpackRoomInfo(result)
 }
 
 // GetCurrentRound fetches the current round number for a room.
@@ -134,19 +131,7 @@ func (r *ChainReader) GetCurrentRound(ctx context.Context, roomId int) (uint64, 
 		return 0, err
 	}
 
-	outputs, err := r.abi.Unpack("currentRound", result)
-	if err != nil {
-		return 0, err
-	}
-	if len(outputs) == 0 {
-		return 0, nil
-	}
-
-	val, ok := outputs[0].(*big.Int)
-	if !ok {
-		return 0, fmt.Errorf("unexpected type for currentRound output")
-	}
-	return val.Uint64(), nil
+	return r.UnpackCurrentRound(result)
 }
 
 // GetAllPlayers returns all player addresses in a room.
@@ -164,23 +149,7 @@ func (r *ChainReader) GetAllPlayers(ctx context.Context, roomId int) ([]string, 
 		return nil, err
 	}
 
-	outputs, err := r.abi.Unpack("getAllPlayers", result)
-	if err != nil {
-		return nil, err
-	}
-	if len(outputs) == 0 {
-		return nil, nil
-	}
-
-	addrs, ok := outputs[0].([]common.Address)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type for getAllPlayers output")
-	}
-	result2 := make([]string, len(addrs))
-	for i, a := range addrs {
-		result2[i] = strings.ToLower(a.Hex())
-	}
-	return result2, nil
+	return r.UnpackAllPlayers(result)
 }
 
 // GetPlayerInfo fetches a specific player's info.
@@ -198,37 +167,7 @@ func (r *ChainReader) GetPlayerInfo(ctx context.Context, roomId int, addr string
 		return nil, err
 	}
 
-	type playerTuple struct {
-		Addr             common.Address
-		HumanityScore    *big.Int
-		IsAlive          bool
-		IsAI             bool
-		JoinBlock        *big.Int
-		EliminationBlock *big.Int
-		EliminationRank  *big.Int
-		LastActionBlock  *big.Int
-		ActionCount      *big.Int
-		SuccessfulVotes  *big.Int
-	}
-
-	repacked, err := r.abi.Methods["getPlayerInfo"].Outputs.Unpack(result)
-	if err != nil {
-		return nil, err
-	}
-	if len(repacked) == 0 {
-		return nil, fmt.Errorf("empty output from getPlayerInfo")
-	}
-
-	var player playerTuple
-	converted := abi.ConvertType(repacked[0], player)
-	player = converted.(playerTuple)
-
-	return &PlayerInfo{
-		Address:       strings.ToLower(player.Addr.Hex()),
-		HumanityScore: int(player.HumanityScore.Int64()),
-		IsAlive:       player.IsAlive,
-		IsAI:          player.IsAI,
-	}, nil
+	return r.UnpackPlayerInfo(result)
 }
 
 // GetRoomPlayerNames returns the player names for a room.
@@ -246,7 +185,95 @@ func (r *ChainReader) GetRoomPlayerNames(ctx context.Context, roomId int) ([]str
 		return nil, err
 	}
 
-	outputs, err := r.abi.Unpack("getRoomPlayerNames", result)
+	return r.UnpackPlayerNames(result)
+}
+
+// --- Individual RPC call for pendingReveal ---
+
+// GetPendingReveal checks if a room is in pendingReveal state.
+func (r *ChainReader) GetPendingReveal(ctx context.Context, roomId int) (bool, error) {
+	data, err := r.abi.Pack("pendingReveal", big.NewInt(int64(roomId)))
+	if err != nil {
+		return false, err
+	}
+
+	result, err := r.client.CallContract(ctx, ethereum.CallMsg{
+		To:   &r.contract,
+		Data: data,
+	}, nil)
+	if err != nil {
+		return false, err
+	}
+
+	return r.UnpackPendingReveal(result)
+}
+
+// --- Unpack helpers (used by both individual calls and multicall batch) ---
+
+// UnpackRoomInfo decodes ABI-encoded getRoomInfo return data.
+func (r *ChainReader) UnpackRoomInfo(data []byte) (*RoomInfo, error) {
+	repacked, err := r.abi.Methods["getRoomInfo"].Outputs.Unpack(data)
+	if err != nil {
+		return nil, err
+	}
+	if len(repacked) == 0 {
+		return nil, fmt.Errorf("empty output from getRoomInfo")
+	}
+
+	var room roomTuple
+	converted := abi.ConvertType(repacked[0], room)
+	room = converted.(roomTuple)
+
+	return &RoomInfo{
+		Phase:       room.Phase,
+		AliveCount:  int(room.AliveCount.Int64()),
+		PlayerCount: int(room.PlayerCount.Int64()),
+		IsActive:    room.IsActive,
+		IsEnded:     room.IsEnded,
+	}, nil
+}
+
+// UnpackCurrentRound decodes ABI-encoded currentRound return data.
+func (r *ChainReader) UnpackCurrentRound(data []byte) (uint64, error) {
+	outputs, err := r.abi.Unpack("currentRound", data)
+	if err != nil {
+		return 0, err
+	}
+	if len(outputs) == 0 {
+		return 0, nil
+	}
+
+	val, ok := outputs[0].(*big.Int)
+	if !ok {
+		return 0, fmt.Errorf("unexpected type for currentRound output")
+	}
+	return val.Uint64(), nil
+}
+
+// UnpackAllPlayers decodes ABI-encoded getAllPlayers return data.
+func (r *ChainReader) UnpackAllPlayers(data []byte) ([]string, error) {
+	outputs, err := r.abi.Unpack("getAllPlayers", data)
+	if err != nil {
+		return nil, err
+	}
+	if len(outputs) == 0 {
+		return nil, nil
+	}
+
+	addrs, ok := outputs[0].([]common.Address)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type for getAllPlayers output")
+	}
+	result := make([]string, len(addrs))
+	for i, a := range addrs {
+		result[i] = strings.ToLower(a.Hex())
+	}
+	return result, nil
+}
+
+// UnpackPlayerNames decodes ABI-encoded getRoomPlayerNames return data.
+func (r *ChainReader) UnpackPlayerNames(data []byte) ([]string, error) {
+	outputs, err := r.abi.Unpack("getRoomPlayerNames", data)
 	if err != nil {
 		return nil, err
 	}
@@ -259,4 +286,43 @@ func (r *ChainReader) GetRoomPlayerNames(ctx context.Context, roomId int) ([]str
 		return nil, fmt.Errorf("unexpected type for getRoomPlayerNames output")
 	}
 	return names, nil
+}
+
+// UnpackPendingReveal decodes ABI-encoded pendingReveal return data.
+func (r *ChainReader) UnpackPendingReveal(data []byte) (bool, error) {
+	outputs, err := r.abi.Unpack("pendingReveal", data)
+	if err != nil {
+		return false, err
+	}
+	if len(outputs) == 0 {
+		return false, nil
+	}
+
+	val, ok := outputs[0].(bool)
+	if !ok {
+		return false, fmt.Errorf("unexpected type for pendingReveal output: %T", outputs[0])
+	}
+	return val, nil
+}
+
+// UnpackPlayerInfo decodes ABI-encoded getPlayerInfo return data.
+func (r *ChainReader) UnpackPlayerInfo(data []byte) (*PlayerInfo, error) {
+	repacked, err := r.abi.Methods["getPlayerInfo"].Outputs.Unpack(data)
+	if err != nil {
+		return nil, err
+	}
+	if len(repacked) == 0 {
+		return nil, fmt.Errorf("empty output from getPlayerInfo")
+	}
+
+	var player playerTuple
+	converted := abi.ConvertType(repacked[0], player)
+	player = converted.(playerTuple)
+
+	return &PlayerInfo{
+		Address:       strings.ToLower(player.Addr.Hex()),
+		HumanityScore: int(player.HumanityScore.Int64()),
+		IsAlive:       player.IsAlive,
+		IsAI:          player.IsAI,
+	}, nil
 }

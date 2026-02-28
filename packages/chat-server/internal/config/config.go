@@ -25,8 +25,8 @@ func Load() *Config {
 		Port:                 getEnv("PORT", "43001"),
 		CorsOrigin:           getEnv("CORS_ORIGIN", "http://localhost:3000"),
 		SessionTTLHours:      getEnvInt("SESSION_TTL_HOURS", 24),
-		RoomStatePollMs:      getEnvInt("ROOM_STATE_POLL_MS", 15000),
-		WatcherPollMs:        getEnvInt("WATCHER_POLL_MS", 30000),
+		RoomStatePollMs:      getEnvInt("ROOM_STATE_POLL_MS", 4000),
+		WatcherPollMs:        getEnvInt("WATCHER_POLL_MS", 15000),
 		OperatorPrivateKey:   getEnv("OPERATOR_PRIVATE_KEY", ""),
 	}
 }

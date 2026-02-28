@@ -134,21 +134,24 @@ func (w *Watcher) checkActiveRooms(ctx context.Context) {
 			continue
 		}
 
-		// Also check aliveCount <= 2 as a fallback (in case pendingReveal wasn't set)
+		// Also check aliveCount <= 2 as a fallback (in case pendingReveal wasn't set).
+		// Uses cache data — zero RPC calls (cache refreshes on its own schedule).
 		shouldReveal := pending
-		if !shouldReveal {
-			aliveCount, isActive, err := w.getRoomAliveStatus(ctx, roomId)
-			if err != nil {
-				if strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "Too Many Requests") {
-					log.Printf("[Watcher] Rate limited checking room %d status, backing off", roomId)
-					hitRateLimit = true
-					break
-				}
-				log.Printf("[Watcher] Failed to check room status for room %d: %v", roomId, err)
-				continue
+		if !shouldReveal && w.cache != nil {
+			aliveCount := w.cache.GetAliveCount(roomId)
+			isActive := w.cache.GetPhase(roomId) == 1
+			if isActive && aliveCount >= 0 && aliveCount <= 2 {
+				log.Printf("[Watcher] Room %d: pendingReveal=false but aliveCount=%d (from cache), forcing reveal", roomId, aliveCount)
+				shouldReveal = true
 			}
-			if isActive && aliveCount <= 2 {
-				log.Printf("[Watcher] Room %d: pendingReveal=false but aliveCount=%d, forcing reveal", roomId, aliveCount)
+		}
+
+		// Check if an entire team has been eliminated (DB + cache only, zero RPC).
+		// This triggers early reveal before aliveCount reaches 2, ending the game
+		// as soon as all AIs or all humans are dead.
+		if !shouldReveal {
+			if teamElim, err := w.isTeamEliminated(roomId); err == nil && teamElim {
+				log.Printf("[Watcher] Room %d: team fully eliminated, triggering early reveal", roomId)
 				shouldReveal = true
 			}
 		}
@@ -215,59 +218,6 @@ func (w *Watcher) isPendingReveal(ctx context.Context, roomId int) (bool, error)
 		return false, fmt.Errorf("unexpected type for pendingReveal output: %T", outputs[0])
 	}
 	return val, nil
-}
-
-// getRoomAliveStatus calls getRoomInfo to check aliveCount and isActive.
-func (w *Watcher) getRoomAliveStatus(ctx context.Context, roomId int) (uint64, bool, error) {
-	data, err := w.abi.Pack("getRoomInfo", big.NewInt(int64(roomId)))
-	if err != nil {
-		return 0, false, err
-	}
-
-	result, err := w.client.CallContract(ctx, ethereum.CallMsg{
-		To:   &w.contract,
-		Data: data,
-	}, nil)
-	if err != nil {
-		return 0, false, err
-	}
-
-	if len(result) == 0 {
-		return 0, false, fmt.Errorf("empty result from getRoomInfo")
-	}
-
-	type roomTuple struct {
-		Id              *big.Int
-		Creator         common.Address
-		Tier            uint8
-		Phase           uint8
-		EntryFee        *big.Int
-		PrizePool       *big.Int
-		StartBlock      *big.Int
-		BaseInterval    *big.Int
-		CurrentInterval *big.Int
-		MaxPlayers      *big.Int
-		PlayerCount     *big.Int
-		AliveCount      *big.Int
-		EliminatedCount *big.Int
-		LastSettleBlock  *big.Int
-		IsActive        bool
-		IsEnded         bool
-	}
-
-	repacked, err := w.abi.Methods["getRoomInfo"].Outputs.Unpack(result)
-	if err != nil {
-		return 0, false, err
-	}
-	if len(repacked) == 0 {
-		return 0, false, fmt.Errorf("empty output from getRoomInfo")
-	}
-
-	var room roomTuple
-	converted := abi.ConvertType(repacked[0], room)
-	room = converted.(roomTuple)
-
-	return room.AliveCount.Uint64(), room.IsActive, nil
 }
 
 // getAllPlayers calls the contract's getAllPlayers(roomId) view function.
@@ -423,6 +373,42 @@ func (w *Watcher) sendTx(ctx context.Context, data []byte) (common.Hash, error) 
 	}
 
 	return signedTx.Hash(), nil
+}
+
+// isTeamEliminated checks if all AIs or all humans have been eliminated
+// by cross-referencing DB identities with cached alive status.
+// Uses only DB + cache — zero RPC calls.
+// Returns false if room not in cache or data unavailable.
+func (w *Watcher) isTeamEliminated(roomId int) (bool, error) {
+	if w.cache == nil || w.cache.GetPhase(roomId) != 1 {
+		return false, nil // Not in cache or not active
+	}
+
+	records, err := w.service.GetRoomIdentities(roomId)
+	if err != nil || len(records) < 2 {
+		return false, err
+	}
+
+	aiAlive, humanAlive := false, false
+	for _, r := range records {
+		if w.cache.IsPlayerAlive(roomId, strings.ToLower(r.Address)) {
+			if r.IsAI {
+				aiAlive = true
+			} else {
+				humanAlive = true
+			}
+			if aiAlive && humanAlive {
+				return false, nil // Both teams still have survivors
+			}
+		}
+	}
+
+	// If nobody is alive at all, skip (shouldn't happen but be safe)
+	if !aiAlive && !humanAlive {
+		return false, nil
+	}
+
+	return true, nil // One team fully eliminated
 }
 
 // getOnChainCommitment reads identityCommitments(roomId, player) from the contract.

@@ -127,14 +127,13 @@ export class GameLoop {
    * 1. 读取房间状态
    * 2. 验证玩家在房间内
    * 3. 游戏结束 → 领取奖励 → 停止
-   * 4. 游戏未开始 → 等待
-   * 5. 读取自己的玩家信息
+   * 4. pendingReveal → 等待
+   * 5. 游戏未开始 → 等待
    * 6. 已淘汰 → 等待游戏结束
-   * 7. 获取所有玩家状态用于策略
-   * 8. 如果本轮未投票 → 投票
-   * 9. 可能发送聊天消息（遵守每轮 3 条限制）
-   * 10. 可能结算轮次
-   * 11. 检查最大轮次数限制
+   * 7. 如果本轮未投票 → 投票
+   * 8. 可能发送聊天消息
+   * 9. 可能结算轮次
+   * 10. 检查最大轮次数限制
    */
   private async tick(): Promise<void> {
     // 防止重叠执行或已停止
@@ -153,17 +152,19 @@ export class GameLoop {
       // ========== 步骤 1: 读取房间状态 ==========
       this.log(`📡 RPC: getRoomInfo/getAllPlayers/currentRound`);
       const [roomInfo, playerAddresses, round] = await Promise.all([
-        contract.getRoomInfo(this.config.roomId), // 房间信息
-        contract.getAllPlayers(this.config.roomId), // 所有玩家地址
-        contract.currentRound(this.config.roomId), // 当前轮次
+        contract.getRoomInfo(this.config.roomId),
+        contract.getAllPlayers(this.config.roomId),
+        contract.currentRound(this.config.roomId),
       ]);
       this.log(`✅ RPC: Round ${round.toString()}, Phase ${roomInfo.phase.toString()}`);
 
-      // 解析房间信息
       const room = this.parseRoomInfo(roomInfo);
+      const currentRound = Number(round);
+
+      // 解析房间信息
       this.status.phase = room.phase;
       this.status.phaseName = room.phaseName;
-      this.status.round = Number(round);
+      this.status.round = currentRound;
 
       // ========== 步骤 1.5: 验证自己在房间内 ==========
       const isInRoom = (playerAddresses as string[]).some(
@@ -184,14 +185,15 @@ export class GameLoop {
       }
 
       // ========== 步骤 2.5: pendingReveal → 等待 operator reveal ==========
+      let pendingReveal = false;
       try {
-        const isPendingReveal = await contract.pendingReveal(this.config.roomId);
-        if (isPendingReveal) {
-          this.log("⏳ Pending reveal — waiting for operator to reveal identities...");
-          return; // 不投票、不聊天、不结算 — 等待 reveal
-        }
+        pendingReveal = await contract.pendingReveal(this.config.roomId);
       } catch {
-        // pendingReveal 查询失败不致命，继续正常流程
+        // 查询失败不致命
+      }
+      if (pendingReveal) {
+        this.log("⏳ Pending reveal — waiting for operator to reveal identities...");
+        return; // 不投票、不聊天、不结算 — 等待 reveal
       }
 
       // ========== 步骤 3: 游戏未开始（等待阶段） ==========
@@ -199,20 +201,7 @@ export class GameLoop {
         return; // 什么都不做，等待游戏开始
       }
 
-      // ========== 步骤 4: 读取自己的玩家信息 ==========
-      this.log(`📡 RPC: getPlayerInfo (my address)`);
-      const myInfo = await contract.getPlayerInfo(this.config.roomId, myAddr);
-      this.status.humanityScore = Number(myInfo.humanityScore);
-      this.status.isAlive = myInfo.isAlive;
-      this.log(`👤 My status: HP=${this.status.humanityScore}, Alive=${myInfo.isAlive}`);
-
-      // ========== 步骤 5: 已淘汰 → 等待游戏结束 ==========
-      if (!myInfo.isAlive) {
-        this.log("💀 Eliminated, waiting for game to end...");
-        return; // 什么都不做，等待游戏结束
-      }
-
-      // ========== 步骤 6: 获取所有玩家状态用于策略 ==========
+      // ========== 步骤 4: 获取玩家详情 + 检查自己的状态 ==========
       this.log(`📡 RPC: getAllPlayerInfos + names (${playerAddresses.length} players)`);
       const [playerInfos, playerNamesResult] = await Promise.all([
         Promise.all(
@@ -223,7 +212,6 @@ export class GameLoop {
         contract.getRoomPlayerNames(this.config.roomId),
       ]);
       const names = playerNamesResult as string[];
-      // 构建玩家状态数组
       const players: PlayerState[] = playerInfos.map((p: ethers.Result, idx: number) => ({
         address: p.addr,
         name: names[idx] || "",
@@ -233,6 +221,21 @@ export class GameLoop {
         actionCount: Number(p.actionCount),
         successfulVotes: Number(p.successfulVotes),
       }));
+
+      const myPlayer = players.find(
+        p => p.address.toLowerCase() === myAddr.toLowerCase(),
+      );
+      if (myPlayer) {
+        this.status.humanityScore = myPlayer.humanityScore;
+        this.status.isAlive = myPlayer.isAlive;
+        this.log(`👤 My status: HP=${myPlayer.humanityScore}, Alive=${myPlayer.isAlive}`);
+      }
+
+      // ========== 步骤 5: 已淘汰 → 等待游戏结束 ==========
+      if (myPlayer && !myPlayer.isAlive) {
+        this.log("💀 Eliminated, waiting for game to end...");
+        return; // 什么都不做，等待游戏结束
+      }
 
       // ========== 步骤 6.5: 拉取房间聊天记录（用于社交推理） ==========
       if (this.chatClient) {
@@ -249,7 +252,7 @@ export class GameLoop {
       this.log(`📡 RPC: hasVotedInRound`);
       const hasVoted = await contract.hasVotedInRound(
         this.config.roomId,
-        round,
+        currentRound,
         myAddr,
       );
       if (!hasVoted) {

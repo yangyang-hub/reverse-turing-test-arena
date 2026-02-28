@@ -61,9 +61,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-27 — Frontend RPC Consolidation
+> **Last updated**: 2026-02-28 — MCP Cache-First RPC Optimization
 
-### Current Status: Frontend RPC Consolidation
+### Current Status: MCP Cache-First RPC Optimization
 
 | Module | Status | Notes |
 |--------|--------|-------|
@@ -106,7 +106,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Player Name Selection | DONE | On-chain name binding (1-20 chars), playerNames mapping, getRoomPlayerNames view, frontend nameMap prop, MCP auto-name AI-XXXX |
 | Off-chain Chat Backend | DONE | packages/chat-server/ (Go + Gin + gorilla/websocket + GORM + PostgreSQL), SIWE auth, operator service (identity records, commit-reveal auth, pendingReveal watcher), RoomStateCache goroutine |
 | Commit-Reveal Identity Hiding | DONE | Operator-signed commitment join, identity hidden during gameplay (isAI=false), revealAndEnd by operator, emergencyEnd timeout fallback |
-| RPC Polling Optimization | DONE | Frontend: pollingInterval 10s (prod), viem batch multicall at transport level, useReadContracts multicall, watch:false for static hooks (getAllPlayers/playerNames/gameStats/rewardInfo), props-based children, useScaffoldWatchContractEvent for KillFeed; Lobby: RoomCard watch:false for players/rewardInfo; MCP: RateLimiter 20/s, parallel playerInfo/events, pollInterval 10s; Chat-server: RoomStatePollMs 15s, parallel GetPlayerInfo; Watcher: separate WATCHER_POLL_MS 30s, cache-based phase skip, 1s stagger, 429 backoff |
+| RPC Polling Optimization | DONE | Frontend: pollingInterval 10s (prod), viem batch multicall at transport level, useReadContracts multicall, watch:false for static hooks, props-based children, useScaffoldWatchContractEvent for KillFeed; Lobby: RoomCard watch:false; MCP: cache-first via chat-server REST (0 RPC for reads), RateLimiter 20/s, pollInterval 10s; Chat-server: RoomStatePollMs 4s, Multicall3 batching (5+N calls → 2 HTTP), Watcher 15s cache-only, 429 backoff |
 | RPC Consolidation | DONE | Arena: 3 watched hooks → 1 core multicall (getRoomInfo+currentRound+pendingReveal), 2 static hooks → 1 static multicall (getAllPlayers+playerNames), hasVotedInRound → parent multicall as prop to VotePanel, VictoryScreen allPlayers via prop; Lobby: N FilteredRoomCard hooks → 1 batch multicall in RoomGrid, RoomCard accepts optional roomInfo prop, RoomPhaseWatcher receives activeRoomId prop |
 | MCP One-Click Automation | DONE | .mcp.json simplified (no cwd/env), SKILL.md rewritten with bootstrap flow (auto-build + auto-config + ask key), public/skill.md synced |
 | Lobby My-Rooms Filter | DONE | Only shows rooms user participates in, "Connect Wallet" gate, RoomPhaseWatcher uses playerActiveRoom (no room scanning), tabs: Waiting/In Game/History |
@@ -114,6 +114,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Fix: revealAndEnd Identity Bug | DONE | Creator's identity record stored with room_id=0 → new /api/room-join-auth/update-room-id endpoint updates to real ID after createRoom tx; fixed in frontend + MCP adapter |
 | Lobby O(K) Optimization | DONE | Lobby queries only player's rooms via chat-server GET /api/players/:address/rooms (identity_records), not O(N) full room scan; FilteredRoomCard no longer calls getAllPlayers; QuickMatch still scans all rooms |
 | Fix: Commitment Mismatch | DONE | AuthorizeJoin made idempotent (returns existing record on retry instead of regenerating salt); watcher retry limit (3 attempts); pre-verify commitments against on-chain before sending tx |
+| Early Team Elimination | DONE | Watcher detects when all AIs or all humans eliminated via DB + cache (zero RPC), triggers early revealAndEnd before aliveCount reaches 2 |
+| Multicall3 Batching | DONE | Chat-server cache uses Multicall3 aggregate3 to batch 5+N eth_call into 2 HTTP requests per room (86% reduction); auto-fallback to individual calls on local Anvil; phase-aware skip playerInfo for non-active rooms |
+| MCP Cache-First RPC | DONE | MCP reads chat-server cache via GET /api/rooms/:roomId/state (0 RPC); fallback to direct RPC on cache miss; gameLoop.tick() cache-first; 3 agents: 4.5→0.43 RPC/s |
 
 ### Known Design Bugs (from review)
 

@@ -52,6 +52,7 @@ func SetupRouter(
 	r.POST("/api/auth", HandleAuth(authSvc))
 	r.GET("/api/health", HandleHealth(hub))
 	r.GET("/api/rooms/:roomId/messages", HandleGetMessages(database))
+	r.GET("/api/rooms/:roomId/state", HandleGetRoomState(cache))
 	r.GET("/api/players/:address/rooms", HandleGetPlayerRooms(opService))
 
 	// Protected endpoints (require Bearer token)
