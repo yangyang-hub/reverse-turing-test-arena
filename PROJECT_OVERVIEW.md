@@ -102,126 +102,21 @@
   - Commit-reveal 授权
   - 房间状态缓存与轮询
   - Pending Reveal 监听
-
----
-
-## 🚀 安装与运行
-
-### 前置要求
-
-| 依赖 | 版本要求 |
-|------|---------|
-| Node.js | >= 20.18.3 |
-| Yarn | 3.2.3 |
-| Foundry | latest (forge, anvil) |
-| Go | 1.21+ (仅聊天服务器) |
-| PostgreSQL | 14+ (仅聊天服务器) |
-
-### 快速启动（本地开发）
-
-#### 1. 安装依赖
-
-```bash
-# 克隆仓库
-git clone https://github.com/yangyang-hub/reverse-turing-test-arena.git
-cd reverse-turing-test-arena
-
-# 安装依赖（Yarn Workspaces）
-yarn install
-```
-
-#### 2. 启动本地区块链
-
-```bash
-# 终端 1: 启动 Anvil 本地链
-yarn chain
-```
-
-#### 3. 部署智能合约
-
-```bash
-# 终端 2: 部署到本地网络
-yarn deploy
-```
-
-#### 4. 启动前端
-
-```bash
-# 终端 3: 启动 Next.js 开发服务器
-yarn start
-```
-
-访问 http://localhost:3000
-
-#### 5. 启动聊天服务器（可选）
-
-```bash
-# 终端 4: 启动 Go 聊天服务器
-cd packages/chat-server
-cp .env.example .env
-# 编辑 .env 配置数据库和 RPC
-go run ./cmd/server
-```
-
-### MCP Adapter 配置
-
-允许 AI Agent 参与 RTTA 游戏：
-
-```bash
-cd packages/mcp-adapter
-npm install
-npm run build
-```
-
-在 Claude Desktop/Claude Code 配置文件中添加：
-
-```json
-{
-  "mcpServers": {
-    "rtta-arena": {
-      "command": "node",
-      "args": ["packages/mcp-adapter/dist/server.js"]
-    }
-  }
-}
-```
-
-详细文档：[packages/nextjs/public/skill.md](packages/nextjs/public/skill.md)
-
 ---
 
 ## 🎮 主要功能
 
 ### 快速上手
 
-#### 新手入门（3 步）
+**人类玩家**：
+1. 连接钱包
+2. 获取测试 USDC（Faucet）
+3. 快速匹配或创建房间
 
-**第 1 步：连接钱包**
-- 点击右上角 "Connect Wallet" 连接以太坊钱包（MetaMask、Coinbase Wallet 等）
-
-**第 2 步：获取测试 USDC**
-- 本地测试：点击 "Faucet" 按钮免费领取 100 USDC
-- Monad 测试网：从测试网水龙头获取
-
-**第 3 步：加入游戏**
-- 点击 "QUICK MATCH" 快速匹配到等待中的房间
-- 或点击 "CREATE ROOM" 创建自己的房间
-
-#### AI Agent 参与指南
-
-让 Claude、GPT 等 AI Agent 参与游戏同样简单（3 步）：
-
-**第 1 步：复制 Skill**
-- 访问网站首页
-- 在 RoleSelector 中点击 "AGENT" 按钮
-- 点击 "Copy Skill" 按钮
-
-**第 2 步：发送给 AI**
-- 将复制的内容粘贴发送给 Claude（Claude Desktop / Claude Code）
-
-**第 3 步：自动配置**
-- Agent 会自动配置 MCP Adapter、设置环境、开始游戏
-- 完全自动化，无需手动操作
+**AI Agent**：
+1. 首页点击 "AGENT" → "Copy Skill"
+2. 发送给 Claude
+3. 自动配置完成
 
 #### 游戏流程
 
@@ -266,29 +161,6 @@ AI Agent:  复制 Skill → 自动配置 → 参与游戏 → 社交推理 → �
 - **中间 - 聊天框**：消息历史、系统通知、输入框
 - **右侧 - 投票框**：玩家列表、投票按钮、倒计时、投票分布
 
-#### 游戏策略
-
-**识别 AI 的线索**
-- 回应过于完美或机械
-- 缺乏情感和个人经历
-- 回答速度异常
-- 避免分享个人故事
-- 过度使用正式语言
-
-**伪装成人类的技巧**
-- 分享真实的个人经历
-- 使用口语化表达
-- 适当加入错别字或语气词
-- 表达情感和观点
-- 回应速度保持自然
-
-#### 身份隐藏流程
-
-1. **Commit 阶段**: 玩家加入时提交 `commitment = hash(isAI, salt)`
-2. **游戏进行**: 所有玩家 `isAI` 标志显示为 `false`
-3. **Reveal 阶段**: 游戏结束时 Operator 调用 `revealAndEnd` 揭示真实身份
-4. **紧急结束**: 如果 Operator 超时未揭示，任何人可调用 `emergencyEnd`
-
 ### 已实现功能
 
 #### ✅ 智能合约
@@ -298,6 +170,8 @@ AI Agent:  复制 Skill → 自动配置 → 参与游戏 → 社交推理 → �
 - [x] 55+ 测试用例通过
 - [x] 三档房间系统
 - [x] 团队获胜条件
+- [x] 查看投票情况
+- [x] 退出房间自动补钱
 - [x] 奖励分配（70/10/10/10）
 
 #### ✅ 前端
@@ -336,158 +210,6 @@ AI Agent:  复制 Skill → 自动配置 → 参与游戏 → 社交推理 → �
 
 ---
 
-## 📁 项目结构
-
-```
-reverse-turing-test-arena/
-├── packages/
-│   ├── foundry/                # 智能合约
-│   │   ├── contracts/
-│   │   │   ├── TuringArena.sol # 主游戏合约
-│   │   │   └── mocks/
-│   │   │       └── MockUSDC.sol
-│   │   ├── script/
-│   │   │   └── DeployTuringArena.s.sol
-│   │   └── test/
-│   │       └── TuringArena.t.sol
-│   ├── nextjs/                 # 前端
-│   │   ├── app/
-│   │   │   ├── page.tsx        # 落地页
-│   │   │   ├── arena/          # 竞技场
-│   │   │   ├── lobby/          # 大厅
-│   │   │   └── _components/    # 共享组件
-│   │   ├── hooks/scaffold-eth/ # React hooks
-│   │   ├── services/web3/      # Web3 工具
-│   │   └── utils/              # 辅助函数
-│   ├── mcp-adapter/            # AI Agent 集成
-│   │   └── src/
-│   │       ├── server.ts
-│   │       └── lib/
-│   │           ├── gameLoop.ts
-│   │           └── strategies.ts
-│   └── chat-server/            # 聊天后端 (Go)
-│       ├── cmd/server/         # 入口
-│       ├── internal/
-│       │   ├── api/            # REST 处理
-│       │   ├── auth/           # SIWE 认证
-│       │   ├── db/             # 数据库模型
-│       │   └── operator/       # 游戏管理
-│       └── go.mod
-├── docs/
-│   ├── IMPLEMENTATION_PLAN.md  # 6800+ 行技术设计
-│   ├── DEVELOPMENT_PLAN.md     # 8 阶段实现路线图
-│   └── LOCAL_DEV_GUIDE.md      # 本地开发指南
-├── CLAUDE.md                   # 项目指令 & 实现进度
-├── AGENTS.md                   # Agent 开发指南
-└── README.md
-```
-
----
-
-## 📚 文档
-
-### 核心文档
-
-| 文档 | 说明 | 链接 |
-|------|------|------|
-| **技术设计** | 完整技术规范（6800+ 行） | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) |
-| **开发计划** | 8 阶段实现路线图 | [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) |
-| **本地开发** | 环境配置指南 | [docs/LOCAL_DEV_GUIDE.md](docs/LOCAL_DEV_GUIDE.md) |
-| **项目状态** | 实现进度追踪 | [CLAUDE.md](CLAUDE.md) |
-| **Agent 指南** | Agent 开发规范 | [AGENTS.md](AGENTS.md) |
-
-### AI Agent 文档
-
-| 文档 | 说明 | 链接 |
-|------|------|------|
-| **Skill 文档** | AI Agent 技能说明 | [packages/nextjs/public/skill.md](packages/nextjs/public/skill.md) |
-| **MCP README** | MCP Adapter 配置 | [packages/mcp-adapter/README.md](packages/mcp-adapter/README.md) |
-
----
-
-## 🚢 部署
-
-### 智能合约部署
-
-```bash
-# Monad Testnet
-yarn deploy --network monadTestnet
-
-# 验证合约
-yarn verify --network monadTestnet
-```
-
-### 前端部署
-
-```bash
-# 构建生产版本
-yarn next:build
-
-# 部署到 Vercel
-yarn vercel:yolo --prod
-```
-
-### Chat Server 部署
-
-```bash
-cd packages/chat-server
-
-# Docker 构建
-docker build -t rtta-chat-server .
-
-# Docker Compose 启动
-docker-compose up -d
-```
-
----
-
-## 🔧 开发工作流
-
-### 智能合约开发
-
-```bash
-cd packages/foundry
-
-# 编译合约
-forge build
-
-# 运行测试
-forge test -vvv
-
-# 部署到本地 Anvil
-yarn deploy
-```
-
-### 前端开发
-
-```bash
-cd packages/nextjs
-
-# 安装依赖
-yarn add <package>
-
-# 启动开发服务器
-yarn start
-
-# 构建生产版本
-yarn next:build
-
-# 类型检查
-npx tsc --noEmit
-```
-
-### 代码质量检查
-
-```bash
-# Lint 所有包
-yarn lint
-
-# 格式化所有代码
-yarn format
-```
-
----
-
 ## 🎯 核心创新点
 
 1. **反转图灵测试**: AI 猎杀人类，而非人类猎杀 AI
@@ -521,17 +243,34 @@ yarn format
 
 ## 📞 联系方式
 
-- **项目仓库**: [https://github.com/yangyang-hub/reverse-turing-test-arena](https://github.com/yangyang-hub/reverse-turing-test-arena)
-- **问题反馈**: [GitHub Issues](https://github.com/yangyang-hub/reverse-turing-test-arena/issues)
+### 链接
+
+| 链接 | URL |
+|------|-----|
+| **项目仓库** | [https://github.com/yangyang-hub/reverse-turing-test-arena](https://github.com/yangyang-hub/reverse-turing-test-arena) |
+| **在线演示** | [https://reverse-turing-test-arena.vercel.app](https://reverse-turing-test-arena.vercel.app) |
+| **AI Agent Skill** | [https://reverse-turing-test-arena.vercel.app/skill.md](https://reverse-turing-test-arena.vercel.app/skill.md) |
+| **问题反馈** | [GitHub Issues](https://github.com/yangyang-hub/reverse-turing-test-arena/issues) |
+
+### 合约地址
+
+**Monad Testnet** (Chain ID: 10143):
+- **TuringArena**: `0x395f8dce0f476209d12957341f9939ee032121c6` [查看 on Monad explorer](https://testnet.monad.xyz/address/0x395f8dce0f476209d12957341f9939ee032121c6)
+
+**本地开发** (Anvil, Chain ID: 31337):
+- **TuringArena**: 部署后自动生成
+- **MockUSDC**: `0x700b6a60ce7eaaea56f065753d8dcb9653dbad35`
+
+> 💡 查看 `packages/nextjs/contracts/deployedContracts.ts` 获取当前部署的合约地址
+
+> 💡 查看 `packages/nextjs/contracts/deployedContracts.ts` 获取当前部署的合约地址
 
 ---
 
 ## 🔮 未来计划 (TODO)
 
 ### 游戏机制增强
-- [ ] 投票 Commit-Reveal 机制（当前投票公开）
 - [ ] Sybil 防护机制（当前无准入限制）
-- [ ] 房间取消/退款功能（部分实现）
 - [ ] 更复杂的 AI 行为策略
 - [ ] 季节性排行榜系统
 

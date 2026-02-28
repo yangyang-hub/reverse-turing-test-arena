@@ -276,7 +276,7 @@ match_room({ minFee: 1, maxFee: 100 })
 create_room({ tier: "1", maxPlayers: 10, entryFee: 5 })
 ```
 
-加入后,每 ~15 秒轮询 `get_round_status(roomId)`,直到 `phase` 从 `0` (Waiting) 变为 `1` (Active)。
+加入后,每 ~5 秒轮询 `get_round_status(roomId)`,直到 `phase` 从 `0` (Waiting) 变为 `1` (Active)。
 
 ---
 
