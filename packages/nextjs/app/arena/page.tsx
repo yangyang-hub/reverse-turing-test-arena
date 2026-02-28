@@ -85,7 +85,7 @@ function ArenaContent() {
 
   const { data: coreData, isLoading: coreLoading } = useReadContracts({
     contracts: coreContracts,
-    query: { enabled: coreContracts.length > 0, refetchInterval: 10_000 },
+    query: { enabled: coreContracts.length > 0, refetchInterval: 4_000 },
   });
 
   const roomLoading = !arenaInfo || coreLoading;
@@ -136,7 +136,7 @@ function ArenaContent() {
 
   const { data: voteCheckData } = useReadContracts({
     contracts: voteCheckContracts,
-    query: { enabled: voteCheckContracts.length > 0, refetchInterval: 10_000 },
+    query: { enabled: voteCheckContracts.length > 0, refetchInterval: 4_000 },
   });
 
   const hasVotedOnChain = voteCheckData?.[0]?.result as boolean | undefined;
@@ -173,7 +173,7 @@ function ArenaContent() {
     contracts: playerInfoContracts,
     query: {
       enabled: playerInfoContracts.length > 0,
-      refetchInterval: 10_000,
+      refetchInterval: 4_000,
     },
   });
 

@@ -195,8 +195,8 @@ func (h *Handler) handleSendMessage(client *Client, msg *IncomingMessage) {
 	round := h.cache.GetCurrentRound(roomId)
 	var count int64
 	h.database.Model(&db.Message{}).Where("room_id = ? AND round = ? AND sender = ?", roomId, int(round), addr).Count(&count)
-	if count >= 3 {
-		client.SendJSON(OutgoingMessage{Type: "error", Code: "message_limit", Message: "Message limit reached (3/round)"})
+	if count >= 6 {
+		client.SendJSON(OutgoingMessage{Type: "error", Code: "message_limit", Message: "Message limit reached (6/round)"})
 		return
 	}
 

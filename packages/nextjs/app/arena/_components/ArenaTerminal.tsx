@@ -84,7 +84,7 @@ export function ArenaTerminal({
   const canSend = isGameActive && isMyPlayerAlive;
 
   // Message limit per round
-  const MAX_MESSAGES = 3;
+  const MAX_MESSAGES = 6;
   const messagesRemaining = MAX_MESSAGES - myMessageCount;
   const canSendMessage = canSend && messagesRemaining > 0;
 
