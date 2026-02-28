@@ -643,7 +643,7 @@ function ArenaContent() {
       {/* Main Arena Grid */}
       <div className="flex-1 grid grid-cols-12 gap-0 min-h-0">
         {/* Left Sidebar - Player Radar */}
-        <div className="col-span-3 border-r border-green-900/30 min-h-0 overflow-hidden">
+        <div className="col-span-2 border-r border-green-900/30 min-h-0 overflow-hidden">
           <PlayerRadar
             nameMap={nameMap}
             playerInfoMap={playerInfoMap}
@@ -653,7 +653,7 @@ function ArenaContent() {
         </div>
 
         {/* Center - Chat Terminal */}
-        <div className="col-span-6 flex flex-col min-h-0 overflow-hidden border-x border-green-900/20">
+        <div className="col-span-7 flex flex-col min-h-0 overflow-hidden border-x border-green-900/20">
           <ArenaTerminal
             roomId={roomId}
             nameMap={nameMap}

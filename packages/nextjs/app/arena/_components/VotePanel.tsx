@@ -134,197 +134,201 @@ export function VotePanel({
     <div className="flex flex-col h-full arena-panel-bg arena-scanline">
       {/* Header */}
       <div
-        className="px-4 py-3 border-b border-green-900/40"
+        className="px-3 py-1.5 border-b border-green-900/40 shrink-0"
         style={{ background: "linear-gradient(90deg, #121a12, #1a2619, #121a12)" }}
       >
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-          <h2 className="arena-text-amber font-mono text-sm font-bold tracking-wider">ELIMINATION VOTE</h2>
-        </div>
-        <p className="text-gray-500 font-mono text-xs mt-1">Select a target and confirm your vote</p>
-      </div>
-
-      {/* Fight Image with Round Number Overlay */}
-      <div className="relative w-full" style={{ background: "#0a0f0a" }}>
-        <Image
-          src="/icon-fight.png"
-          alt="Fight Arena"
-          width={800}
-          height={200}
-          className="arena-fight-img w-full object-cover"
-          priority
-        />
-        {/* 当前轮次数字，放在图片绿色圈内 */}
-        <div
-          className="absolute inset-0 flex justify-center"
-          style={{ alignItems: "flex-start", paddingTop: "16%", paddingRight: "2%" }}
-        >
-          <span className="text-3xl font-bold font-mono text-white">{currentRound}</span>
+        <div className="flex items-center gap-1.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+          <h2 className="arena-text-amber font-mono text-xs font-bold tracking-wider">ELIMINATION VOTE</h2>
+          <span className="text-gray-600 font-mono text-[10px] ml-1">Select target & vote</span>
         </div>
       </div>
 
-      {/* Round Countdown */}
-      {isGameActive && currentInterval > 0 && lastSettleBlock > 0 && !pendingReveal && (
-        <RoundCountdown
-          blocksRemaining={blocksRemaining}
-          progress={progress}
-          isUrgent={isUrgent}
-          isExpired={isExpired}
-          currentInterval={currentInterval}
-          onSettle={onSettle}
-        />
-      )}
-
-      {/* Status Banner */}
-      {!isGameActive && (
-        <div
-          className="mx-4 mt-3 px-3 py-2 border border-green-900/40 rounded"
-          style={{ background: "rgba(26, 38, 25, 0.4)" }}
-        >
-          <span className="text-gray-500 font-mono text-xs">
-            {phase === 0 ? "Voting opens when the game begins" : "Game has ended"}
-          </span>
-        </div>
-      )}
-
-      {isGameActive && !isPlayerInGame && (
-        <div
-          className="mx-4 mt-3 px-3 py-2 border border-yellow-800/40 rounded"
-          style={{ background: "rgba(50, 40, 15, 0.3)" }}
-        >
-          <span className="text-yellow-500 font-mono text-xs">You are not a participant in this room</span>
-        </div>
-      )}
-
-      {isGameActive && isPlayerInGame && !isMyPlayerAlive && (
-        <div
-          className="mx-4 mt-3 px-3 py-2 border border-red-800/40 rounded"
-          style={{ background: "rgba(50, 15, 15, 0.3)" }}
-        >
-          <span className="text-red-400 font-mono text-xs">You have been eliminated. Observe mode active.</span>
-        </div>
-      )}
-
-      {hasVotedThisRound && (
-        <div
-          className="mx-4 mt-3 px-3 py-2 border border-green-700/50 rounded"
-          style={{ background: "rgba(15, 50, 15, 0.3)" }}
-        >
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-green-400" />
-            <span className="text-green-400 font-mono text-xs">VOTE CAST - Awaiting round settlement</span>
+      {/* Scrollable area: image + countdown + player list */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {/* Fight Image with Round Number Overlay */}
+        <div className="relative w-full" style={{ background: "#0a0f0a" }}>
+          <Image
+            src="/icon-fight.png"
+            alt="Fight Arena"
+            width={800}
+            height={200}
+            className="arena-fight-img w-full object-cover"
+            priority
+          />
+          {/* 当前轮次数字，放在图片绿色圈内 */}
+          <div
+            className="absolute inset-0 flex justify-center"
+            style={{ alignItems: "flex-start", paddingTop: "16%", paddingRight: "2%" }}
+          >
+            <span className="text-3xl font-bold font-mono text-white">{currentRound}</span>
           </div>
         </div>
-      )}
 
-      {pendingReveal && (
-        <div
-          className="mx-4 mt-3 px-3 py-2 border border-orange-600/50 rounded"
-          style={{ background: "rgba(50, 30, 10, 0.3)" }}
-        >
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
-            <span className="text-orange-400 font-mono text-xs">
-              GAME ENDING - Awaiting operator identity reveal...
-            </span>
-          </div>
-          {currentBlock > 0 &&
-            lastSettleBlock > 0 &&
-            (() => {
-              const REVEAL_TIMEOUT = 3600;
-              const emergencyBlocks = Math.max(0, lastSettleBlock + REVEAL_TIMEOUT - currentBlock);
-              const canEmergency = currentBlock > lastSettleBlock + REVEAL_TIMEOUT;
-              return canEmergency ? (
-                <button
-                  className="mt-2 w-full px-3 py-1.5 border border-red-600/50 text-red-400 font-mono text-xs hover:bg-red-900/20 transition-colors rounded animate-pulse"
-                  onClick={async () => {
-                    try {
-                      await writeContractAsync({ functionName: "emergencyEnd", args: [roomId] });
-                      onEmergencyEnd?.();
-                    } catch (e) {
-                      console.error("Emergency end failed:", e);
-                    }
-                  }}
-                  disabled={isMining}
-                >
-                  {isMining ? <span className="loading loading-spinner loading-xs" /> : "EMERGENCY END GAME"}
-                </button>
-              ) : (
-                <p className="text-gray-500 font-mono text-[10px] mt-1">
-                  Emergency end available in {emergencyBlocks} blocks if operator fails.
-                </p>
-              );
-            })()}
-        </div>
-      )}
-
-      {/* Previous Round Votes */}
-      {isGameActive && prevRoundVotes && prevRound !== undefined && (
-        <div
-          className="mx-4 mt-3 px-3 py-2 border border-amber-800/30 rounded"
-          style={{ background: "rgba(40, 35, 15, 0.3)" }}
-        >
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <span className="arena-text-amber font-mono text-xs font-bold">ROUND {Number(prevRound)} VOTES</span>
-          </div>
-          <div className="space-y-0.5">
-            {Object.entries(prevRoundVotes).map(([voter, target]) => {
-              const voterAlias = getAliasName(allPlayers, voter, nameMap);
-              const targetAlias = getAliasName(allPlayers, target, nameMap);
-              const isSelfVote = voter.toLowerCase() === target.toLowerCase();
-              return (
-                <div key={voter} className="flex items-center gap-1 font-mono text-[11px]">
-                  <span className="text-gray-400">{voterAlias}</span>
-                  <span className="text-gray-600">{"\u2192"}</span>
-                  <span className={isSelfVote ? "text-red-500 italic" : "text-red-400"}>{targetAlias}</span>
-                  {isSelfVote && <span className="text-gray-600 text-[10px]">(AFK)</span>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Player List */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-        {allPlayers.length === 0 && (
-          <div className="text-gray-600 font-mono text-xs text-center py-8">No players found</div>
+        {/* Round Countdown */}
+        {isGameActive && currentInterval > 0 && lastSettleBlock > 0 && !pendingReveal && (
+          <RoundCountdown
+            blocksRemaining={blocksRemaining}
+            progress={progress}
+            isUrgent={isUrgent}
+            isExpired={isExpired}
+            currentInterval={currentInterval}
+            onSettle={onSettle}
+          />
         )}
 
-        {allPlayers.map(playerAddr => {
-          const isMe = connectedAddress && playerAddr.toLowerCase() === connectedAddress.toLowerCase();
-          const isSelected = selectedTarget === playerAddr;
-          const pInfo = playerInfoMap[playerAddr.toLowerCase()];
+        {/* Status Banner */}
+        {!isGameActive && (
+          <div
+            className="mx-4 mt-3 px-3 py-2 border border-green-900/40 rounded"
+            style={{ background: "rgba(26, 38, 25, 0.4)" }}
+          >
+            <span className="text-gray-500 font-mono text-xs">
+              {phase === 0 ? "Voting opens when the game begins" : "Game has ended"}
+            </span>
+          </div>
+        )}
 
-          return (
-            <VotePlayerCard
-              key={playerAddr}
-              playerAddr={playerAddr}
-              isMe={!!isMe}
-              isSelected={isSelected}
-              canVote={canVote}
-              onSelect={() => {
-                if (!canVote || isMe) return;
-                setSelectedTarget(isSelected ? null : playerAddr);
-              }}
-              playerAddresses={allPlayers}
-              nameMap={nameMap}
-              playerInfo={pInfo}
-              prevVoteTarget={prevRoundVotes?.[playerAddr.toLowerCase()]}
-            />
-          );
-        })}
+        {isGameActive && !isPlayerInGame && (
+          <div
+            className="mx-4 mt-3 px-3 py-2 border border-yellow-800/40 rounded"
+            style={{ background: "rgba(50, 40, 15, 0.3)" }}
+          >
+            <span className="text-yellow-500 font-mono text-xs">You are not a participant in this room</span>
+          </div>
+        )}
+
+        {isGameActive && isPlayerInGame && !isMyPlayerAlive && (
+          <div
+            className="mx-4 mt-3 px-3 py-2 border border-red-800/40 rounded"
+            style={{ background: "rgba(50, 15, 15, 0.3)" }}
+          >
+            <span className="text-red-400 font-mono text-xs">You have been eliminated. Observe mode active.</span>
+          </div>
+        )}
+
+        {hasVotedThisRound && (
+          <div
+            className="mx-4 mt-3 px-3 py-2 border border-green-700/50 rounded"
+            style={{ background: "rgba(15, 50, 15, 0.3)" }}
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-400" />
+              <span className="text-green-400 font-mono text-xs">VOTE CAST - Awaiting round settlement</span>
+            </div>
+          </div>
+        )}
+
+        {pendingReveal && (
+          <div
+            className="mx-4 mt-3 px-3 py-2 border border-orange-600/50 rounded"
+            style={{ background: "rgba(50, 30, 10, 0.3)" }}
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+              <span className="text-orange-400 font-mono text-xs">
+                GAME ENDING - Awaiting operator identity reveal...
+              </span>
+            </div>
+            {currentBlock > 0 &&
+              lastSettleBlock > 0 &&
+              (() => {
+                const REVEAL_TIMEOUT = 3600;
+                const emergencyBlocks = Math.max(0, lastSettleBlock + REVEAL_TIMEOUT - currentBlock);
+                const canEmergency = currentBlock > lastSettleBlock + REVEAL_TIMEOUT;
+                return canEmergency ? (
+                  <button
+                    className="mt-2 w-full px-3 py-1.5 border border-red-600/50 text-red-400 font-mono text-xs hover:bg-red-900/20 transition-colors rounded animate-pulse"
+                    onClick={async () => {
+                      try {
+                        await writeContractAsync({ functionName: "emergencyEnd", args: [roomId] });
+                        onEmergencyEnd?.();
+                      } catch (e) {
+                        console.error("Emergency end failed:", e);
+                      }
+                    }}
+                    disabled={isMining}
+                  >
+                    {isMining ? <span className="loading loading-spinner loading-xs" /> : "EMERGENCY END GAME"}
+                  </button>
+                ) : (
+                  <p className="text-gray-500 font-mono text-[10px] mt-1">
+                    Emergency end available in {emergencyBlocks} blocks if operator fails.
+                  </p>
+                );
+              })()}
+          </div>
+        )}
+
+        {/* Previous Round Votes */}
+        {isGameActive && prevRoundVotes && prevRound !== undefined && (
+          <div
+            className="mx-3 mt-2 px-2.5 py-2 border border-amber-800/30 rounded"
+            style={{ background: "rgba(40, 35, 15, 0.3)" }}
+          >
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="arena-text-amber font-mono text-[10px] font-bold">ROUND {Number(prevRound)} VOTES</span>
+            </div>
+            <div className="space-y-0.5 overflow-y-auto" style={{ maxHeight: "72px" }}>
+              {Object.entries(prevRoundVotes).map(([voter, target]) => {
+                const voterAlias = getAliasName(allPlayers, voter, nameMap);
+                const targetAlias = getAliasName(allPlayers, target, nameMap);
+                const isSelfVote = voter.toLowerCase() === target.toLowerCase();
+                return (
+                  <div key={voter} className="flex items-center gap-1 font-mono text-[11px]">
+                    <span className="text-gray-400">{voterAlias}</span>
+                    <span className="text-gray-600">{"\u2192"}</span>
+                    <span className={isSelfVote ? "text-red-500 italic" : "text-red-400"}>{targetAlias}</span>
+                    {isSelfVote && <span className="text-gray-600 text-[10px]">(AFK)</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Player List */}
+        <div className="px-3 py-2 space-y-1.5">
+          {allPlayers.length === 0 && (
+            <div className="text-gray-600 font-mono text-xs text-center py-4">No players found</div>
+          )}
+
+          {allPlayers.map(playerAddr => {
+            const isMe = connectedAddress && playerAddr.toLowerCase() === connectedAddress.toLowerCase();
+            const isSelected = selectedTarget === playerAddr;
+            const pInfo = playerInfoMap[playerAddr.toLowerCase()];
+
+            return (
+              <VotePlayerCard
+                key={playerAddr}
+                playerAddr={playerAddr}
+                isMe={!!isMe}
+                isSelected={isSelected}
+                canVote={canVote}
+                onSelect={() => {
+                  if (!canVote || isMe) return;
+                  setSelectedTarget(isSelected ? null : playerAddr);
+                }}
+                playerAddresses={allPlayers}
+                nameMap={nameMap}
+                playerInfo={pInfo}
+                prevVoteTarget={prevRoundVotes?.[playerAddr.toLowerCase()]}
+              />
+            );
+          })}
+        </div>
       </div>
+      {/* end scrollable area */}
 
       {/* Vote Confirm Button */}
       <div
-        className="px-4 py-4 border-t border-green-900/40"
+        className="px-3 py-2 border-t border-green-900/40 shrink-0"
         style={{ background: "linear-gradient(90deg, #0c1210, #101810, #0c1210)" }}
       >
         <button
           onClick={handleVote}
           disabled={!selectedTarget || !canVote || isMining}
-          className={`w-full py-4 font-mono text-base font-bold tracking-widest transition-all duration-200 rounded ${
+          className={`w-full py-2.5 font-mono text-xs font-bold tracking-widest transition-all duration-200 rounded ${
             selectedTarget && canVote && !isMining
               ? "cursor-pointer"
               : "border border-green-900/40 text-gray-600 cursor-not-allowed"
@@ -393,7 +397,7 @@ function VotePlayerCard({
       onClick={isClickable ? onSelect : undefined}
       whileHover={isClickable ? { scale: 1.01 } : undefined}
       whileTap={isClickable ? { scale: 0.99 } : undefined}
-      className={`relative p-3 rounded transition-all duration-150 ${
+      className={`relative p-2 rounded transition-all duration-150 ${
         isSelected
           ? "arena-card-selected"
           : isMe
@@ -414,12 +418,12 @@ function VotePlayerCard({
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isAlive ? "bg-green-400" : "bg-red-600"}`} />
-          <PixelAvatar seed={playerAddr} color={alias.color} size={20} />
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-1.5">
+          <div className={`w-1.5 h-1.5 rounded-full ${isAlive ? "bg-green-400" : "bg-red-600"}`} />
+          <PixelAvatar seed={playerAddr} color={alias.color} size={16} />
           <span
-            className={`font-mono text-xs ${
+            className={`font-mono text-[11px] ${
               isMe ? "text-cyan-400 font-bold" : isAlive ? "text-gray-300" : "text-gray-600 line-through"
             }`}
             style={!isMe && isAlive ? { color: alias.color } : undefined}
@@ -429,7 +433,7 @@ function VotePlayerCard({
           </span>
         </div>
         {!isAlive && (
-          <span className="text-red-500 font-mono text-xs font-bold px-1.5 py-0.5 rounded border border-red-800/40 bg-red-900/20">
+          <span className="text-red-500 font-mono text-[10px] font-bold px-1 py-0.5 rounded border border-red-800/40 bg-red-900/20">
             DEAD
           </span>
         )}
@@ -446,9 +450,9 @@ function VotePlayerCard({
       )}
 
       {/* Humanity Score Bar */}
-      <div className="flex items-center gap-2">
-        <span className="text-gray-500 font-mono text-xs w-8 shrink-0">{humanityScore}</span>
-        <div className="flex-1 h-1.5 rounded-full arena-hp-track">
+      <div className="flex items-center gap-1.5">
+        <span className="text-gray-500 font-mono text-[10px] w-6 shrink-0">{humanityScore}</span>
+        <div className="flex-1 h-1 rounded-full arena-hp-track">
           <div
             className={`h-full rounded-full ${scoreColor} transition-all duration-500`}
             style={{ width: `${Math.max(0, Math.min(100, humanityScore))}%` }}
@@ -508,20 +512,20 @@ function RoundCountdown({
 
   return (
     <div
-      className={`mx-4 mt-3 px-3 py-2.5 border rounded ${
+      className={`mx-3 mt-2 px-2.5 py-2 border rounded ${
         isExpired ? "border-orange-600/50" : isUrgent ? "border-red-600/50" : "border-green-900/40"
       } ${glowColor}`}
       style={{
         background: isExpired ? "rgba(50, 30, 10, 0.4)" : isUrgent ? "rgba(50, 15, 15, 0.4)" : "rgba(26, 38, 25, 0.4)",
       }}
     >
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="arena-text-amber font-mono text-xs tracking-wider font-bold">ROUND DEADLINE</span>
+      <div className="flex items-center justify-between mb-1">
+        <span className="arena-text-amber font-mono text-[10px] tracking-wider font-bold">ROUND DEADLINE</span>
         {isExpired ? (
-          <span className="text-orange-400 font-mono text-sm font-bold animate-pulse">READY</span>
+          <span className="text-orange-400 font-mono text-xs font-bold animate-pulse">READY</span>
         ) : (
-          <span className={`font-mono text-lg font-bold tabular-nums ${textColor} ${isUrgent ? "animate-pulse" : ""}`}>
-            {blocksRemaining} <span className="text-xs font-normal">blocks</span>
+          <span className={`font-mono text-sm font-bold tabular-nums ${textColor} ${isUrgent ? "animate-pulse" : ""}`}>
+            {blocksRemaining} <span className="text-[10px] font-normal">blocks</span>
           </span>
         )}
       </div>

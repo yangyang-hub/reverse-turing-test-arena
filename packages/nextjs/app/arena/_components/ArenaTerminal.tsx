@@ -6,7 +6,8 @@ import { useAccount } from "wagmi";
 import type { PlayerInfo } from "~~/app/arena/page";
 import type { ChatMsg } from "~~/hooks/scaffold-eth/useChatSocket";
 import { getAliasName } from "~~/utils/playerAlias";
-import { getTopicForRound } from "~~/utils/topics";
+
+// import { getTopicForRound } from "~~/utils/topics";
 
 type TerminalMessage = {
   id: string;
@@ -53,7 +54,6 @@ export function ArenaTerminal({
   roomInfo,
   allPlayers,
   myPlayerInfo,
-  currentRound,
   chatMessages,
   sendMessage,
   isConnected,
@@ -138,8 +138,8 @@ export function ArenaTerminal({
         background: "linear-gradient(180deg, #0f1a1f 0%, #0c1518 50%, #0a1215 100%)",
       }}
     >
-      {/* Topic Banner at top */}
-      {isGameActive && currentRound > 0 && (
+      {/* Topic Banner at top — commented out */}
+      {/* {isGameActive && currentRound > 0 && (
         <div
           className="px-5 py-3"
           style={{
@@ -152,7 +152,7 @@ export function ArenaTerminal({
           </span>
           <span className="text-white font-mono text-sm">{getTopicForRound(currentRound)}</span>
         </div>
-      )}
+      )} */}
 
       {/* Messages Area */}
       <div
