@@ -3,6 +3,7 @@ package chain
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -82,12 +83,20 @@ func (r *ChainReader) BatchCall(ctx context.Context, calls []Multicall3Call) ([]
 		return nil, fmt.Errorf("empty aggregate3 output")
 	}
 
-	// Convert anonymous struct slice to typed Multicall3Result slice
-	var proto []Multicall3Result
-	converted := abi.ConvertType(outputs[0], proto)
-	results, ok := converted.([]Multicall3Result)
-	if !ok {
-		return nil, fmt.Errorf("unexpected aggregate3 result type: %T", converted)
+	// Convert anonymous struct slice to typed Multicall3Result slice.
+	// go-ethereum's Unpack returns []struct{Success bool; ReturnData []uint8} with JSON tags,
+	// which abi.ConvertType cannot handle (panics). Use reflection instead.
+	val := reflect.ValueOf(outputs[0])
+	if val.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("unexpected aggregate3 output kind: %s", val.Kind())
+	}
+	results := make([]Multicall3Result, val.Len())
+	for i := 0; i < val.Len(); i++ {
+		elem := val.Index(i)
+		results[i] = Multicall3Result{
+			Success:    elem.FieldByName("Success").Bool(),
+			ReturnData: elem.FieldByName("ReturnData").Bytes(),
+		}
 	}
 
 	if len(results) != len(calls) {
