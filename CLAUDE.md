@@ -61,9 +61,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-28 — MCP Cache-First RPC Optimization
+> **Last updated**: 2026-02-28 — Lobby Instant UI Refresh
 
-### Current Status: MCP Cache-First RPC Optimization
+### Current Status: Lobby Instant UI Refresh
 
 | Module | Status | Notes |
 |--------|--------|-------|
@@ -117,6 +117,8 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Early Team Elimination | DONE | Watcher detects when all AIs or all humans eliminated via DB + cache (zero RPC), triggers early revealAndEnd before aliveCount reaches 2 |
 | Multicall3 Batching | DONE | Chat-server cache uses Multicall3 aggregate3 to batch 5+N eth_call into 2 HTTP requests per room (86% reduction); auto-fallback to individual calls on local Anvil; phase-aware skip playerInfo for non-active rooms |
 | MCP Cache-First RPC | DONE | MCP reads chat-server cache via GET /api/rooms/:roomId/state (0 RPC); fallback to direct RPC on cache miss; gameLoop.tick() cache-first; 3 agents: 4.5→0.43 RPC/s |
+| Lobby Instant UI Refresh | DONE | Room operations (create/join/leave/claim) immediately refresh lobby UI via callback chain; no manual page refresh needed |
+| Arena Immediate Refetch | DONE | settleRound/emergencyEnd immediately refetch core data + player infos; VotePanel emergencyEnd uses callback; UsdcFaucet refetches balance after mint |
 
 ### Known Design Bugs (from review)
 
