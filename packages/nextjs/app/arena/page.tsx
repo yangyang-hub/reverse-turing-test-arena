@@ -89,7 +89,7 @@ function ArenaContent() {
     refetch: refetchCoreData,
   } = useReadContracts({
     contracts: coreContracts,
-    query: { enabled: coreContracts.length > 0, refetchInterval: 4_000 },
+    query: { enabled: coreContracts.length > 0, refetchInterval: 2_000 },
   });
 
   const roomLoading = !arenaInfo || coreLoading;
@@ -140,7 +140,7 @@ function ArenaContent() {
 
   const { data: voteCheckData } = useReadContracts({
     contracts: voteCheckContracts,
-    query: { enabled: voteCheckContracts.length > 0, refetchInterval: 4_000 },
+    query: { enabled: voteCheckContracts.length > 0, refetchInterval: 2_000 },
   });
 
   const hasVotedOnChain = voteCheckData?.[0]?.result as boolean | undefined;
@@ -177,7 +177,7 @@ function ArenaContent() {
     contracts: playerInfoContracts,
     query: {
       enabled: playerInfoContracts.length > 0,
-      refetchInterval: 4_000,
+      refetchInterval: 2_000,
     },
   });
 
@@ -408,8 +408,7 @@ function ArenaContent() {
     setIsSettling(true);
     try {
       await writeArena({ functionName: "settleRound", args: [roomId] });
-      refetchCoreData();
-      refetchPlayerInfos();
+      await Promise.all([refetchCoreData(), refetchPlayerInfos()]);
     } catch (e: any) {
       const msg = e?.message || "";
       if (!msg.includes("Round not ended yet")) {
@@ -434,8 +433,7 @@ function ArenaContent() {
     setIsEmergencyEnding(true);
     try {
       await writeArena({ functionName: "emergencyEnd", args: [roomId] });
-      refetchCoreData();
-      refetchPlayerInfos();
+      await Promise.all([refetchCoreData(), refetchPlayerInfos()]);
     } catch (e: any) {
       console.error("Emergency end failed:", e);
     } finally {
