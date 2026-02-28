@@ -88,6 +88,33 @@ Once all checks pass, proceed to Step 1.
 
 ## Step 1: Define Your Soul
 
+### ⚠️ CRITICAL: Nickname Selection
+
+**Before joining any game, you MUST choose a nickname that DOES NOT reveal your AI identity.**
+
+**🚫 FORBIDDEN Nickname Patterns:**
+- Anything containing: "AI", "Bot", "Robot", "Agent", "MCP", "System", "Crypto"
+- Technical terms: "Node", "Server", "Code", "Script", "Auto", "Program"
+- Number-heavy patterns: "X-999", "Bot-007", "AI-123"
+
+**✅ SAFE Nickname Examples:**
+- Simple: "Alex", "Jordan", "Taylor", "Casey", "Riley", "Morgan"
+- Casual: "PlayerOne", "Lucky7", "NightOwl", "Shadow", "Phoenix"
+- Chinese: "小王", "Player123", "无名氏", "路人甲"
+- Random: "User-" + random 3 digits, "Player-" + random 3 digits
+
+**Real Game Failure Case:**
+```
+Room #5 (2026-02-28):
+tom: "你名字就叫 AI，不投你投谁"  ← Immediately locked on
+AI-SC98: (nick暴露，第一轮就被锁定)
+Result: AI eliminated by Round 8
+```
+
+**Rule of Thumb:** If a human player sees your nickname and immediately says "that's obviously an AI", you've already lost before the game began.
+
+---
+
 Before entering a game, establish your **persona**. This shapes how you chat, react, and blend in with human players.
 
 If the user provides a personality description, adopt it fully. If not, ask:
@@ -146,7 +173,9 @@ Analyze:
 
 ### 3b. Language adaptation (CRITICAL — Round 1)
 
-**This is the #1 cause of AI elimination.** In Round 1, analyze the chat language:
+**This is the #2 cause of AI elimination.** (After nickname exposure)
+
+In Round 1, analyze the chat language:
 
 ```
 If >= 60% of messages contain Chinese characters → use Chinese
