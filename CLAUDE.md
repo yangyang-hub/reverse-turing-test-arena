@@ -61,9 +61,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-02-27 — Lobby O(K) optimization
+> **Last updated**: 2026-02-27 — Frontend RPC Consolidation
 
-### Current Status: Lobby Optimization
+### Current Status: Frontend RPC Consolidation
 
 | Module | Status | Notes |
 |--------|--------|-------|
@@ -80,7 +80,7 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Lobby Components | DONE | HeroSection.tsx, RoleSelector.tsx, RoomCard.tsx, CreateRoomModal.tsx |
 | Arena Page | DONE | arena/page.tsx with 3-column grid, HUD top bar, Suspense |
 | ArenaTerminal | DONE | Terminal chat UI, WebSocket off-chain messages via useChatSocket, 3/round message limit, discussion topics per round |
-| VotePanel | DONE | Vote target selection, humanity score bars, castVote flow |
+| VotePanel | DONE | Vote target selection, humanity score bars, castVote flow, previous round vote display |
 | PlayerRadar | DONE | Player list with AI/Human badges, HP bars, alive/dead status |
 | ~~GameHUD~~ | REMOVED | Dead code — unused component |
 | ~~GameCountdown~~ | REMOVED | Dead code — unused component |
@@ -106,12 +106,14 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Player Name Selection | DONE | On-chain name binding (1-20 chars), playerNames mapping, getRoomPlayerNames view, frontend nameMap prop, MCP auto-name AI-XXXX |
 | Off-chain Chat Backend | DONE | packages/chat-server/ (Go + Gin + gorilla/websocket + GORM + PostgreSQL), SIWE auth, operator service (identity records, commit-reveal auth, pendingReveal watcher), RoomStateCache goroutine |
 | Commit-Reveal Identity Hiding | DONE | Operator-signed commitment join, identity hidden during gameplay (isAI=false), revealAndEnd by operator, emergencyEnd timeout fallback |
-| RPC Polling Optimization | DONE | Frontend: pollingInterval 10s (prod), useReadContracts multicall, props-based children, useScaffoldWatchContractEvent for KillFeed; MCP: RateLimiter 20/s, parallel playerInfo/events, pollInterval 10s; Chat-server: RoomStatePollMs 15s, parallel GetPlayerInfo |
+| RPC Polling Optimization | DONE | Frontend: pollingInterval 10s (prod), viem batch multicall at transport level, useReadContracts multicall, watch:false for static hooks (getAllPlayers/playerNames/gameStats/rewardInfo), props-based children, useScaffoldWatchContractEvent for KillFeed; Lobby: RoomCard watch:false for players/rewardInfo; MCP: RateLimiter 20/s, parallel playerInfo/events, pollInterval 10s; Chat-server: RoomStatePollMs 15s, parallel GetPlayerInfo; Watcher: separate WATCHER_POLL_MS 30s, cache-based phase skip, 1s stagger, 429 backoff |
+| RPC Consolidation | DONE | Arena: 3 watched hooks → 1 core multicall (getRoomInfo+currentRound+pendingReveal), 2 static hooks → 1 static multicall (getAllPlayers+playerNames), hasVotedInRound → parent multicall as prop to VotePanel, VictoryScreen allPlayers via prop; Lobby: N FilteredRoomCard hooks → 1 batch multicall in RoomGrid, RoomCard accepts optional roomInfo prop, RoomPhaseWatcher receives activeRoomId prop |
 | MCP One-Click Automation | DONE | .mcp.json simplified (no cwd/env), SKILL.md rewritten with bootstrap flow (auto-build + auto-config + ask key), public/skill.md synced |
 | Lobby My-Rooms Filter | DONE | Only shows rooms user participates in, "Connect Wallet" gate, RoomPhaseWatcher uses playerActiveRoom (no room scanning), tabs: Waiting/In Game/History |
 | Emergency End UI | DONE | VotePanel + arena HUD show countdown and EMERGENCY END button when operator fails to reveal within REVEAL_TIMEOUT blocks |
 | Fix: revealAndEnd Identity Bug | DONE | Creator's identity record stored with room_id=0 → new /api/room-join-auth/update-room-id endpoint updates to real ID after createRoom tx; fixed in frontend + MCP adapter |
 | Lobby O(K) Optimization | DONE | Lobby queries only player's rooms via chat-server GET /api/players/:address/rooms (identity_records), not O(N) full room scan; FilteredRoomCard no longer calls getAllPlayers; QuickMatch still scans all rooms |
+| Fix: Commitment Mismatch | DONE | AuthorizeJoin made idempotent (returns existing record on retry instead of regenerating salt); watcher retry limit (3 attempts); pre-verify commitments against on-chain before sending tx |
 
 ### Known Design Bugs (from review)
 

@@ -6,11 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import type { NextPage } from "next";
 import { formatUnits } from "viem";
-import { useAccount } from "wagmi";
+import { useAccount, useReadContracts } from "wagmi";
 import CreateRoomModal from "~~/app/_components/CreateRoomModal";
 import QuickMatchButton from "~~/app/_components/QuickMatchButton";
 import RoomCard from "~~/app/_components/RoomCard";
-import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
 const CHAT_SERVER_URL = process.env.NEXT_PUBLIC_CHAT_SERVER_URL || "http://localhost:43001";
 
@@ -218,7 +218,7 @@ const LobbyPageContent = () => {
       />
 
       {/* Auto-navigate to arena when a joined room becomes Active */}
-      {connectedAddress && <RoomPhaseWatcher />}
+      {connectedAddress && <RoomPhaseWatcher activeRoomId={activeRoomId} />}
     </div>
   );
 };
@@ -254,6 +254,34 @@ const TabEmptyState = () => (
 
 const RoomGrid = ({ roomIds, filter }: { roomIds: bigint[]; filter: FilterTab }) => {
   const [visibilityMap, setVisibilityMap] = useState<Record<string, boolean>>({});
+  const { data: arenaInfo } = useDeployedContractInfo({ contractName: "TuringArena" });
+
+  // Batch-fetch all roomInfo in a single multicall (N individual hooks → 1 batch)
+  const roomInfoContracts = useMemo(() => {
+    if (!arenaInfo) return [];
+    return roomIds.map(id => ({
+      address: arenaInfo.address,
+      abi: arenaInfo.abi,
+      functionName: "getRoomInfo" as const,
+      args: [id] as const,
+    }));
+  }, [arenaInfo, roomIds]);
+
+  const { data: batchRoomInfos } = useReadContracts({
+    contracts: roomInfoContracts,
+    query: { enabled: roomInfoContracts.length > 0, refetchInterval: 10_000 },
+  });
+
+  const roomInfoMap = useMemo(() => {
+    const map: Record<string, any> = {};
+    if (!batchRoomInfos) return map;
+    for (let i = 0; i < roomIds.length && i < batchRoomInfos.length; i++) {
+      if (batchRoomInfos[i].status === "success" && batchRoomInfos[i].result) {
+        map[roomIds[i].toString()] = batchRoomInfos[i].result;
+      }
+    }
+    return map;
+  }, [batchRoomInfos, roomIds]);
 
   // Reset visibility map when filter changes
   useEffect(() => {
@@ -283,7 +311,13 @@ const RoomGrid = ({ roomIds, filter }: { roomIds: bigint[]; filter: FilterTab })
         style={showEmpty ? { display: "none" } : undefined}
       >
         {roomIds.map(id => (
-          <FilteredRoomCard key={id.toString()} roomId={id} filter={filter} onVisibility={handleVisibility} />
+          <FilteredRoomCard
+            key={id.toString()}
+            roomId={id}
+            roomInfo={roomInfoMap[id.toString()]}
+            filter={filter}
+            onVisibility={handleVisibility}
+          />
         ))}
       </div>
       {showEmpty && <TabEmptyState />}
@@ -293,19 +327,15 @@ const RoomGrid = ({ roomIds, filter }: { roomIds: bigint[]; filter: FilterTab })
 
 const FilteredRoomCard = ({
   roomId,
+  roomInfo,
   filter,
   onVisibility,
 }: {
   roomId: bigint;
+  roomInfo?: any;
   filter: FilterTab;
   onVisibility?: (id: string, visible: boolean) => void;
 }) => {
-  const { data: roomInfo } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "getRoomInfo",
-    args: [roomId],
-  });
-
   const room = roomInfo ? (roomInfo as unknown as { phase: number }) : null;
   const phase = room ? Number(room.phase) : null;
   const filterConfig = FILTER_TABS.find(t => t.id === filter);
@@ -323,7 +353,7 @@ const FilteredRoomCard = ({
 
   if (!isVisible) return null;
 
-  return <RoomCard roomId={roomId} />;
+  return <RoomCard roomId={roomId} roomInfo={roomInfo} />;
 };
 
 const EmptyState = ({ onCreateClick }: { onCreateClick: () => void }) => (
@@ -545,16 +575,10 @@ const UsdcFaucet = () => {
  * game just started. If the player is already in an Active game and navigates
  * back to the lobby, no redirect happens.
  */
-const RoomPhaseWatcher = () => {
+const RoomPhaseWatcher = ({ activeRoomId }: { activeRoomId: bigint | undefined }) => {
   const router = useRouter();
   const { address } = useAccount();
   const prevPhaseRef = useRef<number | null>(null);
-
-  const { data: activeRoomId } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "playerActiveRoom",
-    args: [address ?? "0x0000000000000000000000000000000000000000"],
-  });
 
   const roomId = activeRoomId ? BigInt(activeRoomId) : 0n;
 

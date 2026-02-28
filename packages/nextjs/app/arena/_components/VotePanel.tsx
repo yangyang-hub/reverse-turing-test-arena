@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useAccount } from "wagmi";
+import { useReadContracts } from "wagmi";
 import type { PlayerInfo } from "~~/app/arena/page";
-import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useDeployedContractInfo, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { getAliasName, getPlayerAlias } from "~~/utils/playerAlias";
 
 export function VotePanel({
@@ -16,6 +17,7 @@ export function VotePanel({
   roundNum,
   blockNumber,
   pendingReveal,
+  hasVotedOnChain,
 }: {
   roomId: bigint;
   nameMap?: Record<string, string>;
@@ -25,18 +27,11 @@ export function VotePanel({
   roundNum: bigint | undefined;
   blockNumber: bigint | undefined;
   pendingReveal: boolean;
+  hasVotedOnChain?: boolean;
 }) {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [localVotedRound, setLocalVotedRound] = useState<bigint | null>(null);
   const { address: connectedAddress } = useAccount();
-
-  const zeroAddr = "0x0000000000000000000000000000000000000000" as const;
-  const { data: hasVotedOnChain } = useScaffoldReadContract({
-    contractName: "TuringArena",
-    functionName: "hasVotedInRound",
-    args: [roomId, roundNum ?? 0n, connectedAddress ?? zeroAddr],
-    query: { enabled: !!roundNum && roundNum > 0n && !!connectedAddress },
-  });
 
   // Optimistic lock: treat as voted if chain confirms OR local vote was cast this round
   const hasVotedThisRound = Boolean(hasVotedOnChain) || (localVotedRound !== null && localVotedRound === roundNum);
@@ -80,6 +75,38 @@ export function VotePanel({
     : false;
   // Channel exclusivity is enforced server-side — no need to check isAI here
   const canVote = isGameActive && isMyPlayerAlive && isPlayerInGame && !hasVotedThisRound && !pendingReveal;
+
+  // Previous round vote results — batch-read voteTarget for all players
+  const { data: arenaInfo } = useDeployedContractInfo({ contractName: "TuringArena" });
+  const prevRound = roundNum !== undefined && roundNum > 0n ? roundNum - 1n : undefined;
+  const voteContracts = useMemo(() => {
+    if (!arenaInfo || prevRound === undefined || allPlayers.length === 0) return [];
+    return allPlayers.map(addr => ({
+      address: arenaInfo.address,
+      abi: arenaInfo.abi,
+      functionName: "voteTarget" as const,
+      args: [roomId, prevRound, addr] as const,
+    }));
+  }, [arenaInfo, roomId, prevRound, allPlayers]);
+
+  const { data: prevVoteResults } = useReadContracts({
+    contracts: voteContracts,
+    query: { enabled: voteContracts.length > 0 },
+  });
+
+  // Build voter→target map for previous round
+  const prevRoundVotes = useMemo(() => {
+    if (!prevVoteResults || prevRound === undefined) return null;
+    const zeroAddr = "0x0000000000000000000000000000000000000000";
+    const map: Record<string, string> = {};
+    for (let i = 0; i < allPlayers.length && i < prevVoteResults.length; i++) {
+      const target = prevVoteResults[i]?.result as string | undefined;
+      if (target && target !== zeroAddr) {
+        map[allPlayers[i].toLowerCase()] = target;
+      }
+    }
+    return Object.keys(map).length > 0 ? map : null;
+  }, [prevVoteResults, allPlayers, prevRound]);
 
   const handleVote = async () => {
     if (!selectedTarget || !canVote) return;
@@ -185,6 +212,30 @@ export function VotePanel({
         </div>
       )}
 
+      {/* Previous Round Votes */}
+      {isGameActive && prevRoundVotes && prevRound !== undefined && (
+        <div className="mx-4 mt-3 px-3 py-2 border border-purple-700/40 bg-purple-950/10 rounded">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <span className="text-purple-400 font-mono text-xs font-bold">ROUND {Number(prevRound)} VOTES</span>
+          </div>
+          <div className="space-y-0.5">
+            {Object.entries(prevRoundVotes).map(([voter, target]) => {
+              const voterAlias = getAliasName(allPlayers, voter, nameMap);
+              const targetAlias = getAliasName(allPlayers, target, nameMap);
+              const isSelfVote = voter.toLowerCase() === target.toLowerCase();
+              return (
+                <div key={voter} className="flex items-center gap-1 font-mono text-[11px]">
+                  <span className="text-gray-400">{voterAlias}</span>
+                  <span className="text-gray-600">{"\u2192"}</span>
+                  <span className={isSelfVote ? "text-red-500 italic" : "text-red-400"}>{targetAlias}</span>
+                  {isSelfVote && <span className="text-gray-600 text-[10px]">(AFK)</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Player List */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
         {allPlayers.length === 0 && (
@@ -210,6 +261,7 @@ export function VotePanel({
               playerAddresses={allPlayers}
               nameMap={nameMap}
               playerInfo={pInfo}
+              prevVoteTarget={prevRoundVotes?.[playerAddr.toLowerCase()]}
             />
           );
         })}
@@ -250,6 +302,7 @@ function VotePlayerCard({
   playerAddresses,
   nameMap,
   playerInfo,
+  prevVoteTarget,
 }: {
   playerAddr: string;
   isMe: boolean;
@@ -259,6 +312,7 @@ function VotePlayerCard({
   playerAddresses: string[];
   nameMap?: Record<string, string>;
   playerInfo?: PlayerInfo;
+  prevVoteTarget?: string;
 }) {
   const isAlive = playerInfo?.isAlive ?? true;
   const humanityScore = playerInfo?.humanityScore ?? 100;
@@ -316,6 +370,16 @@ function VotePlayerCard({
         </div>
         {!isAlive && <span className="text-red-600 font-mono text-xs">DEAD</span>}
       </div>
+
+      {/* Previous round vote indicator */}
+      {prevVoteTarget && (
+        <div className="flex items-center gap-1 mb-1.5 ml-4">
+          <span className="text-gray-600 font-mono text-[10px]">{"\u2192"}</span>
+          <span className="text-purple-400 font-mono text-[10px]">
+            voted {getAliasName(playerAddresses, prevVoteTarget, nameMap)}
+          </span>
+        </div>
+      )}
 
       {/* Humanity Score Bar */}
       <div className="flex items-center gap-2">

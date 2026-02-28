@@ -34,6 +34,8 @@ export const wagmiConfig = createConfig({
     return createClient({
       chain,
       transport: fallback(rpcFallbacks),
+      // Batch individual eth_call into a single multicall RPC request
+      batch: { multicall: true },
       ...(chain.id !== (hardhat as Chain).id ? { pollingInterval: scaffoldConfig.pollingInterval } : {}),
     });
   },

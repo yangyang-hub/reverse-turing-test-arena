@@ -28,7 +28,7 @@ type OutgoingMessage struct {
 	Address   string       `json:"address,omitempty"`
 	Token     string       `json:"token,omitempty"` // returned in auth_ok for client caching
 	RoomID    int          `json:"roomId,omitempty"`
-	Round     int          `json:"round,omitempty"`
+	Round     int          `json:"round"`
 	Sender    string       `json:"sender,omitempty"`
 	Content   string       `json:"content,omitempty"`
 	CreatedAt *time.Time   `json:"createdAt,omitempty"`
@@ -195,8 +195,8 @@ func (h *Handler) handleSendMessage(client *Client, msg *IncomingMessage) {
 	round := h.cache.GetCurrentRound(roomId)
 	var count int64
 	h.database.Model(&db.Message{}).Where("room_id = ? AND round = ? AND sender = ?", roomId, int(round), addr).Count(&count)
-	if count >= 3 {
-		client.SendJSON(OutgoingMessage{Type: "error", Code: "message_limit", Message: "Message limit reached (3/round)"})
+	if count >= 6 {
+		client.SendJSON(OutgoingMessage{Type: "error", Code: "message_limit", Message: "Message limit reached (6/round)"})
 		return
 	}
 

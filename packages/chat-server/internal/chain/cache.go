@@ -197,6 +197,17 @@ func (c *RoomStateCache) GetCurrentRound(roomId int) uint64 {
 	return room.CurrentRound
 }
 
+// GetPhase returns the cached phase for a room. Returns 255 if not in cache.
+func (c *RoomStateCache) GetPhase(roomId int) uint8 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	room, ok := c.rooms[roomId]
+	if !ok {
+		return 255 // not in cache
+	}
+	return room.Phase
+}
+
 // IsPlayerInRoom checks if an address is a player in the room.
 func (c *RoomStateCache) IsPlayerInRoom(roomId int, addr string) bool {
 	c.mu.RLock()

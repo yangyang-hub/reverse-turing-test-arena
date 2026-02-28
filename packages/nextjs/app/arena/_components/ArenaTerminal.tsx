@@ -84,7 +84,7 @@ export function ArenaTerminal({
   const canSend = isGameActive && isMyPlayerAlive;
 
   // Message limit per round
-  const MAX_MESSAGES = 3;
+  const MAX_MESSAGES = 6;
   const messagesRemaining = MAX_MESSAGES - myMessageCount;
   const canSendMessage = canSend && messagesRemaining > 0;
 
@@ -243,23 +243,39 @@ export function ArenaTerminal({
           <button
             onClick={handleSend}
             disabled={!inputMessage.trim() || isSending || !canSendMessage || !isConnected}
-            className="px-3 py-1 border border-green-700/50 text-green-400 font-mono text-xs hover:bg-green-900/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className={`px-3 py-1 border font-mono text-xs transition-colors disabled:cursor-not-allowed flex items-center gap-1.5 ${
+              messagesRemaining <= 0
+                ? "border-red-700/50 text-red-500 opacity-50"
+                : messagesRemaining === 1
+                  ? "border-yellow-700/50 text-yellow-400 hover:bg-yellow-900/20 disabled:opacity-30"
+                  : "border-green-700/50 text-green-400 hover:bg-green-900/20 disabled:opacity-30"
+            }`}
           >
-            {isSending ? <span className="animate-pulse">...</span> : "SEND"}
+            {isSending ? (
+              <span className="animate-pulse">...</span>
+            ) : (
+              <>
+                SEND
+                {canSend && (
+                  <span
+                    className={`text-[10px] ${
+                      messagesRemaining <= 0
+                        ? "text-red-500"
+                        : messagesRemaining === 1
+                          ? "text-yellow-500"
+                          : "text-gray-500"
+                    }`}
+                  >
+                    [{messagesRemaining}/{MAX_MESSAGES}]
+                  </span>
+                )}
+              </>
+            )}
           </button>
         </div>
         <div className="flex items-center justify-between mt-1">
           <span className="text-gray-700 font-mono text-xs">{inputMessage.length}/280</span>
-          <div className="flex items-center gap-3">
-            {canSend && (
-              <span
-                className={`font-mono text-xs ${messagesRemaining <= 0 ? "text-red-500" : messagesRemaining === 1 ? "text-yellow-500" : "text-gray-600"}`}
-              >
-                {myMessageCount}/{MAX_MESSAGES} msgs
-              </span>
-            )}
-            {!isConnected && <span className="text-yellow-600 font-mono text-xs animate-pulse">Reconnecting...</span>}
-          </div>
+          {!isConnected && <span className="text-yellow-600 font-mono text-xs animate-pulse">Reconnecting...</span>}
         </div>
       </div>
     </div>

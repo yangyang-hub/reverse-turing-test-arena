@@ -59,11 +59,38 @@ type JoinAuthResult struct {
 
 // AuthorizeJoin generates a commitment and operator signature for a player to join a room.
 // action is "create" or "join".
+// Idempotent: if a record already exists for this room+player, returns the existing
+// commitment/salt to prevent on-chain commitment mismatch from duplicate calls.
 func (s *Service) AuthorizeJoin(roomId int, playerAddr string, isAI bool, maxPlayers int, action string) (*JoinAuthResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	addr := strings.ToLower(playerAddr)
+
+	// Idempotent: if a record already exists, return the existing commitment/salt.
+	// This prevents a second auth call from generating a new salt that doesn't match
+	// the commitment already submitted on-chain.
+	var existing db.IdentityRecord
+	if err := s.database.Where("room_id = ? AND address = ?", roomId, addr).First(&existing).Error; err == nil {
+		log.Printf("[Operator] Returning existing identity for %s in room %d (idempotent)", addr, roomId)
+
+		var commitment [32]byte
+		copy(commitment[:], common.FromHex(existing.Commitment))
+
+		var salt [32]byte
+		copy(salt[:], common.FromHex(existing.Salt))
+
+		sig, err := s.signAuth(addr, commitment, roomId, action)
+		if err != nil {
+			return nil, err
+		}
+
+		return &JoinAuthResult{
+			Commitment:  commitment,
+			Salt:        salt,
+			OperatorSig: sig,
+		}, nil
+	}
 
 	// Check 7:3 ratio (only for join, not create — create is the first player)
 	if action == "join" {
@@ -82,26 +109,9 @@ func (s *Service) AuthorizeJoin(roomId int, playerAddr string, isAI bool, maxPla
 	// Compute commitment = keccak256(isAI, salt)
 	commitment := computeCommitment(isAI, salt)
 
-	// Sign the authorization
-	var authHash [32]byte
-	if action == "create" {
-		authHash = crypto.Keccak256Hash(
-			common.HexToAddress(addr).Bytes(),
-			commitment[:],
-			[]byte("create"),
-		)
-	} else {
-		authHash = crypto.Keccak256Hash(
-			common.HexToAddress(addr).Bytes(),
-			commitment[:],
-			[]byte("join"),
-			common.LeftPadBytes([]byte{byte(roomId >> 24), byte(roomId >> 16), byte(roomId >> 8), byte(roomId)}, 32),
-		)
-	}
-
-	sig, err := s.signEthMessage(authHash)
+	sig, err := s.signAuth(addr, commitment, roomId, action)
 	if err != nil {
-		return nil, fmt.Errorf("failed to sign: %w", err)
+		return nil, err
 	}
 
 	// Store identity record in DB
@@ -123,6 +133,31 @@ func (s *Service) AuthorizeJoin(roomId int, playerAddr string, isAI bool, maxPla
 	}, nil
 }
 
+// signAuth signs the authorization hash for a create or join action.
+func (s *Service) signAuth(addr string, commitment [32]byte, roomId int, action string) ([]byte, error) {
+	var authHash [32]byte
+	if action == "create" {
+		authHash = crypto.Keccak256Hash(
+			common.HexToAddress(addr).Bytes(),
+			commitment[:],
+			[]byte("create"),
+		)
+	} else {
+		authHash = crypto.Keccak256Hash(
+			common.HexToAddress(addr).Bytes(),
+			commitment[:],
+			[]byte("join"),
+			common.LeftPadBytes([]byte{byte(roomId >> 24), byte(roomId >> 16), byte(roomId >> 8), byte(roomId)}, 32),
+		)
+	}
+
+	sig, err := s.signEthMessage(authHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign: %w", err)
+	}
+	return sig, nil
+}
+
 // IsPlayerAI checks the identity record in DB for a player in a room.
 func (s *Service) IsPlayerAI(roomId int, addr string) (bool, error) {
 	var record db.IdentityRecord
@@ -131,6 +166,16 @@ func (s *Service) IsPlayerAI(roomId int, addr string) (bool, error) {
 		return false, fmt.Errorf("identity record not found: %w", err)
 	}
 	return record.IsAI, nil
+}
+
+// FindIdentityRecord finds a single identity record for a player in a room.
+func (s *Service) FindIdentityRecord(roomId int, addr string) (*db.IdentityRecord, error) {
+	var record db.IdentityRecord
+	err := s.database.Where("room_id = ? AND address = ?", roomId, strings.ToLower(addr)).First(&record).Error
+	if err != nil {
+		return nil, err
+	}
+	return &record, nil
 }
 
 // GetRoomIdentities returns all identity records for a room.
@@ -173,10 +218,14 @@ func (s *Service) DeletePlayerIdentity(roomId int, addr string) error {
 // checkRatio verifies the 7:3 human:AI ratio before allowing a join.
 func (s *Service) checkRatio(roomId int, isAI bool, maxPlayers int) error {
 	var aiCount, humanCount int64
-	if err := s.database.Model(&db.IdentityRecord{}).Where("room_id = ? AND is_ai = true", roomId).Count(&aiCount).Error; err != nil {
+	if err := s.database.Model(&db.IdentityRecord{}).
+		Where("room_id = ? AND is_ai = true", roomId).
+		Distinct("address").Count(&aiCount).Error; err != nil {
 		return fmt.Errorf("failed to count AI players: %w", err)
 	}
-	if err := s.database.Model(&db.IdentityRecord{}).Where("room_id = ? AND is_ai = false", roomId).Count(&humanCount).Error; err != nil {
+	if err := s.database.Model(&db.IdentityRecord{}).
+		Where("room_id = ? AND is_ai = false", roomId).
+		Distinct("address").Count(&humanCount).Error; err != nil {
 		return fmt.Errorf("failed to count human players: %w", err)
 	}
 

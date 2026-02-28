@@ -36,7 +36,7 @@ function parseMsgs(data: any[]): ChatMsg[] {
   return (data || []).map((m: any) => ({
     id: m.id,
     roomId: m.roomId,
-    round: m.round,
+    round: m.round ?? 0,
     sender: m.sender,
     content: m.content,
     createdAt: m.createdAt,
@@ -169,7 +169,7 @@ export function useChatSocket(roomId: number | undefined, mode: "ws" | "poll" | 
               {
                 id: data.id,
                 roomId: data.roomId,
-                round: data.round,
+                round: data.round ?? 0,
                 sender: data.sender,
                 content: data.content,
                 createdAt: data.createdAt,

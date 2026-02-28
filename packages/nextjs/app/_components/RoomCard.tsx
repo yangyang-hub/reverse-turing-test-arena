@@ -39,24 +39,29 @@ const PHASE_CLASSES = ["text-secondary", "phase-active", "phase-ended"] as const
 
 type RoomCardProps = {
   roomId: bigint;
+  roomInfo?: any; // Optional: from parent batch fetch
 };
 
-const RoomCard = ({ roomId }: RoomCardProps) => {
+const RoomCard = ({ roomId, roomInfo: propRoomInfo }: RoomCardProps) => {
   const router = useRouter();
   const { address: connectedAddress } = useAccount();
   const [isLeaving, setIsLeaving] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
 
-  const { data: roomInfo, isLoading } = useScaffoldReadContract({
+  // Only fetch if not provided via prop (fallback for standalone usage)
+  const { data: fetchedRoomInfo, isLoading } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getRoomInfo",
     args: [roomId],
+    query: { enabled: !propRoomInfo },
   });
+  const roomInfo = propRoomInfo || fetchedRoomInfo;
 
   const { data: players } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getAllPlayers",
     args: [roomId],
+    watch: false, // Player list rarely changes; refreshed on page visit
   });
 
   const { writeContractAsync: writeArena, isMining } = useScaffoldWriteContract({
@@ -69,6 +74,7 @@ const RoomCard = ({ roomId }: RoomCardProps) => {
     contractName: "TuringArena",
     functionName: "getRewardInfo",
     args: [roomId, connectedAddress ?? "0x0000000000000000000000000000000000000000"] as const,
+    watch: false, // Only relevant for ended games; doesn't change frequently
   });
 
   if (isLoading || !roomInfo) {
