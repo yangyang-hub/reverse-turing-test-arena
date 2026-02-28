@@ -115,5 +115,23 @@ export function useChatAuth() {
     [authenticate],
   );
 
-  return { getJoinAuth, updateRoomId };
+  const deleteIdentity = useCallback(
+    async (roomId: number): Promise<void> => {
+      const token = await authenticate();
+      const res = await fetch(`${CHAT_SERVER_URL}/api/room-join-auth/leave`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ roomId }),
+      });
+      if (!res.ok) {
+        console.warn("[ChatAuth] Failed to delete identity:", await res.text());
+      }
+    },
+    [authenticate],
+  );
+
+  return { getJoinAuth, updateRoomId, deleteIdentity };
 }

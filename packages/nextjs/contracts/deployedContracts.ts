@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
 const deployedContracts = {
   10143: {
     TuringArena: {
-      address: "0x7f2c68257d19e79c940f81bf5ceed91f2cac8dda",
+      address: "0x395f8dce0f476209d12957341f9939ee032121c6",
       abi: [
         {
           type: "constructor",
@@ -1604,7 +1604,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 15523057,
+      deployedOnBlock: 15724239,
     },
   },
   31337: {

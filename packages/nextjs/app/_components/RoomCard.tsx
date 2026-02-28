@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { formatUnits } from "viem";
 import { useAccount } from "wagmi";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useChatAuth } from "~~/hooks/scaffold-eth/useChatAuth";
 import { notification } from "~~/utils/scaffold-eth";
 
 const TIER_CONFIG = [
@@ -48,6 +49,7 @@ const RoomCard = ({ roomId, roomInfo: propRoomInfo, onRoomChange }: RoomCardProp
   const { address: connectedAddress } = useAccount();
   const [isLeaving, setIsLeaving] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
+  const { deleteIdentity } = useChatAuth();
 
   // Only fetch if not provided via prop (fallback for standalone usage)
   const { data: fetchedRoomInfo, isLoading } = useScaffoldReadContract({
@@ -123,6 +125,7 @@ const RoomCard = ({ roomId, roomInfo: propRoomInfo, onRoomChange }: RoomCardProp
     setIsLeaving(true);
     try {
       await writeArena({ functionName: "leaveRoom", args: [roomId] });
+      deleteIdentity(Number(roomId)).catch(() => {});
       onRoomChange?.();
     } catch (e: any) {
       const msg = e?.shortMessage || e?.message || "Unknown error";

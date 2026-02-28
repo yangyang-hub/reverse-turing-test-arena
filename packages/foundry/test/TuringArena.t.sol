@@ -1022,18 +1022,42 @@ contract TuringArenaTest is Test {
         arena.createRoom(TuringArena.RoomTier.Quick, 10, QUICK_FEE, commitment, sig, "Alice");
         vm.stopPrank();
 
-        // Try reusing same commitment for another player
-        vm.prank(alice);
-        arena.leaveRoom(1); // leave first
+        // Try reusing same commitment for another player while original is still active
+        bytes32 authHash2 = keccak256(abi.encodePacked(bob, commitment, "create"));
+        bytes memory sig2 = _signOperator(authHash2);
 
+        vm.startPrank(bob);
+        usdc.approve(address(arena), QUICK_FEE);
+        vm.expectRevert("Commitment already used");
+        arena.createRoom(TuringArena.RoomTier.Quick, 10, QUICK_FEE, commitment, sig2, "Bob");
+        vm.stopPrank();
+    }
+
+    function test_CommitmentReuse_AfterLeave() public {
+        bytes32 salt = keccak256("reuse_test");
+        bytes32 commitment = _makeCommitment(false, salt);
+        bytes32 authHash = keccak256(abi.encodePacked(alice, commitment, "create"));
+        bytes memory sig = _signOperator(authHash);
+
+        vm.startPrank(alice);
+        usdc.approve(address(arena), QUICK_FEE);
+        arena.createRoom(TuringArena.RoomTier.Quick, 10, QUICK_FEE, commitment, sig, "Alice");
+        vm.stopPrank();
+
+        // Leave room — commitment should be cleared
+        vm.prank(alice);
+        arena.leaveRoom(1);
+
+        // Reuse same commitment should now succeed
         bytes32 authHash2 = keccak256(abi.encodePacked(alice, commitment, "create"));
         bytes memory sig2 = _signOperator(authHash2);
 
         vm.startPrank(alice);
         usdc.approve(address(arena), QUICK_FEE);
-        vm.expectRevert("Commitment already used");
         arena.createRoom(TuringArena.RoomTier.Quick, 10, QUICK_FEE, commitment, sig2, "Alice");
         vm.stopPrank();
+
+        assertEq(arena.playerActiveRoom(alice), 2);
     }
 
     function test_RevealAndEnd_HumansWin() public {

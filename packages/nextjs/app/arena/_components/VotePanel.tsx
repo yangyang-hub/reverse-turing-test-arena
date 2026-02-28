@@ -516,7 +516,7 @@ function RoundCountdown({
       {/* Progress bar */}
       <div className="h-1.5 w-full rounded-full arena-hp-track overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-1000 ease-linear ${barColor}`}
+          className={`h-full rounded-full transition-all duration-[400ms] ease-linear ${barColor}`}
           style={{ width: `${progress * 100}%` }}
         />
       </div>

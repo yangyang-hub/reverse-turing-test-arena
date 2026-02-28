@@ -65,6 +65,7 @@ func SetupRouter(
 	// Operator endpoints (require Bearer token)
 	r.POST("/api/room-join-auth", BearerAuth(authSvc), HandleJoinAuth(opService))
 	r.POST("/api/room-join-auth/update-room-id", BearerAuth(authSvc), HandleUpdateIdentityRoomId(opService))
+	r.POST("/api/room-join-auth/leave", BearerAuth(authSvc), HandleLeaveRoom(opService))
 
 	return r
 }

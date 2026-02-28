@@ -95,7 +95,7 @@ let playerWallet: ethers.Wallet | null = null;
 let activeGameLoop: GameLoop | null = null;
 
 // 合约地址和服务 URL（Monad Testnet 默认值，可通过环境变量覆盖）
-const ARENA_CONTRACT = process.env.ARENA_CONTRACT_ADDRESS || "0x7f2c68257d19e79c940f81bf5ceed91f2cac8dda";
+const ARENA_CONTRACT = process.env.ARENA_CONTRACT_ADDRESS || "0x395f8dce0f476209d12957341f9939ee032121c6";
 const PAYMENT_TOKEN = process.env.PAYMENT_TOKEN_ADDRESS || "0x534b2f3A21130d7a60830c2Df862319e593943A3";
 const CHAT_SERVER_URL = process.env.CHAT_SERVER_URL || "http://101.36.105.150:43001";
 

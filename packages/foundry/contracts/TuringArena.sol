@@ -287,6 +287,12 @@ contract TuringArena is ReentrancyGuard {
         Room storage room = rooms[_roomId];
         uint256 refund = room.entryFee;
 
+        // Clear commitment before deleting (so player can rejoin with new commitment)
+        bytes32 commitment = identityCommitments[_roomId][_player];
+        if (commitment != bytes32(0)) {
+            delete usedCommitments[commitment];
+        }
+
         delete players[_roomId][_player];
         delete playerNames[_roomId][_player];
         delete identityCommitments[_roomId][_player];
@@ -323,6 +329,11 @@ contract TuringArena is ReentrancyGuard {
         for (uint256 i = 0; i < playerList.length; i++) {
             address player = playerList[i];
             uint256 refund = room.entryFee;
+            // Clear commitment before deleting
+            bytes32 commitment = identityCommitments[_roomId][player];
+            if (commitment != bytes32(0)) {
+                delete usedCommitments[commitment];
+            }
             delete players[_roomId][player];
             delete playerNames[_roomId][player];
             delete identityCommitments[_roomId][player];
@@ -677,10 +688,14 @@ contract TuringArena is ReentrancyGuard {
         room.isEnded = true;
         room.phase = GamePhase.Ended;
 
-        // Clear active room for all players
+        // Clear active room and commitments for all players
         address[] storage allPlayers = roomPlayers[_roomId];
         for (uint256 i = 0; i < allPlayers.length; i++) {
             playerActiveRoom[allPlayers[i]] = 0;
+            bytes32 commitment = identityCommitments[_roomId][allPlayers[i]];
+            if (commitment != bytes32(0)) {
+                delete usedCommitments[commitment];
+            }
         }
 
         // Emergency: split prize equally among alive players (no team bonus)
@@ -720,10 +735,14 @@ contract TuringArena is ReentrancyGuard {
         room.isEnded = true;
         room.phase = GamePhase.Ended;
 
-        // Clear active room for all players so they can join new games
+        // Clear active room and commitments for all players so they can join new games
         address[] storage allPlayers = roomPlayers[_roomId];
         for (uint256 i = 0; i < allPlayers.length; i++) {
             playerActiveRoom[allPlayers[i]] = 0;
+            bytes32 commitment = identityCommitments[_roomId][allPlayers[i]];
+            if (commitment != bytes32(0)) {
+                delete usedCommitments[commitment];
+            }
         }
 
         _gameStats[_roomId].humansWon = _humansWon;

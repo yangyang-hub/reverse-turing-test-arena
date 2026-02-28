@@ -145,7 +145,34 @@ function ArenaContent() {
 
   const hasVotedOnChain = voteCheckData?.[0]?.result as boolean | undefined;
 
-  const { data: blockNumber } = useBlockNumber({ watch: true });
+  const { data: realBlockNumber } = useBlockNumber({ watch: true });
+
+  // Interpolated block number for smooth countdown (400ms per block estimate)
+  const [interpolatedBlock, setInterpolatedBlock] = useState(0);
+  const lastRealBlockRef = useRef(0);
+  const lastRealBlockTimeRef = useRef(0);
+
+  // Snap to real block when it arrives
+  useEffect(() => {
+    if (realBlockNumber) {
+      const real = Number(realBlockNumber);
+      lastRealBlockRef.current = real;
+      lastRealBlockTimeRef.current = Date.now();
+      setInterpolatedBlock(real);
+    }
+  }, [realBlockNumber]);
+
+  // Tick interpolated block every 400ms between real updates
+  useEffect(() => {
+    if (lastRealBlockRef.current === 0) return;
+    const BLOCK_TIME_MS = 400;
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - lastRealBlockTimeRef.current;
+      const extraBlocks = Math.floor(elapsed / BLOCK_TIME_MS);
+      setInterpolatedBlock(lastRealBlockRef.current + extraBlocks);
+    }, BLOCK_TIME_MS);
+    return () => clearInterval(timer);
+  }, [realBlockNumber]); // restart timer when real block updates
 
   // Game end data — no per-block polling (refetched manually on phase transition)
   const { data: gameStats, refetch: refetchGameStats } = useScaffoldReadContract({
@@ -376,12 +403,14 @@ function ArenaContent() {
     typeof roomInfo === "object" && "maxPlayers" in roomInfo ? Number((roomInfo as any).maxPlayers) : 0;
   const canStartGame = phase === 0 && isCreator && playerCount === maxPlayers;
 
-  // Round timing
+  // Round timing — interpolated block for smooth countdown, real block for settle decisions
   const isGameActive = phase === 1;
-  const currentBlock = blockNumber ? Number(blockNumber) : 0;
+  const currentBlock = interpolatedBlock;
+  const realBlock = realBlockNumber ? Number(realBlockNumber) : 0;
   const settleTargetBlock = lastSettleBlock + currentInterval;
   const blocksRemaining = isGameActive && currentBlock > 0 ? Math.max(0, settleTargetBlock - currentBlock) : 0;
-  const intervalReached = isGameActive && currentBlock >= settleTargetBlock && currentBlock > 0 && lastSettleBlock > 0;
+  // Use REAL block number for settle eligibility (not interpolated) to avoid premature attempts
+  const intervalReached = isGameActive && realBlock >= settleTargetBlock && realBlock > 0 && lastSettleBlock > 0;
   const canSettle = intervalReached;
 
   const handleStartGame = async () => {
@@ -421,8 +450,9 @@ function ArenaContent() {
 
   // Emergency end: fallback when operator fails to reveal
   const REVEAL_TIMEOUT = 3600;
+  // Use real block for eligibility, interpolated for countdown display
   const canEmergencyEnd =
-    pendingReveal && currentBlock > 0 && lastSettleBlock > 0 && currentBlock > lastSettleBlock + REVEAL_TIMEOUT;
+    pendingReveal && realBlock > 0 && lastSettleBlock > 0 && realBlock > lastSettleBlock + REVEAL_TIMEOUT;
   const emergencyBlocksRemaining =
     pendingReveal && currentBlock > 0 && lastSettleBlock > 0
       ? Math.max(0, lastSettleBlock + REVEAL_TIMEOUT - currentBlock)
@@ -647,7 +677,7 @@ function ArenaContent() {
             allPlayers={(allPlayers as string[]) || []}
             roomInfo={roomInfo}
             roundNum={currentRoundData}
-            blockNumber={blockNumber}
+            blockNumber={interpolatedBlock > 0 ? BigInt(interpolatedBlock) : undefined}
             pendingReveal={pendingReveal}
             hasVotedOnChain={hasVotedOnChain}
             onEmergencyEnd={() => {

@@ -108,6 +108,46 @@ func HandleUpdateIdentityRoomId(opService *operator.Service) gin.HandlerFunc {
 	}
 }
 
+// LeaveRoomRequest is the JSON body for POST /api/room-join-auth/leave.
+type LeaveRoomRequest struct {
+	RoomID int `json:"roomId" binding:"required"`
+}
+
+// HandleLeaveRoom godoc
+// POST /api/room-join-auth/leave — delete identity record when a player leaves a room.
+func HandleLeaveRoom(opService *operator.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if opService == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Operator service not configured"})
+			return
+		}
+
+		addr, exists := c.Get("address")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
+			return
+		}
+
+		var req LeaveRoomRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: roomId required"})
+			return
+		}
+
+		if req.RoomID <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "roomId must be positive"})
+			return
+		}
+
+		if err := opService.DeletePlayerIdentity(req.RoomID, addr.(string)); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete identity"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	}
+}
+
 // HandleGetPlayerIdentity godoc
 // GET /api/rooms/:roomId/identity — check if the authenticated player is AI in a specific room.
 func HandleGetPlayerIdentity(opService *operator.Service) gin.HandlerFunc {
