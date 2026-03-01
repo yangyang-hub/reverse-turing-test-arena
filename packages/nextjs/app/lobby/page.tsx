@@ -346,6 +346,19 @@ const RoomGrid = ({
     refetchBatchRoomInfos();
   }, [onRoomChange, refetchBatchRoomInfos]);
 
+  // Sort rooms: phase priority (Waiting=0 > Active=1 > Ended=2), then roomId descending within each group
+  const sortedRoomIds = useMemo(() => {
+    if (Object.keys(roomInfoMap).length === 0) return roomIds;
+    return [...roomIds].sort((a, b) => {
+      const infoA = roomInfoMap[a.toString()] as { phase: number } | undefined;
+      const infoB = roomInfoMap[b.toString()] as { phase: number } | undefined;
+      const phaseA = infoA ? Number(infoA.phase) : 99;
+      const phaseB = infoB ? Number(infoB.phase) : 99;
+      if (phaseA !== phaseB) return phaseA - phaseB;
+      return Number(b) - Number(a); // descending roomId
+    });
+  }, [roomIds, roomInfoMap]);
+
   // Reset visibility map when filter changes
   useEffect(() => {
     setVisibilityMap({});
@@ -364,7 +377,7 @@ const RoomGrid = ({
 
   const reportedCount = Object.keys(visibilityMap).length;
   const visibleCount = Object.values(visibilityMap).filter(Boolean).length;
-  const allReported = reportedCount >= roomIds.length;
+  const allReported = reportedCount >= sortedRoomIds.length;
   const showEmpty = allReported && visibleCount === 0;
 
   return (
@@ -373,7 +386,7 @@ const RoomGrid = ({
         className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
         style={showEmpty ? { display: "none" } : undefined}
       >
-        {roomIds.map(id => (
+        {sortedRoomIds.map(id => (
           <FilteredRoomCard
             key={id.toString()}
             roomId={id}
