@@ -92,6 +92,19 @@ type playerTuple struct {
 	SuccessfulVotes  *big.Int
 }
 
+// RoomSummary holds the fields needed for room listing (lobby display).
+type RoomSummary struct {
+	RoomID      int    `json:"roomId"`
+	Creator     string `json:"creator"`
+	Tier        uint8  `json:"tier"`
+	Phase       uint8  `json:"phase"`
+	EntryFee    string `json:"entryFee"`    // wei string
+	PrizePool   string `json:"prizePool"`   // wei string
+	MaxPlayers  int    `json:"maxPlayers"`
+	PlayerCount int    `json:"playerCount"`
+	AliveCount  int    `json:"aliveCount"`
+}
+
 // --- Individual RPC calls ---
 
 // GetRoomInfo fetches room state from the contract.
@@ -189,6 +202,24 @@ func (r *ChainReader) GetRoomPlayerNames(ctx context.Context, roomId int) ([]str
 }
 
 // --- Individual RPC call for pendingReveal ---
+
+// GetRoomCount fetches the total number of rooms from the contract.
+func (r *ChainReader) GetRoomCount(ctx context.Context) (int, error) {
+	data, err := r.abi.Pack("getRoomCount")
+	if err != nil {
+		return 0, err
+	}
+
+	result, err := r.client.CallContract(ctx, ethereum.CallMsg{
+		To:   &r.contract,
+		Data: data,
+	}, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	return r.UnpackRoomCount(result)
+}
 
 // GetPendingReveal checks if a room is in pendingReveal state.
 func (r *ChainReader) GetPendingReveal(ctx context.Context, roomId int) (bool, error) {
@@ -324,5 +355,49 @@ func (r *ChainReader) UnpackPlayerInfo(data []byte) (*PlayerInfo, error) {
 		HumanityScore: int(player.HumanityScore.Int64()),
 		IsAlive:       player.IsAlive,
 		IsAI:          player.IsAI,
+	}, nil
+}
+
+// UnpackRoomCount decodes ABI-encoded getRoomCount return data.
+func (r *ChainReader) UnpackRoomCount(data []byte) (int, error) {
+	outputs, err := r.abi.Unpack("getRoomCount", data)
+	if err != nil {
+		return 0, err
+	}
+	if len(outputs) == 0 {
+		return 0, nil
+	}
+
+	val, ok := outputs[0].(*big.Int)
+	if !ok {
+		return 0, fmt.Errorf("unexpected type for getRoomCount output")
+	}
+	return int(val.Int64()), nil
+}
+
+// UnpackRoomSummary decodes ABI-encoded getRoomInfo return data into a RoomSummary.
+func (r *ChainReader) UnpackRoomSummary(data []byte, roomId int) (*RoomSummary, error) {
+	repacked, err := r.abi.Methods["getRoomInfo"].Outputs.Unpack(data)
+	if err != nil {
+		return nil, err
+	}
+	if len(repacked) == 0 {
+		return nil, fmt.Errorf("empty output from getRoomInfo")
+	}
+
+	var room roomTuple
+	converted := abi.ConvertType(repacked[0], room)
+	room = converted.(roomTuple)
+
+	return &RoomSummary{
+		RoomID:      roomId,
+		Creator:     strings.ToLower(room.Creator.Hex()),
+		Tier:        room.Tier,
+		Phase:       room.Phase,
+		EntryFee:    room.EntryFee.String(),
+		PrizePool:   room.PrizePool.String(),
+		MaxPlayers:  int(room.MaxPlayers.Int64()),
+		PlayerCount: int(room.PlayerCount.Int64()),
+		AliveCount:  int(room.AliveCount.Int64()),
 	}, nil
 }

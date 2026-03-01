@@ -28,6 +28,7 @@ func SetupRouter(
 	authSvc *auth.Service,
 	cache *chain.RoomStateCache,
 	opService *operator.Service,
+	roomListCache *chain.RoomListCache,
 	corsOrigin string,
 ) *gin.Engine {
 	r := gin.Default()
@@ -51,6 +52,7 @@ func SetupRouter(
 	// Public endpoints
 	r.POST("/api/auth", HandleAuth(authSvc))
 	r.GET("/api/health", HandleHealth(hub))
+	r.GET("/api/rooms", HandleGetRooms(roomListCache))
 	r.GET("/api/rooms/:roomId/messages", HandleGetMessages(database))
 	r.GET("/api/rooms/:roomId/state", HandleGetRoomState(cache))
 	r.GET("/api/players/:address/rooms", HandleGetPlayerRooms(opService))

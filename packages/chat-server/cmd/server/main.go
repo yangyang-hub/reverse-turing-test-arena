@@ -47,6 +47,9 @@ func main() {
 	defer cancel()
 	go cache.StartPolling(ctx)
 
+	// Initialize room list cache (shared across all API clients, 10s TTL)
+	roomListCache := chain.NewRoomListCache(reader, 10*time.Second)
+
 	// Initialize WebSocket hub
 	hub := ws.NewHub()
 	go hub.Run()
@@ -89,7 +92,7 @@ func main() {
 	}
 
 	// Setup HTTP router
-	router := api.SetupRouter(database, hub, authSvc, cache, opService, cfg.CorsOrigin)
+	router := api.SetupRouter(database, hub, authSvc, cache, opService, roomListCache, cfg.CorsOrigin)
 
 	// Graceful shutdown
 	go func() {

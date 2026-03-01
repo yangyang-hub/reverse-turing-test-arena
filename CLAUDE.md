@@ -61,9 +61,9 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 
 ## Implementation Progress
 
-> **Last updated**: 2026-03-01 — Lobby My Game Tab
+> **Last updated**: 2026-03-01 — Bulk Room Listing API
 
-### Current Status: Lobby My Game Tab
+### Current Status: Bulk Room Listing API
 
 | Module | Status | Notes |
 |--------|--------|-------|
@@ -118,7 +118,8 @@ RTTA 是一个基于 Monad 并行 EVM 的全链上"图灵大逃杀"博弈场。�
 | Multicall3 Batching | DONE | Chat-server cache uses Multicall3 aggregate3 to batch 5+N eth_call into 2 HTTP requests per room (86% reduction); auto-fallback to individual calls on local Anvil; phase-aware skip playerInfo for non-active rooms |
 | MCP Cache-First RPC | DONE | MCP reads chat-server cache via GET /api/rooms/:roomId/state (0 RPC); fallback to direct RPC on cache miss; gameLoop.tick() cache-first; 3 agents: 4.5→0.43 RPC/s |
 | Lobby Instant UI Refresh | DONE | Room operations (create/join/leave/claim) immediately refresh lobby UI via callback chain; no manual page refresh needed |
-| Lobby My Game Tab | DONE | MY GAME tab shows user's rooms (all phases); WAITING/IN GAME/HISTORY tabs show all rooms (phase-filtered); getRoomCount polling 10s |
+| Lobby My Game Tab | DONE | MY GAME tab shows user's rooms (all phases); WAITING/IN GAME/HISTORY tabs show all rooms (phase-filtered) |
+| Bulk Room Listing API | DONE | Chat-server GET /api/rooms with ?phase= filter, RoomListCache (10s TTL, Multicall3 batch, 200-chunk), lobby public tabs use server API (no frontend multicall), getRoomCount polling removed |
 | Arena Immediate Refetch | DONE | settleRound/emergencyEnd immediately refetch core data + player infos; VotePanel emergencyEnd uses callback; UsdcFaucet refetches balance after mint |
 
 ### Known Design Bugs (from review)

@@ -16,6 +16,18 @@ const CHAT_SERVER_URL = process.env.NEXT_PUBLIC_CHAT_SERVER_URL || "http://local
 
 type FilterTab = "mygame" | "waiting" | "active" | "ended";
 
+type RoomSummary = {
+  roomId: number;
+  creator: string;
+  tier: number;
+  phase: number;
+  entryFee: string;
+  prizePool: string;
+  maxPlayers: number;
+  playerCount: number;
+  aliveCount: number;
+};
+
 const FILTER_TABS: { id: FilterTab; label: string; icon: string; phaseRange: number[] }[] = [
   { id: "mygame", label: "My Game", icon: "👤", phaseRange: [0, 1, 2] },
   { id: "waiting", label: "Waiting", icon: "⏳", phaseRange: [0] },
@@ -30,6 +42,7 @@ const LobbyPageContent = () => {
   const [myRoomIds, setMyRoomIds] = useState<bigint[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState(false);
   const [roomListVersion, setRoomListVersion] = useState(0);
+  const [serverRooms, setServerRooms] = useState<RoomSummary[]>([]);
   const { address: connectedAddress } = useAccount();
   const searchParams = useSearchParams();
   const isQuickMatch = searchParams.get("quickMatch") === "true";
@@ -42,11 +55,10 @@ const LobbyPageContent = () => {
   });
   const myActiveRoom = activeRoomId ? Number(activeRoomId) : 0;
 
-  // Fetch room count for QuickMatchButton (needs all room IDs for scanning)
+  // Fetch room count only for QuickMatchButton scanning (no polling)
   const { data: roomCount, refetch: refetchRoomCount } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getRoomCount",
-    query: { refetchInterval: 10_000 },
     watch: false,
   });
   const allRoomIds = useMemo(() => {
@@ -81,15 +93,23 @@ const LobbyPageContent = () => {
       .finally(() => setIsLoadingRooms(false));
   }, [connectedAddress, roomListVersion]);
 
+  // Fetch room summaries from chat-server for public tabs (waiting/active/ended)
+  useEffect(() => {
+    if (activeFilter === "mygame") return;
+    const tab = FILTER_TABS.find(t => t.id === activeFilter);
+    const phase = tab?.phaseRange[0];
+    fetch(`${CHAT_SERVER_URL}/api/rooms${phase !== undefined ? `?phase=${phase}` : ""}`)
+      .then(r => r.json())
+      .then(d => setServerRooms(d.rooms ?? []))
+      .catch(() => setServerRooms([]));
+  }, [activeFilter, roomListVersion]);
+
   // Merge identity_records rooms + active room (fallback if update-room-id hasn't run yet)
   const mergedRoomIds = useMemo(() => {
     const set = new Set(myRoomIds.map(id => id.toString()));
     if (myActiveRoom > 0) set.add(BigInt(myActiveRoom).toString());
     return Array.from(set).map(s => BigInt(s));
   }, [myRoomIds, myActiveRoom]);
-
-  // "mygame" shows only user's rooms; other tabs show all rooms
-  const displayRoomIds = activeFilter === "mygame" ? mergedRoomIds : allRoomIds;
 
   return (
     <div className="flex min-h-screen flex-col cyber-grid-bg">
@@ -168,22 +188,36 @@ const LobbyPageContent = () => {
         </div>
 
         {/* Room Grid */}
-        {activeFilter === "mygame" && !connectedAddress ? (
-          <div className="flex h-64 items-center justify-center">
-            <div className="flex flex-col items-center gap-4">
-              <span className="text-4xl opacity-40">🔗</span>
-              <span className="terminal-text text-sm text-base-content/50">CONNECT WALLET TO VIEW YOUR ROOMS</span>
+        {activeFilter === "mygame" ? (
+          !connectedAddress ? (
+            <div className="flex h-64 items-center justify-center">
+              <div className="flex flex-col items-center gap-4">
+                <span className="text-4xl opacity-40">🔗</span>
+                <span className="terminal-text text-sm text-base-content/50">CONNECT WALLET TO VIEW YOUR ROOMS</span>
+              </div>
             </div>
-          </div>
-        ) : activeFilter === "mygame" && isLoadingRooms ? (
-          <div className="flex h-64 items-center justify-center">
-            <div className="flex flex-col items-center gap-4">
-              <span className="loading loading-ring loading-lg text-primary" />
-              <span className="terminal-text text-sm animate-pulse">LOADING YOUR ROOMS...</span>
+          ) : isLoadingRooms ? (
+            <div className="flex h-64 items-center justify-center">
+              <div className="flex flex-col items-center gap-4">
+                <span className="loading loading-ring loading-lg text-primary" />
+                <span className="terminal-text text-sm animate-pulse">LOADING YOUR ROOMS...</span>
+              </div>
             </div>
-          </div>
-        ) : activeFilter === "mygame" && mergedRoomIds.length === 0 ? (
-          <EmptyState onCreateClick={() => setIsModalOpen(true)} />
+          ) : mergedRoomIds.length === 0 ? (
+            <EmptyState onCreateClick={() => setIsModalOpen(true)} />
+          ) : (
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeFilter}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                <RoomGrid roomIds={mergedRoomIds} filter={activeFilter} onRoomChange={handleRoomChange} />
+              </motion.div>
+            </AnimatePresence>
+          )
         ) : (
           <AnimatePresence mode="wait">
             <motion.div
@@ -193,7 +227,7 @@ const LobbyPageContent = () => {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              <RoomGrid roomIds={displayRoomIds} filter={activeFilter} onRoomChange={handleRoomChange} />
+              <ServerRoomGrid rooms={serverRooms} onRoomChange={handleRoomChange} />
             </motion.div>
           </AnimatePresence>
         )}
@@ -386,6 +420,38 @@ const FilteredRoomCard = ({
   if (!isVisible) return null;
 
   return <RoomCard roomId={roomId} roomInfo={roomInfo} onRoomChange={onRoomChange} />;
+};
+
+function summaryToRoomInfo(s: RoomSummary) {
+  return {
+    phase: s.phase,
+    tier: s.tier,
+    entryFee: BigInt(s.entryFee),
+    prizePool: BigInt(s.prizePool),
+    playerCount: BigInt(s.playerCount),
+    maxPlayers: BigInt(s.maxPlayers),
+    aliveCount: BigInt(s.aliveCount),
+    creator: s.creator,
+  };
+}
+
+const ServerRoomGrid = ({ rooms, onRoomChange }: { rooms: RoomSummary[]; onRoomChange?: () => void }) => {
+  if (rooms.length === 0) {
+    return <TabEmptyState />;
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {rooms.map(room => (
+        <RoomCard
+          key={room.roomId}
+          roomId={BigInt(room.roomId)}
+          roomInfo={summaryToRoomInfo(room)}
+          onRoomChange={onRoomChange}
+        />
+      ))}
+    </div>
+  );
 };
 
 const EmptyState = ({ onCreateClick }: { onCreateClick: () => void }) => (
