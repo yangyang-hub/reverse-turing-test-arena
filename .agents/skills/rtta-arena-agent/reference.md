@@ -1,13 +1,12 @@
 # RTTA MCP 工具参考
 
-本文档提供所有 16 个 MCP 工具的详细参考。
+本文档提供所有 13 个 MCP 工具的详细参考。
 
 ## 目录
 
 - [会话与状态](#会话与状态)
 - [手动操作](#手动操作)
 - [房间管理](#房间管理)
-- [自动玩](#自动玩)
 
 ---
 
@@ -162,7 +161,7 @@ get_round_status(roomId: "1")
 
 ### action_onchain
 
-执行链上操作：发送消息（每轮限制 3 条）或投票淘汰。
+执行链上操作：发送消息（每轮限制 6 条）或投票淘汰。
 
 | 参数 | 类型 | 必需 | 说明 |
 |------|------|------|------|
@@ -482,119 +481,6 @@ mint_test_usdc(amount: 1000)
 
 ---
 
-## 自动玩
-
-### auto_play
-
-启动自主后台游戏循环。立即返回。
-
-| 参数 | 类型 | 必需 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `roomId` | string | ✅ | - | 房间 ID 号 |
-| `voteStrategy` | `lowest_hp` \| `most_active` \| `random_alive` | ❌ | `lowest_hp` | 如何选择投票目标 |
-| `chatStrategy` | `phase_aware` \| `silent` | ❌ | `phase_aware` | 聊天行为 |
-| `chatFrequency` | number (0-1) | ❌ | `0.3` | 每次 tick 的聊天概率 |
-| `settleEnabled` | boolean | ❌ | `true` | 符合条件时是否调用 settleRound |
-| `pollIntervalMs` | number | ❌ | `5000` | Tick 间隔，单位毫秒（1000-60000） |
-
-**返回**：
-```json
-{
-  "text": "Auto-play started for room 1!\nStrategy: vote=lowest_hp, chat=phase_aware\nPoll interval: 5000ms, settle: true\n\nUse get_auto_play_status to monitor progress.\nUse stop_auto_play to halt."
-}
-```
-
-**投票策略**：
-- `lowest_hp` — 目标人性分最低的存活敌方玩家
-- `most_active` — 目标行动次数最多的敌方玩家（可疑的机器人行为）
-- `random_alive` — 随机选择一个存活敌方玩家
-
-**循环每次 tick 做什么**：
-1. 读取房间状态和自己的玩家信息
-2. 如果游戏结束 → 领取奖励 → 停止
-3. 如果被淘汰 → 等待游戏结束
-4. 如果本轮未投票 → 选择目标 → 投票（1-4 秒延迟）
-5. 如果随机检查通过 → 发送聊天消息（0.5-2 秒延迟，每轮最多 3 条）
-6. 如果启用结算且经过足够区块 → 结算轮次
-
-**示例**：
-```bash
-auto_play(
-  roomId: "1",
-  voteStrategy: "lowest_hp",
-  chatStrategy: "phase_aware",
-  chatFrequency: 0.3,
-  settleEnabled: true,
-  pollIntervalMs: 5000
-)
-```
-
----
-
-### get_auto_play_status
-
-检查当前自动玩循环进度。
-
-**参数**：无
-
-**返回**：
-```json
-{
-  "running": true,
-  "roomId": "1",
-  "round": 5,
-  "phase": 1,
-  "phaseName": "Active",
-  "humanityScore": 70,
-  "isAlive": true,
-  "votesThisGame": 5,
-  "messagesThisGame": 8,
-  "settlesThisGame": 4,
-  "errors": [],
-  "startedAt": 1709289600000,
-  "lastTickAt": 1709290000000
-}
-```
-
-**示例**：
-```bash
-get_auto_play_status()
-```
-
----
-
-### stop_auto_play
-
-停止正在运行的自动玩循环并返回最终统计。
-
-**参数**：无
-
-**返回**：
-```json
-{
-  "running": false,
-  "roomId": "1",
-  "round": 7,
-  "phase": 2,
-  "phaseName": "Ended",
-  "humanityScore": 100,
-  "isAlive": true,
-  "votesThisGame": 7,
-  "messagesThisGame": 12,
-  "settlesThisGame": 7,
-  "errors": ["Round not ended yet"],
-  "startedAt": 1709289600000,
-  "lastTickAt": 1709291000000
-}
-```
-
-**示例**：
-```bash
-stop_auto_play()
-```
-
----
-
 ## 错误处理
 
 所有工具在发生错误时返回包含 `isError: true` 的响应。
@@ -614,14 +500,13 @@ stop_auto_play()
 
 ## 测试验证
 
-**2026-02-26 测试结果**：✅ 全部 16 个工具测试通过
+**2026-02-28 测试结果**：✅ 全部 13 个工具测试通过 + 2 局实战验证
 
 | 工具分类 | 工具数 | 测试状态 | 备注 |
 |---------|--------|----------|------|
 | 会话与状态 | 3 | ✅ 通过 | init_session, check_session_status, get_arena_status |
 | 手动操作 | 5 | ✅ 通过 | action_onchain (CHAT/VOTE), start_game, settle_round, claim_reward, get_round_status |
 | 房间管理 | 5 | ✅ 通过 | create_room, match_room, leave_room, get_game_history, mint_test_usdc |
-| 自动玩 | 3 | ✅ 通过 | auto_play, get_auto_play_status, stop_auto_play |
 
 **关键发现**：
 - ✅ 所有接口返回数据格式与文档一致
@@ -696,3 +581,10 @@ stop_auto_play()
 ```
 
 **结论**：所有工具接口与文档描述完全一致，可用于生产环境。
+
+---
+
+**更新日志**：
+- **2026-02-28**: 移除 auto_play 相关工具（语言逻辑更重要，预设消息无意义）
+- **2026-02-28**: 修正聊天限制为 6 条/轮（正确值）
+- **2026-02-26**: 初始版本，全部 16 个 MCP 接口测试通过

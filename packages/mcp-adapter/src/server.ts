@@ -8,12 +8,8 @@ import { z } from "zod";
 import { ethers } from "ethers";
 // 导入 ABI（应用二进制接口）定义文件，用于合约调用
 import { ARENA_ABI, ERC20_ABI } from "./lib/contracts.js";
-// 导入游戏循环类，用于自动玩游戏
-import { GameLoop } from "./lib/gameLoop.js";
-// 导入默认配置和阶段名称常量
-import { DEFAULT_CONFIG, PHASE_NAMES } from "./lib/types.js";
-// 导入自动玩配置的类型定义
-import type { AutoPlayConfig, VoteStrategy, ChatStrategy } from "./lib/types.js";
+// 导入阶段名称常量
+import { PHASE_NAMES } from "./lib/types.js";
 // 导入链下聊天客户端
 import { ChatClient } from "./lib/chatClient.js";
 
@@ -90,9 +86,6 @@ const rpcRateLimiter = new RateLimiter(20);
 // 玩家钱包变量（通过 init_session 工具初始化）
 // 使用 null 表示钱包尚未初始化
 let playerWallet: ethers.Wallet | null = null;
-
-// 当前活跃的游戏循环（同一时间只能有一个自动玩游戏循环）
-let activeGameLoop: GameLoop | null = null;
 
 // 合约地址和服务 URL（Monad Testnet 默认值，可通过环境变量覆盖）
 const ARENA_CONTRACT = process.env.ARENA_CONTRACT_ADDRESS || "0x395f8dce0f476209d12957341f9939ee032121c6";
@@ -712,123 +705,7 @@ server.tool(
   },
 );
 
-// ============ 工具 9: 自动玩游戏（启动后台循环） ============
-server.tool(
-  "auto_play", // 工具名称
-  "启动一个自主的后台游戏循环，自动投票、聊天、结算轮次和领取奖励。立即返回 — 使用 get_auto_play_status 监控进度。",
-  {
-    roomId: z.string().describe("房间 ID 号"),
-    voteStrategy: z.enum(["lowest_hp", "most_active", "random_alive"]).optional()
-      .describe("投票策略：lowest_hp（最低人性分，默认）、most_active（最活跃）或 random_alive（随机存活者）"),
-    chatStrategy: z.enum(["phase_aware", "silent"]).optional()
-      .describe("聊天策略：phase_aware（阶段感知，默认）或 silent（静默）"),
-    chatFrequency: z.coerce.number().min(0).max(1).optional()
-      .describe("每次 tick 的聊天概率（0-1，默认 0.3）"),
-    settleEnabled: z.boolean().optional()
-      .describe("是否在满足条件时调用 settleRound（默认 true）"),
-    pollIntervalMs: z.coerce.number().min(1000).max(60000).optional()
-      .describe("轮询间隔，单位毫秒（默认 10000）"),
-  },
-  async ({ roomId, voteStrategy, chatStrategy, chatFrequency, settleEnabled, pollIntervalMs }) => {
-    // 检查钱包是否已初始化
-    if (!playerWallet) {
-      return {
-        content: [{ type: "text" as const, text: "Error: Session not initialized. Use init_session first." }],
-        isError: true,
-      };
-    }
-
-    // 如果已有活跃的游戏循环，先停止它
-    if (activeGameLoop) {
-      activeGameLoop.stop();
-    }
-
-    // 构建自动玩配置对象，使用提供的参数或默认值
-    const config: AutoPlayConfig = {
-      roomId,
-      voteStrategy: (voteStrategy as VoteStrategy) ?? DEFAULT_CONFIG.voteStrategy, // 投票策略
-      chatStrategy: (chatStrategy as ChatStrategy) ?? DEFAULT_CONFIG.chatStrategy, // 聊天策略
-      chatFrequency: chatFrequency ?? DEFAULT_CONFIG.chatFrequency, // 聊天频率
-      settleEnabled: settleEnabled ?? DEFAULT_CONFIG.settleEnabled, // 是否启用结算
-      pollIntervalMs: pollIntervalMs ?? DEFAULT_CONFIG.pollIntervalMs, // 轮询间隔
-      maxRounds: DEFAULT_CONFIG.maxRounds, // 最大轮次数
-    };
-
-    // 创建新的游戏循环实例并启动
-    activeGameLoop = new GameLoop(config, playerWallet, ARENA_CONTRACT, undefined, chatClient);
-    activeGameLoop.start(); // 启动后台循环
-
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Auto-play started for room ${roomId}!\n` +
-            `Strategy: vote=${config.voteStrategy}, chat=${config.chatStrategy}\n` +
-            `Poll interval: ${config.pollIntervalMs}ms, settle: ${config.settleEnabled}\n\n` +
-            `Use get_auto_play_status to monitor progress.\n` +
-            `Use stop_auto_play to halt.`,
-        },
-      ],
-    };
-  },
-);
-
-// ============ 工具 10: 停止自动玩 ============
-server.tool(
-  "stop_auto_play", // 工具名称
-  "停止正在运行的自动玩游戏循环并返回最终统计信息。",
-  {}, // 无需参数
-  async () => {
-    // 检查是否有活跃的游戏循环
-    if (!activeGameLoop) {
-      return {
-        content: [{ type: "text" as const, text: "No active auto-play loop to stop." }],
-      };
-    }
-
-    // 停止游戏循环并获取最终状态
-    const finalStatus = activeGameLoop.stop();
-    activeGameLoop = null; // 清空活跃循环引用
-
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Auto-play stopped.\n\n` + JSON.stringify(finalStatus, null, 2),
-        },
-      ],
-    };
-  },
-);
-
-// ============ 工具 11: 获取自动玩状态 ============
-server.tool(
-  "get_auto_play_status", // 工具名称
-  "检查当前自动玩游戏循环的进度：轮次、人性分、已投票数、已发送消息数、错误数。",
-  {}, // 无需参数
-  async () => {
-    // 检查是否有活跃的游戏循环
-    if (!activeGameLoop) {
-      return {
-        content: [{ type: "text" as const, text: "No active auto-play loop. Use auto_play to start one." }],
-      };
-    }
-
-    // 获取游戏循环的当前状态
-    const status = activeGameLoop.getStatus();
-
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(status, null, 2),
-        },
-      ],
-    };
-  },
-);
-
-// ============ 工具 12: 创建房间 ============
+// ============ 工具 9: 创建房间 ============
 server.tool(
   "create_room", // 工具名称
   "创建一个新的游戏房间。你成为房间创建者并自动加入（收取入场费）。Tier 控制游戏节奏：Quick (0) = 快速轮次，Standard (1) = 平衡，Epic (2) = 长游戏。返回新房间 ID。",
@@ -1342,7 +1219,7 @@ async function main() {
 
   const transport = new StdioServerTransport(); // 创建标准输入输出传输层
   await server.connect(transport); // 连接服务器到传输层
-  console.error("RTTA Arena MCP Server running (16 tools available)...");
+  console.error("RTTA Arena MCP Server running (13 tools available)...");
 }
 
 // 启动服务器并捕获任何错误

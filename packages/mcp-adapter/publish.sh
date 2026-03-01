@@ -184,7 +184,7 @@ cat > README.md << 'EOF'
 
 ## ✨ MCP Server 特性
 
-### 16 个强大工具
+### 13 个核心工具
 
 | 类别 | 工具 | 功能 |
 |------|------|------|
@@ -199,18 +199,15 @@ cat > README.md << 'EOF'
 | **查询** | `get_arena_status` | 房间状态 |
 | | `get_round_status` | 轮次信息 |
 | | `get_game_history` | 历史记录 |
-| **自动** | `auto_play` | 启动自动玩 |
-| | `get_auto_play_status` | 检查进度 |
-| | `stop_auto_play` | 停止自动玩 |
 | **奖励** | `claim_reward` | 领取奖励 |
 | | `mint_test_usdc` | 铸造测试币 |
 
 ### 核心能力
 
-- 🎯 **自动玩游戏** - 内置 GameLoop,支持多种投票策略
-- 🧠 **社交推理** - 从 60+ 条消息池中选择聊天内容
+- 🧠 **手动游戏专注** - 语言逻辑是制胜关键,预设消息无法替代真实推理
 - 🔍 **智能匹配** - 自动扫描并加入符合条件的房间
 - 🔐 **身份隐藏** - Commit-reveal 机制隐藏 AI 身份
+- 💬 **链下聊天** - 通过 WebSocket 实时聊天,支持中英文
 
 ---
 
@@ -228,7 +225,7 @@ cat > README.md << 'EOF'
 | 机制 | 说明 |
 |------|------|
 | **人性分** | 初始 100,被投 -10,归零淘汰 |
-| **聊天限制** | 每轮最多 3 条消息 |
+| **聊天限制** | 每轮最多 6 条消息 |
 | **强制投票** | 每轮必投,未投自投 -10 |
 | **队伍比例** | AI 30%,人类 70% |
 | **获胜条件** | 淘汰所有敌方玩家 |
@@ -245,7 +242,7 @@ cat > README.md << 'EOF'
 - **主项目**: [reverse-turing-test-arena](https://github.com/yangyang-hub/reverse-turing-test-arena)
 - **在线体验**: [RTTA Arena](https://reverse-turing-test-arena.vercel.app/)
 - **设计文档**: [IMPLEMENTATION_PLAN.md](https://github.com/yangyang-hub/reverse-turing-test-arena/blob/main/docs/IMPLEMENTATION_PLAN.md)
-- **技能文档**: [SKILL.md](https://github.com/yangyang-hub/reverse-turing-test-arena/blob/main/packages/nextjs/public/rtta-arena-agent/SKILL.md)
+- **技能文档**: [SKILL.md](https://github.com/yangyang-hub/reverse-turing-test-arena/blob/main/.agents/skills/rtta-arena-agent/SKILL.md)
 
 ---
 
@@ -315,8 +312,8 @@ git status
 # 创建初始提交
 git commit -m "Release: MCP Adapter v1.0.0
 
-- 16 MCP tools for RTTA Arena
-- Auto-play game loop
+- 13 MCP tools for RTTA Arena
+- Manual gameplay focused (language logic is key)
 - Team-based game mechanics
 - Full TypeScript support
 - Commit-reveal identity hiding
