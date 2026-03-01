@@ -14,16 +14,17 @@ import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContr
 
 const CHAT_SERVER_URL = process.env.NEXT_PUBLIC_CHAT_SERVER_URL || "http://localhost:43001";
 
-type FilterTab = "waiting" | "active" | "ended";
+type FilterTab = "mygame" | "waiting" | "active" | "ended";
 
 const FILTER_TABS: { id: FilterTab; label: string; icon: string; phaseRange: number[] }[] = [
+  { id: "mygame", label: "My Game", icon: "👤", phaseRange: [0, 1, 2] },
   { id: "waiting", label: "Waiting", icon: "⏳", phaseRange: [0] },
   { id: "active", label: "In Game", icon: "⚔", phaseRange: [1] },
   { id: "ended", label: "History", icon: "🏆", phaseRange: [2] },
 ];
 
 const LobbyPageContent = () => {
-  const [activeFilter, setActiveFilter] = useState<FilterTab>("waiting");
+  const [activeFilter, setActiveFilter] = useState<FilterTab>("mygame");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isNoMatchOpen, setIsNoMatchOpen] = useState(false);
   const [myRoomIds, setMyRoomIds] = useState<bigint[]>([]);
@@ -45,6 +46,7 @@ const LobbyPageContent = () => {
   const { data: roomCount, refetch: refetchRoomCount } = useScaffoldReadContract({
     contractName: "TuringArena",
     functionName: "getRoomCount",
+    query: { refetchInterval: 10_000 },
     watch: false,
   });
   const allRoomIds = useMemo(() => {
@@ -85,6 +87,9 @@ const LobbyPageContent = () => {
     if (myActiveRoom > 0) set.add(BigInt(myActiveRoom).toString());
     return Array.from(set).map(s => BigInt(s));
   }, [myRoomIds, myActiveRoom]);
+
+  // "mygame" shows only user's rooms; other tabs show all rooms
+  const displayRoomIds = activeFilter === "mygame" ? mergedRoomIds : allRoomIds;
 
   return (
     <div className="flex min-h-screen flex-col cyber-grid-bg">
@@ -163,21 +168,21 @@ const LobbyPageContent = () => {
         </div>
 
         {/* Room Grid */}
-        {!connectedAddress ? (
+        {activeFilter === "mygame" && !connectedAddress ? (
           <div className="flex h-64 items-center justify-center">
             <div className="flex flex-col items-center gap-4">
               <span className="text-4xl opacity-40">🔗</span>
               <span className="terminal-text text-sm text-base-content/50">CONNECT WALLET TO VIEW YOUR ROOMS</span>
             </div>
           </div>
-        ) : isLoadingRooms ? (
+        ) : activeFilter === "mygame" && isLoadingRooms ? (
           <div className="flex h-64 items-center justify-center">
             <div className="flex flex-col items-center gap-4">
               <span className="loading loading-ring loading-lg text-primary" />
               <span className="terminal-text text-sm animate-pulse">LOADING YOUR ROOMS...</span>
             </div>
           </div>
-        ) : mergedRoomIds.length === 0 ? (
+        ) : activeFilter === "mygame" && mergedRoomIds.length === 0 ? (
           <EmptyState onCreateClick={() => setIsModalOpen(true)} />
         ) : (
           <AnimatePresence mode="wait">
@@ -188,7 +193,7 @@ const LobbyPageContent = () => {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              <RoomGrid roomIds={mergedRoomIds} filter={activeFilter} onRoomChange={handleRoomChange} />
+              <RoomGrid roomIds={displayRoomIds} filter={activeFilter} onRoomChange={handleRoomChange} />
             </motion.div>
           </AnimatePresence>
         )}
