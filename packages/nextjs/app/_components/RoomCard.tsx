@@ -41,10 +41,11 @@ const PHASE_CLASSES = ["text-secondary", "phase-active", "phase-ended"] as const
 type RoomCardProps = {
   roomId: bigint;
   roomInfo?: any; // Optional: from parent batch fetch
+  activeRoomId?: number; // From playerActiveRoom — overrides getAllPlayers for hasJoined check
   onRoomChange?: () => void;
 };
 
-const RoomCard = ({ roomId, roomInfo: propRoomInfo, onRoomChange }: RoomCardProps) => {
+const RoomCard = ({ roomId, roomInfo: propRoomInfo, activeRoomId, onRoomChange }: RoomCardProps) => {
   const router = useRouter();
   const { address: connectedAddress } = useAccount();
   const [isLeaving, setIsLeaving] = useState(false);
@@ -114,9 +115,10 @@ const RoomCard = ({ roomId, roomInfo: propRoomInfo, onRoomChange }: RoomCardProp
   const isActive = phaseIndex === 1;
   const isEnded = phaseIndex === 2;
   const hasJoined =
-    connectedAddress && players
+    (activeRoomId !== undefined && activeRoomId === Number(roomId)) ||
+    (connectedAddress && players
       ? (players as string[]).some(p => p.toLowerCase() === connectedAddress.toLowerCase())
-      : false;
+      : false);
 
   const handleEnter = () => {
     router.push(`/arena?roomId=${roomId.toString()}`);

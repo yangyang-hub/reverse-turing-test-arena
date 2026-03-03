@@ -214,7 +214,12 @@ const LobbyPageContent = () => {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                <RoomGrid roomIds={mergedRoomIds} filter={activeFilter} onRoomChange={handleRoomChange} />
+                <RoomGrid
+                  roomIds={mergedRoomIds}
+                  filter={activeFilter}
+                  activeRoomId={myActiveRoom}
+                  onRoomChange={handleRoomChange}
+                />
               </motion.div>
             </AnimatePresence>
           )
@@ -227,7 +232,7 @@ const LobbyPageContent = () => {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              <ServerRoomGrid rooms={serverRooms} onRoomChange={handleRoomChange} />
+              <ServerRoomGrid rooms={serverRooms} activeRoomId={myActiveRoom} onRoomChange={handleRoomChange} />
             </motion.div>
           </AnimatePresence>
         )}
@@ -305,10 +310,12 @@ const TabEmptyState = () => (
 const RoomGrid = ({
   roomIds,
   filter,
+  activeRoomId,
   onRoomChange,
 }: {
   roomIds: bigint[];
   filter: FilterTab;
+  activeRoomId?: number;
   onRoomChange?: () => void;
 }) => {
   const [visibilityMap, setVisibilityMap] = useState<Record<string, boolean>>({});
@@ -392,6 +399,7 @@ const RoomGrid = ({
             roomId={id}
             roomInfo={roomInfoMap[id.toString()]}
             filter={filter}
+            activeRoomId={activeRoomId}
             onVisibility={handleVisibility}
             onRoomChange={handleRoomChange}
           />
@@ -406,12 +414,14 @@ const FilteredRoomCard = ({
   roomId,
   roomInfo,
   filter,
+  activeRoomId,
   onVisibility,
   onRoomChange,
 }: {
   roomId: bigint;
   roomInfo?: any;
   filter: FilterTab;
+  activeRoomId?: number;
   onVisibility?: (id: string, visible: boolean) => void;
   onRoomChange?: () => void;
 }) => {
@@ -432,7 +442,7 @@ const FilteredRoomCard = ({
 
   if (!isVisible) return null;
 
-  return <RoomCard roomId={roomId} roomInfo={roomInfo} onRoomChange={onRoomChange} />;
+  return <RoomCard roomId={roomId} roomInfo={roomInfo} activeRoomId={activeRoomId} onRoomChange={onRoomChange} />;
 };
 
 function summaryToRoomInfo(s: RoomSummary) {
@@ -448,7 +458,15 @@ function summaryToRoomInfo(s: RoomSummary) {
   };
 }
 
-const ServerRoomGrid = ({ rooms, onRoomChange }: { rooms: RoomSummary[]; onRoomChange?: () => void }) => {
+const ServerRoomGrid = ({
+  rooms,
+  activeRoomId,
+  onRoomChange,
+}: {
+  rooms: RoomSummary[];
+  activeRoomId?: number;
+  onRoomChange?: () => void;
+}) => {
   if (rooms.length === 0) {
     return <TabEmptyState />;
   }
@@ -460,6 +478,7 @@ const ServerRoomGrid = ({ rooms, onRoomChange }: { rooms: RoomSummary[]; onRoomC
           key={room.roomId}
           roomId={BigInt(room.roomId)}
           roomInfo={summaryToRoomInfo(room)}
+          activeRoomId={activeRoomId}
           onRoomChange={onRoomChange}
         />
       ))}
