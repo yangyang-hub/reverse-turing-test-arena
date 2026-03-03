@@ -93,9 +93,14 @@ function ArenaContent() {
   });
 
   const roomLoading = !arenaInfo || coreLoading;
-  const roomInfo = coreData?.[0]?.result;
+  const roomInfoRaw = coreData?.[0]?.result;
   const currentRoundData = coreData?.[1]?.result as bigint | undefined;
   const isPendingReveal = coreData?.[2]?.result as boolean | undefined;
+
+  // Keep last valid roomInfo to avoid flashing 404 during transient refetch gaps
+  const roomInfoRef = useRef<typeof roomInfoRaw>(undefined);
+  if (roomInfoRaw) roomInfoRef.current = roomInfoRaw;
+  const roomInfo = roomInfoRaw ?? roomInfoRef.current;
 
   // Static multicall: getAllPlayers + getRoomPlayerNames (fetched once, no polling)
   const staticContracts = useMemo(() => {
